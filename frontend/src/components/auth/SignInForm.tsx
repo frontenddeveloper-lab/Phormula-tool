@@ -1,0 +1,595 @@
+// "use client";
+
+// import Checkbox from "@/components/form/input/Checkbox";
+// import Input from "@/components/form/input/InputField";
+// import Label from "@/components/form/Label";
+// import Button from "@/components/ui/button/Button";
+// import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
+// import Link from "next/link";
+// import React, { useEffect, useState } from "react";
+// import { useRouter, useSearchParams } from "next/navigation";
+
+// import { useAppDispatch, useAppSelector } from "@/lib/store";
+// import { setAuthError, setAuthLoading, setCredentials, setUser } from "@/lib/features/auth/authSlice";
+// import { useLoginMutation } from "@/lib/api/authApi";
+// import { API_BASE } from "@/config/env";
+// import ForgotPasswordModal from "./ForgotPasswordModal";
+
+// export default function SignInForm() {
+//   const router = useRouter();
+//   const search = useSearchParams();
+//   const dispatch = useAppDispatch();
+//   const { status, error, token } = useAppSelector((s) => s.auth);
+
+//   const redirect = search.get("redirect") || "/";
+
+//   const [showPassword, setShowPassword] = useState(false);
+//   const [isChecked, setIsChecked] = useState(true);
+//   const [email, setEmail] = useState("");
+//   const [password, setPassword] = useState("");
+
+//   const [showForgotModal, setShowForgotModal] = useState(false);
+
+//   const [login, { isLoading: isLoggingIn }] = useLoginMutation();
+
+//   // Prefill from localStorage (Remember Me)
+//   useEffect(() => {
+//     const savedEmail = localStorage.getItem("email") || "";
+//     const savedPassword = localStorage.getItem("password") || "";
+//     if (savedEmail && savedPassword) {
+//       setEmail(savedEmail);
+//       setPassword(savedPassword);
+//       setIsChecked(true);
+//     }
+//   }, []);
+
+//   // If already authenticated, bounce away from sign-in
+//   useEffect(() => {
+//     if (token) router.replace(redirect);
+//   }, [token, redirect, router]);
+
+//   const onSubmit = async (e: React.FormEvent) => {
+//     e.preventDefault();
+//     if (status === "loading" || isLoggingIn) return;
+
+//     dispatch(setAuthLoading());
+
+//     try {
+//       const result = await login({ email: email.trim(), password }).unwrap();
+
+//       // Save token in slice & localStorage
+//       dispatch(setCredentials({ token: result.token }));
+
+//       // Remember Me
+//       if (isChecked) {
+//         localStorage.setItem("email", email.trim());
+//         localStorage.setItem("password", password);
+//       } else {
+//         localStorage.removeItem("email");
+//         localStorage.removeItem("password");
+//       }
+
+//       // Fetch user once (simple fetch to avoid extra RTKQ wiring here)
+//       const me = await fetch(`${API_BASE}/get_user_data`, {
+//         method: "GET",
+//         headers: { Authorization: `Bearer ${result.token}` },
+//       }).then((r) => r.json()).catch(() => null);
+
+//             if (me) dispatch(setUser(me));
+
+//       const onboardingComplete = me?.onboarding_complete === true;
+
+//       const hasBrand =
+//         typeof me?.brand_name === "string" &&
+//         me.brand_name.trim().length > 0;
+
+//       // Has this browser already done the first-time redirect?
+//       const hasSeenFirstTimeRoute =
+//         typeof window !== "undefined" &&
+//         localStorage.getItem("hasSeenFirstTimeRoute") === "true";
+
+//       const ranged = me?.ranged;           // adjust to your actual field name
+//       const countryName = me?.countryName; // or me?.country_name
+//       const month = me?.month;
+//       const year = me?.year;
+
+//       const firstTimePath =
+//         ranged && countryName && month && year
+//           ? `/country/${ranged}/${countryName}/${month}/${year}`
+//           : redirect; // fallback if any value is missing
+
+//       if (!onboardingComplete && !hasBrand) {
+//         // Truly new user → start onboarding
+//         router.push("/choose-country?onboard=1");
+//       } else if (!hasSeenFirstTimeRoute && firstTimePath !== redirect) {
+//         // ✅ First login AFTER onboarding is complete → special route
+//         localStorage.setItem("hasSeenFirstTimeRoute", "true");
+//         router.push(firstTimePath);
+//       } else {
+//         // All subsequent logins
+//         router.push(redirect); // usually "/"
+//       }
+
+//     }
+
+//     catch (err: any) {
+//       const msg =
+//         err?.status === 403
+//           ? "Please verify your email first."
+//           : err?.data?.message || err?.error || "Login failed. Please try again.";
+//       dispatch(setAuthError(msg));
+//     }
+//   };
+
+//   return (
+//     <div className="flex flex-col flex-1 lg:w-1/2 w-full">
+//       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
+//         <div>
+//           <div className="mb-5 sm:mb-8">
+//             <h1 className="mb-2 font-semibold text-green-500 text-title-sm dark:text-white/90 sm:text-title-md">
+//               Welcome!
+//             </h1>
+//             <p className="text-sm text-gray-500 dark:text-gray-400">
+//               Enter your email and password to sign in!
+//             </p>
+//           </div>
+
+
+
+
+
+//           <form onSubmit={onSubmit} noValidate>
+//             <div className="space-y-6">
+//               <div>
+//                 <Label>
+//                   Email <span className="text-error-500">*</span>{" "}
+//                 </Label>
+//                 <Input
+//                   placeholder="info@gmail.com"
+//                   type="email"
+//                   value={email}
+//                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+//                   required
+//                   autoComplete="email"
+//                 />
+//               </div>
+
+//               <div>
+//                 <Label>
+//                   Password <span className="text-error-500">*</span>{" "}
+//                 </Label>
+//                 <div className="relative">
+//                   <Input
+//                     type={showPassword ? "text" : "password"}
+//                     placeholder="Enter your password"
+//                     value={password}
+//                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+//                     required
+//                     autoComplete="current-password"
+//                   />
+//                   <button
+//                     type="button"
+//                     onClick={() => setShowPassword(!showPassword)}
+//                     className="absolute z-30 -translate-y-1/2 right-4 top-1/2"
+//                     aria-label={showPassword ? "Hide password" : "Show password"}
+//                   >
+//                     {showPassword ? (
+//                       <EyeIcon className="fill-gray-500 dark:fill-gray-400" />
+//                     ) : (
+//                       <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400" />
+//                     )}
+//                   </button>
+//                 </div>
+//               </div>
+
+//               <div className="flex items-center justify-between">
+//                 <label className="inline-flex items-center gap-3 cursor-pointer">
+//                   <Checkbox checked={isChecked} onChange={setIsChecked} />
+//                   <span className="block font-normal text-gray-700 text-theme-sm dark:text-gray-400">
+//                     Keep me logged in
+//                   </span>
+//                 </label>
+//                 <button
+//                   type="button"
+//                   onClick={() => setShowForgotModal(true)}
+//                   className="text-sm text-blue-700"
+//                 >
+//                   Forgot password?
+//                 </button>
+//               </div>
+
+
+//               {(error) && (
+//                 <p className="text-sm text-red-500 -mt-2" aria-live="polite">
+//                   {error}
+//                 </p>
+//               )}
+
+//               <div>
+//                 <Button
+//                   className="w-full"
+//                   size="md"
+//                   type="submit"
+//                   disabled={status === "loading" || isLoggingIn}
+//                 >
+//                   {status === "loading" || isLoggingIn ? "Signing in…" : "Sign in"}
+//                 </Button>
+//               </div>
+//             </div>
+//           </form>
+
+//           <div className="relative py-3 sm:py-5">
+//             <div className="absolute inset-0 flex items-center">
+//               <div className="w-full border-t border-charcoal-500 "></div>
+//             </div>
+//             <div className="relative flex justify-center text-sm">
+//               <span className="p-2 text-charcoal-500 bg-white sm:px-5 sm:py-2">
+//                 or
+//               </span>
+//             </div>
+//           </div>
+
+//           {/* Google Sign-in (full width) */}
+//           <div className="mt-2 w-full border border-charcoal-500 rounded-lg">
+//             <button
+//               type="button"
+//               disabled
+//               className="w-full inline-flex items-center justify-center gap-3 px-4 py-3
+//                text-charcoal-500  rounded-lg transition-colors
+//                 text-md font-bold
+//                dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10
+//                disabled:cursor-not-allowed"
+//               title="Temporarily disabled"
+//             >
+//               {/* Icon left */}
+//               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+//                 <path d="M18.7511 10.1944C18.7511 9.47495 18.6915 8.94995 18.5626 8.40552H10.1797V11.6527H15.1003C15.0011 12.4597 14.4654 13.675 13.2749 14.4916L13.2582 14.6003L15.9087 16.6126L16.0924 16.6305C17.7788 15.1041 18.7511 12.8583 18.7511 10.1944Z" fill="#4285F4" />
+//                 <path d="M10.1788 18.75C12.5895 18.75 14.6133 17.9722 16.0915 16.6305L13.274 14.4916C12.5201 15.0068 11.5081 15.3666 10.1788 15.3666C7.81773 15.3666 5.81379 13.8402 5.09944 11.7305L4.99473 11.7392L2.23868 13.8295L2.20264 13.9277C3.67087 16.786 6.68674 18.75 10.1788 18.75Z" fill="#34A853" />
+//                 <path d="M5.10014 11.7305C4.91165 11.186 4.80257 10.6027 4.80257 9.99992C4.80257 9.3971 4.91165 8.81379 5.09022 8.26935L5.08523 8.1534L2.29464 6.02954L2.20333 6.0721C1.5982 7.25823 1.25098 8.5902 1.25098 9.99992C1.25098 11.4096 1.5982 12.7415 2.20333 13.9277L5.10014 11.7305Z" fill="#FBBC05" />
+//                 <path d="M10.1789 4.63331C11.8554 4.63331 12.9864 5.34303 13.6312 5.93612L16.1511 3.525C14.6035 2.11528 12.5895 1.25 10.1789 1.25C6.68676 1.25 3.67088 3.21387 2.20264 6.07218L5.08953 8.26943C5.81381 6.15972 7.81776 4.63331 10.1789 4.63331Z" fill="#EB4335" />
+//               </svg>
+//               Continue with Google
+//             </button>
+//           </div>
+
+
+//           <div className="mt-5 max-w-fit mx-auto">
+//             <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
+//               Don&apos;t have an account ?{" "}
+//               <Link
+//                 href="/signup"
+//                 className="text-blue-700"
+//               >
+//                 Sign Up
+//               </Link>
+//             </p>
+//           </div>
+
+//           {showForgotModal && (
+//             <ForgotPasswordModal onClose={() => setShowForgotModal(false)} />
+//           )}
+
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"use client";
+
+import Checkbox from "@/components/form/input/Checkbox";
+import Input from "@/components/form/input/InputField";
+import Label from "@/components/form/Label";
+import Button from "@/components/ui/button/Button";
+import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
+import Link from "next/link";
+import React, { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+
+import { useAppDispatch, useAppSelector } from "@/lib/store";
+import { setAuthError, setAuthLoading, setCredentials, setUser } from "@/lib/features/auth/authSlice";
+import { useLoginMutation } from "@/lib/api/authApi";
+import { API_BASE } from "@/config/env";
+import ForgotPasswordModal from "./ForgotPasswordModal";
+
+export default function SignInForm() {
+  const router = useRouter();
+  const search = useSearchParams();
+  const dispatch = useAppDispatch();
+  const { status, error, token } = useAppSelector((s) => s.auth);
+
+  const redirect = search.get("redirect") || "/";
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [isChecked, setIsChecked] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [showForgotModal, setShowForgotModal] = useState(false);
+
+  const [login, { isLoading: isLoggingIn }] = useLoginMutation();
+
+  // ✅ This flag tells us "this navigation came from a fresh login"
+  const [hasJustLoggedIn, setHasJustLoggedIn] = useState(false);
+
+  // Prefill from localStorage (Remember Me)
+  useEffect(() => {
+    const savedEmail = localStorage.getItem("email") || "";
+    const savedPassword = localStorage.getItem("password") || "";
+    if (savedEmail && savedPassword) {
+      setEmail(savedEmail);
+      setPassword(savedPassword);
+      setIsChecked(true);
+    }
+  }, []);
+
+  // If already authenticated and user manually hits /signin,
+  // bounce them away (but NOT right after a fresh login)
+  useEffect(() => {
+    if (!token) return;
+    if (hasJustLoggedIn) return; // <-- don't override first-time redirect
+    router.replace(redirect);
+  }, [token, redirect, router, hasJustLoggedIn]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (status === "loading" || isLoggingIn) return;
+
+    dispatch(setAuthLoading());
+
+    try {
+      const result = await login({ email: email.trim(), password }).unwrap();
+
+      // Save token in slice & localStorage
+      dispatch(setCredentials({ token: result.token }));
+
+      // Remember Me
+      if (isChecked) {
+        localStorage.setItem("email", email.trim());
+        localStorage.setItem("password", password);
+      } else {
+        localStorage.removeItem("email");
+        localStorage.removeItem("password");
+      }
+
+      // Fetch user once (simple fetch to avoid extra RTKQ wiring here)
+      const me = await fetch(`${API_BASE}/get_user_data`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${result.token}` },
+      })
+        .then((r) => r.json())
+        .catch(() => null);
+
+      if (me) dispatch(setUser(me));
+
+      const onboardingComplete = me?.onboarding_complete === true;
+
+      const hasBrand =
+        typeof me?.brand_name === "string" &&
+        me.brand_name.trim().length > 0;
+
+      // Has this browser already done the first-time redirect?
+      const hasSeenFirstTimeRoute =
+        typeof window !== "undefined" &&
+        localStorage.getItem("hasSeenFirstTimeRoute") === "true";
+
+      // 👇 Adjust these to match your backend fields
+      const ranged = me?.ranged;
+      const countryName = me?.countryName || me?.country_name;
+      const month = me?.month;
+      const year = me?.year;
+
+      const firstTimePath =
+        ranged && countryName && month && year
+          ? `/country/${ranged}/${countryName}/${month}/${year}`
+          : redirect; // fallback if any value is missing
+
+      if (!onboardingComplete && !hasBrand) {
+        // Truly new user → start onboarding
+        setHasJustLoggedIn(true);
+        router.push("/choose-country?onboard=1");
+      } else if (!hasSeenFirstTimeRoute && firstTimePath !== redirect) {
+        // ✅ First login AFTER onboarding is complete → Profit screen
+        localStorage.setItem("hasSeenFirstTimeRoute", "true");
+        setHasJustLoggedIn(true);
+        router.push(firstTimePath);
+      } else {
+        // All subsequent logins
+        setHasJustLoggedIn(true);
+        router.push(redirect); // usually "/"
+      }
+    } catch (err: any) {
+      const msg =
+        err?.status === 403
+          ? "Please verify your email first."
+          : err?.data?.message || err?.error || "Login failed. Please try again.";
+      dispatch(setAuthError(msg));
+    }
+  };
+
+  return (
+    <div className="flex flex-col  lg:w-1/2 w-full">
+      <div className="flex flex-col justify-center  flex-1 w-full max-w-lg mx-auto">
+        <div>
+          <div className="mb-5 sm:mb-8">
+            <h1 className="mb-2  text-green-500 text-title-sm dark:text-white/90 sm:text-title-lg">
+              Welcome!
+            </h1>
+            <p className="text-base text-gray-500 dark:text-gray-400">
+            Please enter your login details
+            </p>
+          </div>
+
+          <form onSubmit={onSubmit} noValidate>
+            <div className="space-y-3">
+              <div>
+                <Label>
+                  Email <span className="text-error-500 ">*</span>{" "}
+                </Label>
+                <Input
+                  placeholder="info@gmail.com"
+                  type="email"
+                  value={email}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </div>
+
+              <div>
+                <Label>
+                  Password <span className="text-error-500">*</span>{" "}
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute z-30 -translate-y-1/2 right-4 top-1/2"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeIcon className="fill-gray-500 dark:fill-gray-400" />
+                    ) : (
+                      <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="inline-flex items-center gap-3 cursor-pointer">
+                  <Checkbox checked={isChecked} onChange={setIsChecked} />
+                  <span className="block font-normal text-gray-700 text-theme-base dark:text-gray-400">
+                    Keep me logged in
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(true)}
+                  className="text-base text-blue-700"
+                >
+                  Forgot password?
+                </button>
+              </div>
+
+              {error && (
+                <p className="text-sm text-red-500 -mt-2" aria-live="polite">
+                  {error}
+                </p>
+              )}
+
+              <div>
+                <Button
+                  className="w-full"
+                  size="md"
+                  type="submit"
+                  disabled={status === "loading" || isLoggingIn}
+                >
+                  {status === "loading" || isLoggingIn ? "Signing in…" : "Sign in"}
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          <div className="relative ">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-charcoal-500 "></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="p-2 text-charcoal-500 bg-white sm:px-5 sm:py-2">
+                or
+              </span>
+            </div>
+          </div>
+
+          {/* Google Sign-in (full width) */}
+          <div className="mt-2 w-full border border-charcoal-500 rounded-lg">
+            <button
+              type="button"
+              disabled
+              className="w-full inline-flex items-center justify-center gap-3 px-4 py-2.5
+               text-charcoal-500  rounded-lg transition-colors
+                text-md font-bold
+               dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10
+               disabled:cursor-not-allowed"
+              title="Temporarily disabled"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M18.7511 10.1944C18.7511 9.47495 18.6915 8.94995 18.5626 8.40552H10.1797V11.6527H15.1003C15.0011 12.4597 14.4654 13.675 13.2749 14.4916L13.2582 14.6003L15.9087 16.6126L16.0924 16.6305C17.7788 15.1041 18.7511 12.8583 18.7511 10.1944Z" fill="#4285F4" />
+                <path d="M10.1788 18.75C12.5895 18.75 14.6133 17.9722 16.0915 16.6305L13.274 14.4916C12.5201 15.0068 11.5081 15.3666 10.1788 15.3666C7.81773 15.3666 5.81379 13.8402 5.09944 11.7305L4.99473 11.7392L2.23868 13.8295L2.20264 13.9277C3.67087 16.786 6.68674 18.75 10.1788 18.75Z" fill="#34A853" />
+                <path d="M5.10014 11.7305C4.91165 11.186 4.80257 10.6027 4.80257 9.99992C4.80257 9.3971 4.91165 8.81379 5.09022 8.26935L5.08523 8.1534L2.29464 6.02954L2.20333 6.0721C1.5982 7.25823 1.25098 8.5902 1.25098 9.99992C1.25098 11.4096 1.5982 12.7415 2.20333 13.9277L5.10014 11.7305Z" fill="#FBBC05" />
+                <path d="M10.1789 4.63331C11.8554 4.63331 12.9864 5.34303 13.6312 5.93612L16.1511 3.525C14.6035 2.11528 12.5895 1.25 10.1789 1.25C6.68676 1.25 3.67088 3.21387 2.20264 6.07218L5.08953 8.26943C5.81381 6.15972 7.81776 4.63331 10.1789 4.63331Z" fill="#EB4335" />
+              </svg>
+              Continue with Google
+            </button>
+          </div>
+
+          <div className="mt-5 max-w-fit mx-auto">
+            <p className="text-base font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
+              Don&apos;t have an account ?{" "}
+              <Link
+                href="/signup"
+                className="text-blue-700"
+              >
+                Sign Up
+              </Link>
+            </p>
+          </div>
+
+          {showForgotModal && (
+            <ForgotPasswordModal onClose={() => setShowForgotModal(false)} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

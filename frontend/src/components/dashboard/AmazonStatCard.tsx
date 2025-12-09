@@ -1,0 +1,86 @@
+// components/dashboard/AmazonStatCard.tsx
+"use client";
+
+import React from "react";
+import ValueOrSkeleton from "@/components/common/ValueOrSkeleton";
+import {
+  calcDeltaPct,
+  fmtGBP,
+  fmtInt,
+  fmtPct,
+  toNumberSafe,
+} from "@/lib/dashboard/format";
+
+export type AmazonStatCardProps = {
+  label: string;
+  current: number | null | undefined;
+  previous: number | null | undefined;
+  loading: boolean;
+  formatter?: (v: any) => string;
+  bottomLabel: string; // e.g. "Nov'25"
+  className?: string;
+};
+
+export default function AmazonStatCard({
+  label,
+  current,
+  previous,
+  loading,
+  formatter = fmtGBP,
+  bottomLabel,
+  className,
+}: AmazonStatCardProps) {
+  const currVal = toNumberSafe(current);
+  const prevVal = previous != null ? toNumberSafe(previous) : 0;
+
+  const delta = calcDeltaPct(currVal, prevVal); // may be null
+  const isUp = delta != null && delta >= 0;
+
+  let deltaContent: React.ReactNode = "—";
+  if (delta != null) {
+    deltaContent = (
+      <>
+        <span className="mr-0.5">{isUp ? "▲" : "▼"}</span>
+        {Math.abs(delta).toFixed(2)}%
+      </>
+    );
+  }
+
+  const deltaColor =
+    delta == null
+      ? "text-gray-500"
+      : isUp
+      ? "text-emerald-600"
+      : "text-rose-600";
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 shadow-sm flex flex-col justify-between ${
+        className || ""
+      }`}
+    >
+      <div className="text-sm font-medium text-charcoal-500">{label}</div>
+
+      <div className="mt-1 text-lg font-semibold">
+        <ValueOrSkeleton loading={loading} mode="inline" compact>
+          {formatter(currVal)}
+        </ValueOrSkeleton>
+      </div>
+
+      <div className="mt-3 flex items-end justify-between text-xs text-charcoal-500">
+        <div className="flex flex-col">
+          <span>{bottomLabel}:</span>
+          <span className="font-medium">
+            {previous == null ? "—" : formatter(prevVal)}
+          </span>
+        </div>
+
+        <div
+          className={`inline-flex items-center font-semibold ${deltaColor}`}
+        >
+          {deltaContent}
+        </div>
+      </div>
+    </div>
+  );
+}
