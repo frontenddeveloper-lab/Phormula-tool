@@ -1,0 +1,844 @@
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Blueprint, request, session, jsonify, redirect 
+from app.utils.token_utils import (
+    decode_token, generate_reset_token, confirm_verification_token,
+    generate_token, generate_verification_token
+)
+import os  
+import pandas as pd
+from sqlalchemy import and_, or_
+import numpy as np 
+from app.utils.data_utils import  create_user_session
+from app.utils.email_utils import send_welcome_and_verification_emails , send_reset_email
+from app import db
+from app.models.user_models import User, CountryProfile, Category 
+import jwt
+import secrets
+import string
+from config import Config
+SECRET_KEY = Config.SECRET_KEY
+from werkzeug.utils import secure_filename
+from sqlalchemy import create_engine
+from sqlalchemy import MetaData, Table, Column, Integer, String, Float, text
+from dotenv import load_dotenv
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import func
+
+
+load_dotenv()
+db_url = os.getenv('DATABASE_URL')
+db_url1= os.getenv('DATABASE_ADMIN_URL')
+
+
+
+
+
+user_bp = Blueprint('user', __name__)
+
+
+@user_bp.route('/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json()
+        email = data['email']
+        password = data['password']
+        phone_number = data['phone_number']
+
+        hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=8)
+
+        # Check if user already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            return jsonify({'success': False, 'message': 'Email already exists. Please choose a different email. Please Login.'})
+
+        # Generate token_name for new user
+        token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+        token_name = f"user_{token}"
+
+        # Register new user with token_name
+        new_user = User(
+            email=email, 
+            password=hashed_password, 
+            phone_number=phone_number,
+            token_name=token_name
+        )
+        db.session.add(new_user)
+        db.session.commit()
+
+        # Generate token and verification link
+        token = generate_token(new_user.id)
+        verification_token = generate_verification_token(email)
+        verification_link = f'http://127.0.0.1:5000/verify-email/{verification_token}'
+
+        # Send welcome and verification emails
+        try:
+            # test_send_email()
+            send_welcome_and_verification_emails(email, verification_link)
+        except Exception as e:
+            return jsonify({'success': False, 'message': 'Failed to send verification or welcome email', 'error': str(e)})
+
+        # ✅ Return success and instruct frontend to show country selection UI
+        return jsonify({
+            'success': True,
+            'message': 'User registered successfully. Please check your email to verify your account.',
+            'show_country_selection': True,
+            'user_id': new_user.id,  # optional: can be used to store in frontend state
+            'token_name': token_name  # Include token_name in response
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Registration error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Server error during registration', 'error': str(e)}), 500
+
+
+
+@user_bp.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if data is None:
+        return jsonify({'success': False, 'message': 'Invalid input'}), 400
+
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({'success': False, 'message': 'Email and password are required'}), 400
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found'}), 404
+
+    if not user.is_verified:
+        return jsonify({'error': 'Your email is not verified. Please verify your email first.'}), 403
+
+    if user and check_password_hash(user.password, password):
+        session['user_id'] = user.id
+        token = generate_token(user.id)
+        return jsonify({'success': True, 'message': 'Valid email and password', 'token': token})
+    else:
+        return jsonify({'success': False, 'message': 'Invalid email or password'}), 401
+
+
+
+@user_bp.route('/forgot_password', methods=['POST'])
+def forgot_password():
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({'success': False, 'message': 'Email is required.'}), 400
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        return jsonify({'success': False, 'message': 'Email not found.'}), 404
+
+    # Generate and send email only if user exists
+    token = generate_reset_token(user.id)
+    reset_url = f"http://localhost:3000/reset_password/{token}"
+    send_reset_email(user.email, reset_url)
+
+    return jsonify({'success': True, 'message': 'Password reset email sent.'}), 200
+
+
+@user_bp.route('/reset_password/<token>', methods=['POST'])
+def reset_password(token):
+    data = request.get_json()
+    password = data.get('password')
+    user_id = decode_token(token)
+
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Invalid or expired token.'})
+
+    user = User.query.get(user_id)
+    if user:
+        hashed_password = generate_password_hash(password, method='pbkdf2:sha256', salt_length=8)
+        user.password = hashed_password
+        user.is_verified = True
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Password reset successfully.'})
+    else:
+        return jsonify({'success': False, 'message': 'User not found.'})
+
+
+
+
+@user_bp.route('/google_register', methods=['POST'])
+def google_register():
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({'success': False, 'message': 'Invalid input'}), 400
+            
+        email = data.get('email')
+        if not email:
+            return jsonify({'success': False, 'message': 'Email is required'}), 400
+            
+        phone_number = data.get('phone_number', "0000000000")
+        password = data.get('password', "default_password")
+
+        # Check if user already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            if existing_user.is_google_user:
+                # User exists and is already a Google user, log them in
+                token = generate_token(existing_user.id)
+                session['user_id'] = existing_user.id
+                return jsonify({'success': True, 'message': 'Google user login successful', 'token': token})
+            else:
+                # User exists but not as Google user
+                return jsonify({'success': False, 'message': 'Email already exists with regular account. Please use regular login.'}), 409
+
+        # Generate token_name for new user
+        random_token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+        token_name = f"user_{random_token}"
+
+        # Hash the password
+        password_hash = generate_password_hash(password, method='pbkdf2:sha256', salt_length=8)
+
+        # Register new Google user
+        new_user = User(
+            email=email, 
+            phone_number=phone_number, 
+            password=password_hash, 
+            is_google_user=True,
+            is_verified=True,  # Google users are pre-verified
+            token_name=token_name
+        )
+        db.session.add(new_user)
+        db.session.commit()
+
+        # Generate token and set session
+        auth_token = generate_token(new_user.id)
+        session['user_id'] = new_user.id
+
+        # Optional: Send welcome email (verification not needed for Google users)
+        try:
+            verification_link = f'http://127.0.0.1:5000/dashboard'  # Direct to dashboard
+            send_welcome_and_verification_emails(email, verification_link)
+        except Exception as e:
+            print(f"Failed to send welcome email to {email}: {e}")
+            # Don't fail registration if email fails
+
+        return jsonify({
+            'success': True, 
+            'message': 'Google user registered successfully', 
+            'token': auth_token,
+            'show_country_selection': True,
+            'user_id': new_user.id,
+            'token_name': token_name
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Google registration error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Server error during Google registration', 'error': str(e)}), 500
+
+
+@user_bp.route('/google_login', methods=['POST'])
+def google_login():
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({'success': False, 'message': 'Invalid input'}), 400
+            
+        email = data.get('email')
+        if not email:
+            return jsonify({'success': False, 'message': 'Email is required'}), 400
+
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            # No user found - they need to register first
+            return jsonify({'success': False, 'message': 'No account found. Please register first.'}), 404
+        
+        if not user.is_google_user:
+            # User exists but not as Google user
+            return jsonify({'success': False, 'message': 'Please log in using your email and password.'}), 401
+            
+        # User exists and is a Google user
+        if not user.is_verified:
+            # This shouldn't happen for Google users, but just in case
+            user.is_verified = True
+            db.session.commit()
+            
+        # Generate token and set session
+        token = generate_token(user.id)
+        session['user_id'] = user.id
+        
+        return jsonify({'success': True, 'message': 'Google login successful', 'token': token})
+        
+    except Exception as e:
+        print(f"Google login error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Server error during Google login', 'error': str(e)}), 500
+
+
+
+
+@user_bp.route('/resend_verification', methods=['POST'])
+def resend_verification_email():
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({'success': False, 'message': 'Email is required'}), 400  # If email is not provided
+
+    # Check if the user exists
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found'}), 404
+
+    # Generate new verification token
+    verification_token = generate_verification_token(email)
+    verification_link = f'http://127.0.0.1:5000/verify_email/{verification_token}'
+
+    # Try sending the verification email
+    try:
+        send_welcome_and_verification_emails(email, verification_link)
+        return jsonify({'success': True, 'message': 'Verification email resent successfully.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Failed to resend verification email', 'error': str(e)}), 500
+
+
+
+@user_bp.route('/get_user_data', methods=['GET'])
+def get_user_data():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+    token = auth_header.split(' ')[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])  # ✅ Fixed here
+        user_id = payload['user_id']
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token has expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token'}), 401
+
+    user = User.query.filter_by(id=user_id).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    return jsonify({
+        'company_name': user.company_name,
+        'brand_name': user.brand_name,
+        'email': user.email,
+        'phone_number': user.phone_number,
+        'annual_sales_range': user.annual_sales_range,
+        'password': user.password,
+        'platform': user.platform,
+        'country': user.country,
+        'homeCurrency': user.homeCurrency
+    })
+
+
+@user_bp.route('/passcountry', methods=['GET'])
+def get_user_countries():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+    token = auth_header.split(' ')[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token has expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token'}), 401
+
+    user = User.query.filter_by(id=user_id).first()
+    if not user:
+        return jsonify({'error': 'User not found.'}), 404
+
+    if not user.country:
+        country_list = []
+    else:
+        country_list = [c.strip() for c in user.country.split(',')]  
+
+    return jsonify({'countries': country_list}), 200
+
+
+
+
+
+@user_bp.route('/selectform', methods=['POST'])
+def add_sales():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+    token = auth_header.split(' ')[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token has expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token'}), 401
+
+    data = request.get_json()
+
+    country = data.get('country')
+    annual_sales_range = data.get('annual_sales_range')
+    brand_name = data.get('brand_name')
+    company_name = data.get('company_name')
+    homeCurrency = data.get('homeCurrency')
+
+
+    if not country:
+        return jsonify({'success': False, 'message': 'Country is required.'}), 400
+
+    user = User.query.filter_by(id=user_id).first()
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found.'}), 404
+
+    user.country = country
+    user.company_name = company_name
+    user.brand_name = brand_name
+    user.homeCurrency = homeCurrency
+    if annual_sales_range:
+        user.annual_sales_range = annual_sales_range
+        
+
+    db.session.commit()
+    db.session.refresh(user)
+
+    return jsonify({'success': True, 'message': 'Sales data submitted successfully.'}), 201
+ 
+
+
+
+
+
+@user_bp.route('/verify-email/<token>', methods=['GET'])
+def verify_email(token):
+    try:
+        email = confirm_verification_token(token)
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'success': False, 'message': 'Invalid verification token.'})
+
+        # Update user's email verification status
+        user.is_verified = True
+        db.session.commit()
+
+        # Create user-specific database after successful email verification
+        
+        create_user_session(db_url)
+
+        # Store user session after verification
+        session['user_id'] = user.id
+
+        return redirect('http://localhost:3000/verify-email?status=success')
+    except Exception as e:
+        print(f"Email verification error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Invalid or expired verification token.', 'error': str(e)})
+    
+
+
+
+@user_bp.route('/switch_profile/<int:profile_id>', methods=['GET'])
+def switch_profile(profile_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+    token = auth_header.split(' ')[1]
+    user_id = decode_token(token)
+    if not user_id:
+        return jsonify({'error': 'Invalid token'}), 401
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    profile = CountryProfile.query.get(profile_id)
+    if profile and profile.user_id == user_id:
+        session['profile_id'] = profile.id
+        session['last_profile'] = {
+            'profile_id': profile.id,
+            'country': profile.country,
+            'transit_time': profile.transit_time,
+            'stock_unit': profile.stock_unit
+        }
+        return jsonify({'message': 'Profile switched successfully', 'profile_id': profile.id, 'country': profile.country, 'marketplace': profile.marketplace}), 200
+
+    return jsonify({'error': 'Profile not found or unauthorized access'}), 404
+
+
+
+
+@user_bp.route('/profileupdate', methods=['POST'])
+def profileupdate():
+    # Step 1: Get the Authorization header
+    auth_header = request.headers.get('Authorization') 
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+    # Step 2: Extract the token from the header
+    token = auth_header.split(' ')[1]
+    try:
+        # Decode the JWT token
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token has expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token'}), 401
+
+    # Step 3: Fetch the user from the database using the decoded user_id
+    user = User.query.filter_by(id=user_id).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    # Step 4: Get the updated data from the request
+    data = request.json
+    user.password = data.get('password', user.password)
+    user.email = data.get('email', user.email)
+    user.phone_number = data.get('phone_number', user.phone_number)
+    user.annual_sales_range = data.get('annual_sales_range', user.annual_sales_range)
+    user.company_name = data.get('company_name', user.company_name)
+    user.brand_name = data.get('brand_name', user.brand_name)
+    user.country = data.get('country', user.country)
+    user.platform = data.get('platform', user.platform)
+    user.homeCurrency = data.get('homeCurrency', user.homeCurrency)
+
+    # Step 5: Commit the changes to the database
+    try:
+        db.session.commit()
+        return jsonify({'message': 'Profile updated successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+@user_bp.route('/feepreviewupload', methods=['POST'])
+def feepreviewupload():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+    token = auth_header.split(' ')[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token has expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token'}), 401
+    user = User.query.get(user_id)
+    
+    
+
+    country = request.form.get('country').lower()
+    marketplace = request.form.get('marketplace')
+    file = request.files.get('file')
+    transit_time = int(request.form.get('transit_time'))  # Transit time in months  # Transit time in months
+    stock_unit = request.form.get('stock_unit')
+
+    
+    
+    if not country or not marketplace or not file or not transit_time or not stock_unit :
+        return jsonify({'error': 'Country, marketplace, and file , transit_time, stock_unit are required'}), 400
+    
+    existing_profile = CountryProfile.query.filter_by(
+            user_id=user_id, 
+            country=country, 
+            marketplace=marketplace, 
+    ).first()
+
+    if existing_profile:
+            db.session.delete(existing_profile)
+            db.session.commit()  # Commit the deletion
+
+    
+    
+    existing_profile = CountryProfile.query.filter_by(user_id=user_id, country=country, marketplace=marketplace, transit_time=transit_time, stock_unit=stock_unit ).first()
+    if existing_profile:
+        return jsonify({'message': f'Profile already exists for country: {country} and marketplace: {marketplace}'}), 409  # Conflict status code
+
+    if file:
+        filename = secure_filename(file.filename)
+        upload_folder = Config.UPLOAD_FOLDER
+        file_path = os.path.join(upload_folder, filename)
+        file.save(file_path)
+
+
+        # Read the Excel file using pandas
+        df = pd.read_excel(file_path)
+        def clean_numeric(value):
+            if value == '--' or pd.isna(value):
+                return 0  # You can use 0 if you prefer
+            try:
+                return float(value)
+            except ValueError:
+                return 0
+
+        float_cols = [
+            'price', 'estimated_fees', 'estimated_referral_fee', 'sales_price', 'longest_side', 'median_side',
+            'shortest_side', 'length_and_girth', 'item_package_weight', 'estimated_variable_closing_fee',
+            'expected_domestic_fulfilment_fee_per_unit', 'expected_efn_fulfilment_fee_per_unit_uk',
+            'expected_efn_fulfilment_fee_per_unit_de', 'expected_efn_fulfilment_fee_per_unit_fr',
+            'expected_efn_fulfilment_fee_per_unit_it', 'expected_efn_fulfilment_fee_per_unit_es',
+            'expected_efn_fulfilment_fee_per_unit_se'
+        ]
+
+        for column in float_cols:
+            if column in df.columns:
+                df[column] = df[column].apply(clean_numeric)
+         # Create user-specific database session
+        user_engine = create_engine(db_url)
+        user_session = create_user_session(db_url)
+        admin_engine = create_engine(db_url1)
+        AdminSession = sessionmaker(bind=admin_engine)
+        admin_session = AdminSession()
+
+
+
+
+        country = country.lower()
+        table_name = f'user_{user_id}_{country.lower()}_table'
+        metadata = MetaData()
+        metadata.bind = user_engine
+
+        user_specific_table = Table(
+               table_name, metadata,
+             Column('id', Integer, primary_key=True),
+        Column('user_id', Integer, nullable=False),
+        Column('country', String(255), nullable=False),
+        Column('transit_time', Integer, nullable=False),
+        Column('stock_unit', Integer, nullable=False),
+        Column('product_group', String(255), nullable=False),
+        Column('estimated_fees', Float, nullable=False),
+        Column('referral_fee', Float, nullable=True) ,
+        Column('estimated_referral_fee', Float, nullable=True) ,
+        Column('marketplace', String(255), nullable=False),
+        Column('file_name', String(255), nullable=False),
+        Column('sku', String(255), nullable=False),
+        Column('fnsku', String(255), nullable=False),
+        Column('amazon_store', String(255), nullable=False),
+        Column('asin', String(255), nullable=False),
+        Column('product_barcode', String(255), nullable=True),  # New column
+        Column('sku_cost_price', Float, nullable=True),  # New column   
+        Column('product_name', String(255), nullable=False),
+        Column('brand', String(255), nullable=False),
+        Column('price', Float, nullable=False),
+        Column('fulfilled_by', String(255), nullable=True),
+        Column('has_local_inventory', String(255), nullable=True),
+        Column('sales_price', Float, nullable=True),
+        Column('longest_side', Float, nullable=True),
+        Column('median_side', Float, nullable=True),
+        Column('shortest_side', Float, nullable=True),
+        Column('length_and_girth', Float, nullable=True),
+        Column('unit_of_dimension', String(50), nullable=True),
+        Column('item_package_weight', Float, nullable=True),
+        Column('unit_of_weight', String(50), nullable=True),
+        Column('product_size_weight_band', String(255), nullable=True),
+        Column('currency', String(10), nullable=True),
+        Column('estimated_variable_closing_fee', Float, nullable=True),
+        Column('expected_domestic_fulfilment_fee_per_unit', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_uk', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_de', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_fr', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_it', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_es', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_se', Float, nullable=True),
+
+
+    )
+        metadata.create_all(user_engine)
+        
+        with user_engine.connect() as conn:
+            conn.execute(text(f"DELETE FROM {table_name} WHERE user_id = :user_id AND country = :country AND marketplace = :marketplace"),
+                            {"user_id": user_id, "country": country, "marketplace": marketplace})
+            conn.commit()
+
+
+        df = df.fillna('')
+        df.replace('--', np.nan, inplace=True)
+    
+        # Iterate over the rows and save data to the database
+        for _, row in df.iterrows():
+            # fnsku = row['Fnsku'] if pd.notna(row['Fnsku']) else ''
+            insert_stmt = user_specific_table.insert().values(
+                user_id=user_id,
+                country=country,
+                transit_time=transit_time,
+                stock_unit=stock_unit,
+                marketplace=marketplace,
+                file_name=filename,
+                sku=row.get('sku', ''),
+                fnsku=row.get('fnsku', ''),
+                asin=row.get('asin', ''),
+                amazon_store=row.get('amazon-store', ''),
+                product_name=row.get('product-name', ''),
+                product_group=row.get('product-group', ''),
+                brand=row.get('brand', ''),
+                price=row.get('your-price', 0),
+                estimated_fees=row.get('estimated-fee-total', 0),
+                estimated_referral_fee=row.get('estimated-referral-fee-per-unit', None),
+                fulfilled_by=row.get('fulfilled-by', ''),
+                has_local_inventory=row.get('has-local-inventory', ''),
+                sales_price=row.get('sales-price', None),
+                longest_side=row.get('longest-side', None),
+                median_side=row.get('median-side', None),
+                shortest_side=row.get('shortest-side', None),
+                length_and_girth=row.get('length-and-girth', None),
+                unit_of_dimension=row.get('unit-of-dimension', ''),
+                item_package_weight=row.get('item-package-weight', None),
+                unit_of_weight=row.get('unit-of-weight', ''),
+                product_size_weight_band=row.get('product-size-weight-band', ''),
+                currency=row.get('currency', ''),
+                estimated_variable_closing_fee=row.get('estimated-variable-closing-fee', None),
+                expected_domestic_fulfilment_fee_per_unit=row.get('expected-domestic-fulfilment-fee-per-unit', None),
+                expected_efn_fulfilment_fee_per_unit_uk=row.get('expected-efn-fulfilment-fee-per-unit-uk', None),
+                expected_efn_fulfilment_fee_per_unit_de=row.get('expected-efn-fulfilment-fee-per-unit-de', None),
+                expected_efn_fulfilment_fee_per_unit_fr=row.get('expected-efn-fulfilment-fee-per-unit-fr', None),
+                expected_efn_fulfilment_fee_per_unit_it=row.get('expected-efn-fulfilment-fee-per-unit-it', None),
+                expected_efn_fulfilment_fee_per_unit_es=row.get('expected-efn-fulfilment-fee-per-unit-es', None),
+                expected_efn_fulfilment_fee_per_unit_se=row.get('expected-efn-fulfilment-fee-per-unit-se', None),
+        
+                referral_fee=None,
+                product_barcode=None,  # Will update later
+                sku_cost_price=None  # Initialize with None, will update later
+
+            )
+            user_session.execute(insert_stmt)
+        user_session.commit()
+
+
+        conn = user_engine.connect()
+        query = user_specific_table.select()
+        results = conn.execute(query).mappings().all()
+
+        for result in results:
+            country_value = result['country']
+            product_group_value = result['product_group']
+            price_value = result['price']
+           
+
+
+            
+            product_group_cleaned = (product_group_value or "").strip()
+
+
+            
+            
+
+            COUNTRY_MAP = {
+                "uk": "United Kingdom",
+                "us": "United States",
+                "uae": "United Arab Emirates",
+                "in": "India"
+                # add more if needed
+            }
+
+            # Convert frontend country to DB country
+            normalized_country = COUNTRY_MAP.get(country.lower(), country)
+
+
+            queery = admin_session.query(Category).filter_by(
+                country=normalized_country,
+                category=product_group_cleaned
+            )
+            
+            Category_obj = queery.first()
+
+            if not Category_obj:
+                # Extract first word before special characters like & / - etc.
+                first_word = product_group_cleaned.split('&')[0].split('/')[0].split('-')[0].strip().upper()
+    
+            
+                queery = admin_session.query(Category).filter_by(
+                    country=normalized_country.strip(),
+                    category=first_word
+                )
+
+            # Add conditional filtering based on price_from and price_to
+            if price_value is not None:
+                queery = queery.filter(
+                    and_(
+                        or_(Category.price_from == 0, Category.price_from <= price_value),
+                        or_(Category.price_to == 0, Category.price_to >= price_value)
+                    )
+                )
+                
+
+            Category_obj = queery.first()
+
+            if Category_obj:
+
+                update_stmt = (
+                    user_specific_table.update()
+                    .where(user_specific_table.c.id == result['id'])
+                    .values(referral_fee=Category_obj.referral_fee)
+                )
+
+                conn.execute(update_stmt)
+
+            else:
+                print(f"No matching Category found for country {country_value} and Category {product_group_value}")  # Debugging statement
+
+        conn.commit()  # Ensure all updates are committed
+
+         # Verify update
+        with user_engine.connect() as conn:
+         updated_results = conn.execute(query).mappings().all()
+         for result in updated_results:
+            print(f"ID: {result['id']}, Referral Fee: {result['referral_fee']}")  # Verify update
+        
+        
+
+
+
+        sku_table_name = f"sku_{user_id}_data_table"
+        with user_engine.connect() as conn:
+            sku_data_table = Table(sku_table_name, metadata, autoload_with=user_engine)
+
+            query = text(f"""
+                SELECT asin, product_barcode, price 
+                FROM {sku_table_name}
+                WHERE asin IN (SELECT asin FROM {table_name} WHERE user_id = :user_id)
+            """)
+
+            result = conn.execute(query, {"user_id": user_id})
+
+            # Fetch rows as dictionaries
+            rows = [dict(zip(result.keys(), row)) for row in result.fetchall()]
+
+            # Now safely access dictionary keys
+            asin_mapping = {row['asin']: (row['product_barcode'], row['price']) for row in rows}
+
+        # Update user_{country}_table with fetched data
+        with user_engine.connect() as conn:
+            for asin, (barcode, price) in asin_mapping.items():
+                update_stmt = text(f"""
+                    UPDATE {table_name}
+                    SET product_barcode = :barcode, sku_cost_price = :price
+                    WHERE asin = :asin AND user_id = :user_id
+                """)
+                conn.execute(update_stmt, {"barcode": barcode, "price": price, "asin": asin, "user_id": user_id})
+
+            conn.commit()
+
+        new_profile = CountryProfile(
+            user_id=user_id,
+            country=country, 
+            marketplace=marketplace,
+            transit_time=transit_time,
+            stock_unit=stock_unit
+
+        )
+        db.session.add(new_profile)
+        db.session.commit()
+
+        return jsonify({'message': 'New profile created successfully','profile_id': new_profile.id,'country':new_profile.country}), 201  # Created status code
+
+    return jsonify({'message': 'File successfully uploaded and data added to the database.'})
+    
