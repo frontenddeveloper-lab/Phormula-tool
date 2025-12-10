@@ -778,7 +778,7 @@ class FormulaEngine:
             "platform": "platform_fee", "subscription fee": "platform_fee",
             "ads": "advertising_total", "ad cost": "advertising_total", "advertising": "advertising_total",
             "reimb vs sales": "reimbursement_vs_sales", "reimbursement vs sales": "reimbursement_vs_sales",
-            "cm2": "cm2_profit", "cm2 profit": "cm2_profit", "cm2 margin": "cm2_margins",
+            "cm2": "cm2_profit", "cm2 profit": "cm2_profit","net profit": "cm2_profit", "cm2 margin": "cm2_margins",
             "acos": "acos", "ad cos": "acos", "roas": "acos",
             "reimb vs cm2": "reimbursement_vs_cm2_margins", "reimbursement vs cm2": "reimbursement_vs_cm2_margins",
             "margin": "profit_margin", "profit %": "profit_margin",
@@ -2115,7 +2115,7 @@ class FormulaEngine:
             per_sku["__metric__"] = (
                 per_sku["sales"].abs()
                 + per_sku["credits"].abs()
-                - per_sku["taxes"]
+                + per_sku["taxes"].abs()
                 - per_sku["amazon_fee"]
                 - per_sku["cost"].abs()
             )
