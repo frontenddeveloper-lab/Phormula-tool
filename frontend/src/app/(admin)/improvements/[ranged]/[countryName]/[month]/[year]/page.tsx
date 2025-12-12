@@ -413,12 +413,16 @@ axisLabel: {
 
         splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
       },
-      yAxis: {
-        type: 'value',
- axisLabel: {
-    formatter: (v: any) => Math.round(Number(v)).toLocaleString(),
-  },
-      },
+     yAxis: {
+  type: 'value',
+  name: `Net Sales (£)`,
+  nameLocation: 'middle',
+  nameGap: 45,
+  axisLabel: {
+    formatter: (v: number) => `£${Math.round(v).toLocaleString()}`
+  }
+},
+
       
     series: [
   {
@@ -589,12 +593,16 @@ axisLabel: {
 
         splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
       },
-      yAxis: {
-        type: 'value',
- axisLabel: {
-    formatter: (v: any) => Math.round(Number(v)).toLocaleString(),
-  },
-      },
+yAxis: {
+  type: 'value',
+  name: `CM1 Profit (£)`,
+  nameLocation: 'middle',
+  nameGap: 45,
+  axisLabel: {
+    formatter: (v: number) => `£${Math.round(v).toLocaleString()}`
+  }
+}
+,
    series: [
   {
     name: 'New/Reviving',
@@ -752,10 +760,17 @@ useEffect(() => {
         },
         splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
       },
-      yAxis: {
-        type: 'value',
-        axisLabel: { formatter: (v: any) => fmtNum(v) },
-      },
+    yAxis: {
+  type: 'value',
+  name: 'Units (No.s)',
+  nameLocation: 'middle',
+  nameGap: 45,
+  axisLabel: {
+    formatter: (v: number) => `${Math.round(v).toLocaleString()}`
+  }
+}
+
+,
 
       series: [
         {
@@ -912,7 +927,10 @@ useEffect(() => {
         splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
       },
       yAxis: {
-        type: 'value',
+       type: 'value',
+  name: `ASP (£)`,
+  nameLocation: 'middle',
+  nameGap: 45,
         axisLabel: {formatter: (value: number) => {
       if (!value) return '0';
       return Number.isInteger(value)
@@ -2635,10 +2653,10 @@ const isLockedCurrent = (year: string, month: string) => {
 <div className='w-full'>
       {/* Month selectors */}
       <h2 className="text-2xl font-bold text-[#414042] mb-2">
-          Business Insights - AI Analyst&nbsp;
-          <span className="text-[#5EA68E]">
-             {countryName && formatCountryLabel(countryName)}<span className="text-[#5EA68E] px-2">
-           {month1 && year1 && month2 && year2
+          Business Insights - AI Analyst&nbsp;- 
+          <span className="text-[#5EA68E] pl-1">
+              {countryName && formatCountryLabel(countryName)}<span className="text-[#5EA68E] px-2">
+           {/* {month1 && year1 && month2 && year2
   ? (() => {
       const monthToIndex = (m: string) => {
         const s = String(m).trim().toLowerCase();
@@ -2687,7 +2705,7 @@ const isLockedCurrent = (year: string, month: string) => {
 
       return `(${getAbbr(newMonth)}'${ny.slice(2)} vs ${getAbbr(oldMonth)}'${oy.slice(2)})`;
     })()
-  : ''}
+  : ''} */}
 
 </span>
           </span>
@@ -2772,7 +2790,7 @@ const disabled =
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
-     <div className="mt-4 mb-3 rounded-xl border border-gray-200 bg-white p-3 w-full bg-[#D9D9D933]">
+     <div className="mt-4 mb-3 rounded-xl border border-gray-200  p-3 w-full bg-[#D9D9D933]">
   <div className="text-2xl font-bold text-[#414042]">Profitability</div>
 
  {/* Center labels like GraphPage */}
@@ -2858,7 +2876,7 @@ const disabled =
 </div>
 
   {/* Shared legend bottom center */}
-  <div className="mt-3 flex flex-wrap justify-center gap-4 text-[12px] font-semibold text-[#414042]">
+  <div className="mt-3 flex flex-wrap justify-center gap-4 text-[14px] font-semibold text-[#414042]">
     <span className="inline-flex items-center gap-2">
       <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#F47A00]" />
       Top 80%
@@ -2882,8 +2900,8 @@ const disabled =
 {(['all_skus','top_80_skus','new_or_reviving_skus','other_skus'] as TabKey[]).some(
   (k) => (categorizedGrowth[k] || []).length > 0
 ) && (
-        <div>
-          <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start mt-10'>
+        <div className='border border-gray-200 rounded-xl p-4 mt-6 w-full bg-white'>
+          <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start '>
             <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start w-full'>
 <h2 className="xl:text-2xl text-xl font-bold text-[#414042] mb-4">Performance-based SKU split</h2>
             <div className='flex justify-center gap-3'>
@@ -3224,7 +3242,7 @@ exportToExcel(allRows, file);
     alignItems: 'center',
     gap: 14,
     flexWrap: 'wrap',
-    fontSize: 12,
+    fontSize: 14 ,
     color: '#414042',
     marginTop: 6,
   }}

@@ -85,6 +85,94 @@ const cleanMarkdown = (s = '') =>
     .replace(/\*{1,3}/g, '')
     .trim()
 
+
+    function analyticsTextToMarkdown(raw = ""): string {
+  const text = raw.replace(/\r\n/g, "\n").trim();
+  if (!text) return "";
+
+  const lines = text
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  let md = "";
+  let mode: "none" | "summary" | "actions" = "none";
+  let i = 0;
+
+  const isHeading = (l: string) => /^summary$/i.test(l) || /^actions$/i.test(l);
+  const isProduct = (l: string) => /^product\s*name\s*-\s*/i.test(l);
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Headings
+    if (/^summary$/i.test(line)) {
+      md += `## SUMMARY\n\n`;
+      mode = "summary";
+      i++;
+      continue;
+    }
+    if (/^actions$/i.test(line)) {
+      md += `\n---\n\n## ACTIONS\n\n`;
+      mode = "actions";
+      i++;
+      continue;
+    }
+
+    // SUMMARY: every sentence -> bullet
+    if (mode === "summary" && !isHeading(line) && !isProduct(line)) {
+      md += `- ${line}\n`;
+      i++;
+      continue;
+    }
+
+    // ACTIONS: Product block
+    if (mode === "actions" && isProduct(line)) {
+      const productName = line.replace(/^product\s*name\s*-\s*/i, "").trim();
+      md += `\n### Product: **${productName}**\n\n`;
+
+      // Collect description lines until next Product/Heading
+      i++;
+      const desc: string[] = [];
+      while (i < lines.length && !isProduct(lines[i]) && !isHeading(lines[i])) {
+        desc.push(lines[i]);
+        i++;
+      }
+
+      // Split desc into: metrics paragraph + action line (usually last)
+      // Heuristic: last line that starts with Review/Reduce/Increase/etc => ACTION
+      const actionIdx = desc.findIndex(d => /^(review|reduce|increase|decrease|optimize|improve)/i.test(d));
+      const actionLine = actionIdx >= 0 ? desc[actionIdx] : desc[desc.length - 1];
+      const metricsLines =
+        actionIdx >= 0 ? desc.filter((_, idx) => idx !== actionIdx) : desc.slice(0, -1);
+
+      // Metrics as bullets (sentences)
+      const metricsText = metricsLines.join(" ");
+      const metricsSentences = metricsText
+        .split(/(?<=[.])\s+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      if (metricsSentences.length) {
+        metricsSentences.forEach(s => (md += `- ${s}\n`));
+      }
+
+      if (actionLine) {
+        md += `\n**Action:** ${actionLine}\n`;
+      }
+
+      continue;
+    }
+
+    // fallback: normal line
+    md += `${line}\n`;
+    i++;
+  }
+
+  return md.trim();
+}
+
+
 function parseAIResponse(rawText: string): ParsedAI {
   const result: ParsedAI = { title: '', details: [], weeks: [] }
   if (!rawText) return result
@@ -505,7 +593,8 @@ export default function ChatbotPage() {
                               )
                             } else {
                               // Default: render as Markdown
-                              return <ReactMarkdown>{msg.text}</ReactMarkdown>
+const formatted = analyticsTextToMarkdown(msg.text);
+return <ReactMarkdown>{formatted || msg.text}</ReactMarkdown>;
                             }
                           })()
                         ) : (

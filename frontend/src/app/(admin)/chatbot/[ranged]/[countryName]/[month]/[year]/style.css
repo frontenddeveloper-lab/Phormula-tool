@@ -64,6 +64,27 @@
   opacity: 0;
 } 
 
+.markdown h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 12px;
+}
+
+.markdown h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.markdown ul {
+  padding-left: 18px;
+}
+
+.markdown li {
+  margin-bottom: 6px;
+}
+
+
 /* background-image: url('/src/assets/chat-ai-bg.png');
 background-image: url('/src/assets/chat-user-bg.png'); */
 

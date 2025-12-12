@@ -811,7 +811,7 @@ const QuarterlyLast12Filters: React.FC<Props> = ({
   const wrapCls =
     "relative inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs sm:text-sm shadow-sm";
   const selectCls =
-    "appearance-none bg-transparent pr-5 text-xs sm:text-sm text-[#414042] focus:outline-none cursor-pointer leading-tight";
+    "appearance-none bg-transparent px-2 py-1 pr-6 text-center text-xs sm:text-sm text-[#414042] focus:outline-none cursor-pointer leading-tight";
 
   return (
     <div className="flex items-center gap-2 sm:gap-3">
@@ -826,7 +826,7 @@ const QuarterlyLast12Filters: React.FC<Props> = ({
           <option value="yearly">Last 12 Months</option>
           <option value="lifetime">Lifetime</option>
         </select>
-        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] text-[#414042]">
+        <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
           <FaAngleDown />
         </span>
       </div>
@@ -834,9 +834,9 @@ const QuarterlyLast12Filters: React.FC<Props> = ({
       {/* 2️⃣ Quarter picker – only when Quarterly is selected */}
       {safeRange === "quarterly" && (
         <div className={wrapCls}>
-          <span className="mr-2 flex items-center text-base text-[#414042]/70">
+          {/* <span className="mr-2 flex items-center text-base text-[#414042]/70">
             <HiOutlineCalculator />
-          </span>
+          </span> */}
 
           <select
             value={currentQuarterValue}
@@ -855,7 +855,8 @@ const QuarterlyLast12Filters: React.FC<Props> = ({
             ))}
           </select>
 
-          <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] text-[#414042]">
+          <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
+
             <FaAngleDown />
           </span>
         </div>
