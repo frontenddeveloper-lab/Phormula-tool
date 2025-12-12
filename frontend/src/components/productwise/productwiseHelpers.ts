@@ -309,25 +309,224 @@
 
 
 
+// // components/productwise/productwiseHelpers.ts
+
+// export type CountryKey =
+//   | "global"
+//   | "global_gbp"
+//   | "global_inr"
+//   | "global_cad"
+//   | "uk"
+//   | "us"
+//   | "ca"
+//   | "india"
+
+// export type Range = "monthly" | "quarterly" | "yearly";
+
+// export type MonthDatum = {
+//   month: string;                 // "October"
+//   month_num?: string;            // "10" (optional)
+//   net_sales: number;
+//   quantity: number;
+//   profit: number;
+//   gross_margin?: number;         // %
+//   year?: number;
+//   conversion_rate_applied?: number | null;
+// };
+
+// export type APIResponse = {
+//   success: boolean;
+//   message?: string;
+//   // Backend sends e.g. "global": MonthDatum[], "uk": MonthDatum[], "us": MonthDatum[]
+//   data: Record<CountryKey, MonthDatum[]>;
+//   available_countries?: string[];
+//   time_range?: string;
+//   year?: number;
+//   quarter?: string | null;
+// };
+
+// export const monthOrder = [
+//   "October",   // you only care about ordering; your API uses capitalized names
+//   "November",
+//   "December",
+//   "January",
+//   "February",
+//   "March",
+//   "April",
+//   "May",
+//   "June",
+//   "July",
+//   "August",
+//   "September",
+// ];
+
+// // legacy – keep for other places if they still use it
+// // export const GBP_TO_USD_RATE = 1.27;
+
+// export const formatCountryLabel = (country: string) => {
+//   const lower = country.toLowerCase();
+//   if (lower === "global") return "Global";
+//   if (lower.startsWith("global_")) {
+//     // e.g. global_gbp, global_inr
+//     return "Global";
+//   }
+//   return country.toUpperCase();
+// };
+
+// // ---- currency helpers ----
+
+// /**
+//  * Given a country or global variant, decide which ISO currency code to use.
+//  * This is purely a mapping – NOT conversion.
+//  */
+// export const inferCurrencyFromKey = (countryOrKey: string): string => {
+//   const lower = countryOrKey.toLowerCase();
+
+//   if (
+//     lower === "uk" ||
+//     lower === "gbp" ||
+//     lower === "global_gbp" ||
+//     lower === "uk_gbp"
+//   ) {
+//     return "GBP";
+//   }
+
+//   if (
+//     lower === "us" ||
+//     lower === "usa" ||
+//     lower === "usd" ||
+//     lower === "global" ||
+//     lower === "global_usd"
+//   ) {
+//     return "USD";
+//   }
+
+//   // Fallback – most of your code is USD by default
+//   return "USD";
+// };
+
+// /**
+//  * Generic formatter when you already know the currency.
+//  */
+// export const formatCurrency = (value: number, currency: string) =>
+//   new Intl.NumberFormat(currency === "GBP" ? "en-GB" : "en-US", {
+//     style: "currency",
+//     currency,
+//     minimumFractionDigits: 0,
+//     maximumFractionDigits: 0,
+//   }).format(value);
+
+// /**
+//  * Backwards-compatible helper; can be given "uk", "us", "global", "global_gbp", etc.
+//  * Uses inferCurrencyFromKey() internally.
+//  */
+// export const formatCurrencyByCountry = (
+//   countryOrKey: string,
+//   value: number
+// ) => {
+//   const currency = inferCurrencyFromKey(countryOrKey);
+//   return formatCurrency(value, currency);
+// };
+
+// export const getCountryColor = (country: CountryKey) => {
+//   const lower = (country || "").toLowerCase();
+//   const colors: Record<string, string> = {
+//     uk: "#AB64B5",
+//     us: "#87AD12",
+//     global: "#F47A00",
+//     global_gbp: "#F47A00",
+//     global_usd: "#F47A00",
+//   };
+//   return colors[lower] || "#ff7c7c";
+// };
+
+// export const formatMonthYear = (monthName: string, year: number | string) => {
+//   const MONTH_ABBRS = [
+//     "Jan",
+//     "Feb",
+//     "Mar",
+//     "Apr",
+//     "May",
+//     "Jun",
+//     "Jul",
+//     "Aug",
+//     "Sep",
+//     "Oct",
+//     "Nov",
+//     "Dec",
+//   ];
+
+//   if (!monthName) return "";
+
+//   const fullNames = [
+//     "january",
+//     "february",
+//     "march",
+//     "april",
+//     "may",
+//     "june",
+//     "july",
+//     "august",
+//     "september",
+//     "october",
+//     "november",
+//     "december",
+//   ];
+
+//   const idx = fullNames.findIndex(
+//     (full) =>
+//       monthName.toLowerCase().startsWith(full.slice(0, 3)) ||
+//       monthName.toLowerCase() === full
+//   );
+
+//   const abbr = idx >= 0 ? MONTH_ABBRS[idx] : monthName.slice(0, 3) || monthName;
+//   const y = String(year);
+//   const shortYear = y.slice(-2);
+//   return `${abbr}'${shortYear}`;
+// };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // components/productwise/productwiseHelpers.ts
 
 export type CountryKey =
-  | "uk"
-  | "us"
   | "global"
   | "global_gbp"
   | "global_inr"
-  | "global_cad";
+  | "global_cad"
+  | "uk"
+  | "us"
+  | "ca"
+  | "india";
 
 export type Range = "monthly" | "quarterly" | "yearly";
 
 export type MonthDatum = {
-  month: string;                 // "October"
-  month_num?: string;            // "10" (optional)
+  month: string; // "October"
+  month_num?: string; // "10" (optional)
   net_sales: number;
   quantity: number;
   profit: number;
-  gross_margin?: number;         // %
+  gross_margin?: number; // %
   year?: number;
   conversion_rate_applied?: number | null;
 };
@@ -342,9 +541,21 @@ export type APIResponse = {
   year?: number;
   quarter?: string | null;
 };
+// productwiseHelpers.ts
+
+export const normalizeCountryKey = (key: string): CountryKey => {
+  const lower = key.toLowerCase();
+
+  if (lower.startsWith("global")) return "global";
+  if (lower.startsWith("uk")) return "uk";
+  if (lower.startsWith("us")) return "us";
+  if (lower.startsWith("ca")) return "ca" as CountryKey;
+
+  return lower as CountryKey;
+};
 
 export const monthOrder = [
-  "October",   // you only care about ordering; your API uses capitalized names
+  "October", // you only care about ordering; your API uses capitalized names
   "November",
   "December",
   "January",
@@ -358,14 +569,11 @@ export const monthOrder = [
   "September",
 ];
 
-// legacy – keep for other places if they still use it
-// export const GBP_TO_USD_RATE = 1.27;
-
 export const formatCountryLabel = (country: string) => {
   const lower = country.toLowerCase();
   if (lower === "global") return "Global";
   if (lower.startsWith("global_")) {
-    // e.g. global_gbp, global_inr
+    // e.g. global_gbp, global_inr, global_cad
     return "Global";
   }
   return country.toUpperCase();
@@ -380,6 +588,7 @@ export const formatCountryLabel = (country: string) => {
 export const inferCurrencyFromKey = (countryOrKey: string): string => {
   const lower = countryOrKey.toLowerCase();
 
+  // Pounds
   if (
     lower === "uk" ||
     lower === "gbp" ||
@@ -389,6 +598,27 @@ export const inferCurrencyFromKey = (countryOrKey: string): string => {
     return "GBP";
   }
 
+  // Rupees
+  if (
+    lower === "in" ||
+    lower === "india" ||
+    lower === "inr" ||
+    lower === "global_inr"
+  ) {
+    return "INR";
+  }
+
+  // Canadian dollars
+  if (
+    lower === "ca" ||
+    lower === "canada" ||
+    lower === "cad" ||
+    lower === "global_cad"
+  ) {
+    return "CAD";
+  }
+
+  // US dollars (default)
   if (
     lower === "us" ||
     lower === "usa" ||
@@ -406,22 +636,32 @@ export const inferCurrencyFromKey = (countryOrKey: string): string => {
 /**
  * Generic formatter when you already know the currency.
  */
-export const formatCurrency = (value: number, currency: string) =>
-  new Intl.NumberFormat(currency === "GBP" ? "en-GB" : "en-US", {
+export const formatCurrency = (value: number, currency: string) => {
+  const upper = (currency || "").toUpperCase();
+
+  const locale =
+    upper === "GBP"
+      ? "en-GB"
+      : upper === "INR"
+      ? "en-IN"
+      : upper === "CAD"
+      ? "en-CA"
+      : "en-US";
+
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency,
+    currency: upper,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
+};
 
 /**
- * Backwards-compatible helper; can be given "uk", "us", "global", "global_gbp", etc.
+ * Backwards-compatible helper; can be given "uk", "us", "global",
+ * "global_gbp", "global_inr", "global_cad", etc.
  * Uses inferCurrencyFromKey() internally.
  */
-export const formatCurrencyByCountry = (
-  countryOrKey: string,
-  value: number
-) => {
+export const formatCurrencyByCountry = (countryOrKey: string, value: number) => {
   const currency = inferCurrencyFromKey(countryOrKey);
   return formatCurrency(value, currency);
 };
@@ -431,8 +671,11 @@ export const getCountryColor = (country: CountryKey) => {
   const colors: Record<string, string> = {
     uk: "#AB64B5",
     us: "#87AD12",
+    ca: "#0EA5E9",
     global: "#F47A00",
     global_gbp: "#F47A00",
+    global_inr: "#F47A00",
+    global_cad: "#F47A00",
     global_usd: "#F47A00",
   };
   return colors[lower] || "#ff7c7c";

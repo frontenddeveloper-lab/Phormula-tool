@@ -201,6 +201,55 @@ def encode_file_to_base64(file_path):
 #         print(f"Error in productwise_performance: {str(e)}")
 #         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
+def get_countries_for_currency(currency):
+    currency = currency.lower()
+
+    if currency == "usd":
+        return ["uk_usd", "us", "global"]
+
+    elif currency == "inr":
+        return ["uk", "us", "global_inr"]
+
+    elif currency == "gbp":
+        return ["uk", "us", "global_gbp"]
+
+    elif currency == "cad":
+        return ["uk", "us", "global_cad"]
+
+    # default fallback
+    return ["uk", "us", "global"]
+
+
+def get_conversion_rate(source_currency, target_currency, month, year):
+    try:
+        query = text("""
+            SELECT conversion_rate 
+            FROM currency_conversion
+            WHERE LOWER(user_currency) = :source
+            AND LOWER(selected_currency) = :target
+            AND LOWER(month) = :month
+            AND year = :year
+            LIMIT 1
+        """)
+        result = conn1.execute(query, {
+            "source": source_currency.lower(),
+            "target": target_currency.lower(),
+            "month": month.lower(),
+            "year": year
+        }).fetchone()
+
+        return float(result[0]) if result else 1.0
+    except:
+        return 1.0
+
+
+country_currency_map = {
+    "uk": "gbp",
+    "us": "usd",
+    "global": None   # global stays as it is (optional)
+}
+
+
 
 @skuwise_bp.route('/ProductwisePerformance', methods=['POST'])
 def productwise_performance():
@@ -226,12 +275,15 @@ def productwise_performance():
         year = data.get('year', datetime.now().year)
         quarter = data.get('quarter')
 
-        home_currency = (data.get('home_currency') or 'USD').upper()
+        home_currency = (data.get('home_currency') or 'USD').lower()
 
-        requested_countries = data.get(
-            'countries',
-            ['uk', 'us', 'global', 'global_inr', 'global_cad', 'global_gbp']
-        )
+        # requested_countries = data.get(
+        #     'countries',
+        #     ['uk', 'us', 'global']
+        # )
+
+        requested_countries = get_countries_for_currency(home_currency)
+
 
         if not product_name:
             return jsonify({'error': 'Product name is required'}), 400
@@ -309,10 +361,10 @@ def productwise_performance():
                 conversion_rate_applied = None
 
                 # Only fetch UK→USD rate if we're actually going to use USD
-                if country.lower() == 'uk' and home_currency == 'USD':
-                    conversion_rate = get_uk_conversion_rate(month, year)
-                else:
-                    conversion_rate = 1.0
+                # if country.lower() == 'uk' and home_currency == 'USD':
+                #     conversion_rate = get_uk_conversion_rate(month, year)
+                # else:
+                #     conversion_rate = 1.0
 
                 for i, table_pattern in enumerate(table_patterns):
                     matching_tables = [
@@ -361,18 +413,46 @@ def productwise_performance():
                         )
 
                         # For UK: only convert to USD when requested
-                        if country.lower() == 'uk' and i == 0 and home_currency == 'USD':
-                            table_sales *= conversion_rate
-                            table_profit *= conversion_rate
-                            table_asp *= conversion_rate
-                            table_cost_of_unit_sold *= conversion_rate
-                            conversion_rate_applied = conversion_rate
+                        # if country.lower() == 'uk' and i == 0 and home_currency == 'USD':
+                        #     table_sales *= conversion_rate
+                        #     table_profit *= conversion_rate
+                        #     table_asp *= conversion_rate
+                        #     table_cost_of_unit_sold *= conversion_rate
+                        #     conversion_rate_applied = conversion_rate
+
+                        # total_sales += table_sales
+                        # total_quantity += table_quantity
+                        # total_profit += table_profit
+                        # total_asp += table_asp
+                        # total_cost_of_unit_sold += table_cost_of_unit_sold
+
+                        source_currency = country_currency_map.get(country.lower())
+                        target_currency = home_currency.lower()
+
+                        if source_currency and target_currency:
+                            conversion_rate = get_conversion_rate(
+                                source_currency,
+                                target_currency,
+                                month,
+                                year
+                            )
+                        else:
+                            conversion_rate = 1.0
+
+                        # Apply conversion
+                        table_sales *= conversion_rate
+                        table_profit *= conversion_rate
+                        table_asp *= conversion_rate
+                        table_cost_of_unit_sold *= conversion_rate
+
+                        conversion_rate_applied = conversion_rate
 
                         total_sales += table_sales
                         total_quantity += table_quantity
                         total_profit += table_profit
                         total_asp += table_asp
                         total_cost_of_unit_sold += table_cost_of_unit_sold
+
 
                     except Exception as e:
                         conn.rollback()

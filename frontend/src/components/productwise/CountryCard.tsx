@@ -403,61 +403,187 @@
 import React from "react";
 import {
   CountryKey,
-  formatCurrencyByCountry,
   formatMonthYear,
   getCountryColor,
+  normalizeCountryKey
 } from "./productwiseHelpers";
+import type { HomeCurrency } from "@/components/dashboard/useFx";
 
 interface CountryCardProps {
   country: string;
   stats: any;
   selectedYear: number | "";
   homeCurrency: "USD" | "GBP" | "INR" | "CAD";
+  activeCountry: string;
 }
+
+// const inferCurrencyFromKey = (key: CountryKey): "USD" | "GBP" | "INR" | "CAD" => {
+//   switch (key) {
+//     case "uk":
+//     case "global_gbp":
+//       return "GBP";
+//     case "global_inr":
+//       return "INR";
+//     case "global_cad":
+//       return "CAD";
+//     case "global":
+//     case "us":
+//     default:
+//       return "USD";
+//   }
+// };
 
 const CountryCard: React.FC<CountryCardProps> = ({
   country,
   stats,
   selectedYear,
-  homeCurrency, // now actually influencing the symbol
+  homeCurrency,
+  activeCountry,
 }) => {
-  const countryKey = country.toLowerCase() as CountryKey;
+  // const countryKey = country.toLowerCase() as CountryKey;
+  // const active = (activeCountry || "global").toLowerCase();
+  // const isGlobalSnapshot = active === "global";
 
-  /**
-   * Decide which "currency profile" to use for the symbol.
-   * - UK card should always show native GBP (Amazon UK rule).
-   * - All other countries should use the user's homeCurrency symbol.
-   */
-  const getSymbolKey = (): CountryKey => {
-    // Amazon UK: always show native GBP
-    if (countryKey === "uk") return "uk";
 
-    // Everything else: show in home currency symbol
-    switch (homeCurrency) {
-      case "INR":
-        return "global_inr"; // gives ₹
-      case "GBP":
-        return "global_gbp"; // gives £
-      case "CAD":
-        return "global_cad"; // gives CA$
-      case "USD":
-      default:
-        return "global"; // gives $
-    }
-  };
+  // const getSymbolKey = (): CountryKey => {
+  //   // 1) GLOBAL SNAPSHOT: everything uses home currency symbol
+  //   if (isGlobalSnapshot) {
+  //     switch (homeCurrency) {
+  //       case "INR":
+  //         return "global_inr"; // ₹
+  //       case "GBP":
+  //         return "global_gbp"; // £
+  //       case "CAD":
+  //         return "global_cad"; // CA$
+  //       case "USD":
+  //       default:
+  //         return "global"; // $
+  //     }
+  //   }
+
+  //   if (countryKey === "uk") {
+  //     return "uk";
+  //   }
+
+  //   // US card → native USD
+  //   if (countryKey === "us") {
+  //     return "global"; // uses $
+  //   }
+
+  //   // CA card → native CAD
+  //   // if (countryKey === "ca") {
+  //   //   return "global_cad"; // uses CA$
+  //   // }
+
+  //   // GLOBAL card when a specific country is selected:
+  //   // you asked: "Global card in $ and UK card in GBP" → always $
+  //   if (countryKey.startsWith("global")) {
+  //     return "global";
+  //   }
+
+  //   // Fallback (any other card): use homeCurrency symbol
+  //   switch (homeCurrency) {
+  //     case "INR":
+  //       return "global_inr";
+  //     case "GBP":
+  //       return "global_gbp";
+  //     case "CAD":
+  //       return "global_cad";
+  //     case "USD":
+  //     default:
+  //       return "global";
+  //   }
+  // };
+
+  // const symbolKey = getSymbolKey();
+
+  // const formatAmountWith2Decimals = (value: number) => {
+  //   const symbolKey = getSymbolKey();
+  //   const currency = inferCurrencyFromKey(symbolKey);
+
+  //   return new Intl.NumberFormat(
+  //     currency === "GBP"
+  //       ? "en-GB"
+  //       : currency === "INR"
+  //         ? "en-IN"
+  //         : currency === "CAD"
+  //           ? "en-CA"
+  //           : "en-US",
+  //     {
+  //       style: "currency",
+  //       currency,
+  //       minimumFractionDigits: 2,
+  //       maximumFractionDigits: 2,
+  //     }
+  //   ).format(value);
+  // };
+
 
   const formatAmount = (value: number) => {
-    return formatCurrencyByCountry(getSymbolKey(), value);
+    if (value == null) return "-";
+
+    const currency = homeCurrency; // "USD" | "GBP" | "INR" | "CAD"
+
+    const locale =
+      currency === "GBP"
+        ? "en-GB"
+        : currency === "INR"
+          ? "en-IN"
+          : currency === "CAD"
+            ? "en-CA"
+            : "en-US";
+
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(value);
   };
 
-  // For color + label, normalize "global_*" variants to "GLOBAL"
-  const colorKey: CountryKey = countryKey.startsWith("global")
-    ? "global"
-    : countryKey;
+  const formatAmountWith2Decimals = (value: number) => {
+    if (value == null) return "-";
 
-  const displayLabel = countryKey.startsWith("global")
-    ? "GLOBAL"
-    : country.toUpperCase();
+    const currency = homeCurrency;
+
+    const locale =
+      currency === "GBP"
+        ? "en-GB"
+        : currency === "INR"
+          ? "en-IN"
+          : currency === "CAD"
+            ? "en-CA"
+            : "en-US";
+
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
+
+  // For color + label, normalize "global_*" variants to "GLOBAL"
+  // const colorKey: CountryKey = countryKey.startsWith("global")
+  //   ? "global"
+  //   : countryKey;
+
+  // const displayLabel = countryKey.startsWith("global")
+  //   ? "GLOBAL"
+  //   : country.toUpperCase();
+
+
+  const backendKey = country.toLowerCase();          // e.g. "uk_usd"
+  const normalized = normalizeCountryKey(backendKey); // -> "uk"
+
+  // Card title label (GLOBAL / UK / US / CA)
+  const displayLabel =
+    normalized === "global"
+      ? "GLOBAL"
+      : normalized.toUpperCase();
+
+  // Card circle color
+  const colorKey = normalized;
 
   return (
     <div className="rounded-lg border border-charcoal-500 bg-white p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md">
@@ -471,6 +597,7 @@ const CountryCard: React.FC<CountryCardProps> = ({
             {displayLabel}
           </span>
         </h4>
+
       </div>
 
       <div className="flex flex-col gap-4">
@@ -517,8 +644,9 @@ const CountryCard: React.FC<CountryCardProps> = ({
               Avg. Selling Price
             </p>
             <p className="text-[clamp(12px,0.95vw,16px)] font-semibold">
-              {formatAmount(Number(stats.avgSellingPrice.toFixed(2)))}
+              {formatAmountWith2Decimals(stats.avgSellingPrice)}
             </p>
+
           </div>
 
           <div className="rounded-lg border border-gray-300 bg-gray-200/40 p-2 sm:p-3">
@@ -550,7 +678,7 @@ const CountryCard: React.FC<CountryCardProps> = ({
             <p className="text-[clamp(12px,0.95vw,16px)] font-semibold">
               {formatMonthYear(stats.maxSalesMonth.month, selectedYear || "")}
             </p>
-            <p className="text-[clamp(12px,0.95vw,16px)]">
+            <p className="text-[clamp(12px,0.95vw,16px)] font-semibold">
               {formatAmount(stats.maxSalesMonth.net_sales)}
             </p>
           </div>
@@ -569,7 +697,7 @@ const CountryCard: React.FC<CountryCardProps> = ({
             <p className="text-[clamp(12px,0.95vw,16px)] font-semibold">
               {formatMonthYear(stats.maxUnitsMonth.month, selectedYear || "")}
             </p>
-            <p className="text-[clamp(12px,0.95vw,16px)]">
+            <p className="text-[clamp(12px,0.95vw,16px)] font-semibold">
               {stats.maxUnitsMonth.quantity.toLocaleString()}
             </p>
           </div>
@@ -588,7 +716,7 @@ const CountryCard: React.FC<CountryCardProps> = ({
             <p className="text-[clamp(12px,0.95vw,16px)] font-semibold">
               {formatMonthYear(stats.maxSalesMonth.month, selectedYear || "")}
             </p>
-            <p className="text-[clamp(12px,0.95vw,16px)]">
+            <p className="text-[clamp(12px,0.95vw,16px)] font-semibold">
               {formatAmount(stats.maxSalesMonth.profit)}
             </p>
           </div>
