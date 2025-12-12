@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useParams } from 'next/navigation'; // Next.js uses next/navigation for app router
 import * as XLSX from 'xlsx';
@@ -12,6 +12,18 @@ import { IoDownload } from "react-icons/io5";
 import { BsStars } from "react-icons/bs";
 import { FaArrowUp, FaArrowDown } from 'react-icons/fa';
 import * as echarts from 'echarts';
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip,
+  Legend,
+} from "chart.js";
+
+ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend);
 
 
 
@@ -82,12 +94,16 @@ interface SkuInsight {
 }
 
 interface ApiResponse {
-  comparison_range?: {
-    month2_label: string;
-  };
+  comparison_range?: { month2_label: string };
   categorized_growth?: CategorizedGrowth;
   insights?: Record<string, SkuInsight>;
+  reimbursement_totals?: { month1: number; month2: number };
+
+  // ✅ add
+  advertising_totals?: { month1: number; month2: number };
+  expense_totals?: { month1: number; month2: number };
 }
+
 
 // =========================
 // Config
@@ -141,7 +157,7 @@ const MonthsforBI: React.FC = () => {
 });
 
 
-const [activeTab, setActiveTab] = useState<TabKey>('top_80_skus');
+const [activeTab, setActiveTab] = useState<TabKey>('all_skus');
   const [month2Label, setMonth2Label] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
@@ -157,16 +173,52 @@ const [activeTab, setActiveTab] = useState<TabKey>('top_80_skus');
   const [fbSubmitting, setFbSubmitting] = useState<boolean>(false);
   const [fbSuccess, setFbSuccess] = useState<boolean>(false);
   const [autoCompared, setAutoCompared] = useState(false);
-  const [expandAllSkusOthers, setExpandAllSkusOthers] = useState(false);
+const [expandAllSkusOthers, setExpandAllSkusOthers] = useState(true);
+const [reimbursementTotals, setReimbursementTotals] = useState<{month1:number; month2:number} | null>(null);
+const [advertisingTotals, setAdvertisingTotals] = useState<{month1:number; month2:number} | null>(null);
+const [expenseTotals, setExpenseTotals] = useState<{month1:number; month2:number} | null>(null);
 
   // ✅ NEW: available periods from backend (['YYYY-MM'])
   const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
+  const [showTotalsModal, setShowTotalsModal] = useState(false);
+
+const [selectedTotals, setSelectedTotals] = useState<Record<string, boolean>>({
+  netSales: true,
+  cm1Profit: true,
+  otherExpense: true,
+  advertising: true,
+  reimbursement: true,
+});
+
+const toggleTotalsMetric = (key: string) => {
+  const selectedCount = Object.values(selectedTotals).filter(Boolean).length;
+  const isChecked = !!selectedTotals[key];
+
+  // prevent turning off the last metric (same logic as GraphPage) :contentReference[oaicite:2]{index=2}
+  if (isChecked && selectedCount === 1) {
+    setShowTotalsModal(true);
+    return;
+  }
+
+  setSelectedTotals((prev) => ({ ...prev, [key]: !isChecked }));
+};
+
 
   const chartRef = React.useRef<HTMLDivElement | null>(null);
 const chartInstanceRef = React.useRef<echarts.EChartsType | null>(null);
 
 const profitChartRef = React.useRef<HTMLDivElement | null>(null);
 const profitChartInstanceRef = React.useRef<echarts.EChartsType | null>(null);
+
+const unitsChartRef = React.useRef<HTMLDivElement | null>(null);
+const unitsChartInstanceRef = React.useRef<echarts.EChartsType | null>(null);
+
+const aspChartRef = React.useRef<HTMLDivElement | null>(null);
+const aspChartInstanceRef = React.useRef<echarts.EChartsType | null>(null);
+
+const totalsChartRef = React.useRef<HTMLDivElement | null>(null);
+const totalsChartInstanceRef = React.useRef<echarts.EChartsType | null>(null);
+
 
 const periodToDate = (p: string) => {
   // p = "YYYY-MM"
@@ -196,16 +248,52 @@ const pickDefaultComparePeriods = (periods: string[]) => {
 const sumField = (rows: any[], key: string) =>
   (rows || []).reduce((a, r) => a + Number(r?.[key] ?? 0), 0);
 
-const buildCompareSeries = (metricKeyBase: 'net_sales' | 'profit') => {
+const buildCompareSeries = (
+  metricKeyBase: 'net_sales' | 'profit' | 'quantity' | 'rembursement_fee' | 'asp'
+) => {
   const m1Label = `${getAbbr(month1)}'${String(year1).slice(2)}`;
   const m2Label = `${getAbbr(month2)}'${String(year2).slice(2)}`;
-const x = [`${m1Label}`, '', `${m2Label}`];
+  const x = [`${m1Label}`, '', `${m2Label}`];
 
   const top80Rows = categorizedGrowth.top_80_skus || [];
   const newRevRows = categorizedGrowth.new_or_reviving_skus || [];
   const otherRows = categorizedGrowth.other_skus || [];
-  const allRows = categorizedGrowth.all_skus || [...top80Rows, ...newRevRows, ...otherRows];
 
+  const sumField = (rows: any[], key: string) =>
+    (rows || []).reduce((a, r) => a + Number(r?.[key] ?? 0), 0);
+
+  const safeDiv = (a: number, b: number) => (b ? a / b : 0);
+
+  // ✅ SPECIAL CASE: ASP should be weighted = total net_sales / total qty
+  if (metricKeyBase === 'asp') {
+    const top80_ns_m1 = sumField(top80Rows, 'net_sales_month1');
+    const top80_ns_m2 = sumField(top80Rows, 'net_sales_month2');
+    const top80_q_m1  = sumField(top80Rows, 'quantity_month1');
+    const top80_q_m2  = sumField(top80Rows, 'quantity_month2');
+
+    const newRev_ns_m1 = sumField(newRevRows, 'net_sales_month1');
+    const newRev_ns_m2 = sumField(newRevRows, 'net_sales_month2');
+    const newRev_q_m1  = sumField(newRevRows, 'quantity_month1');
+    const newRev_q_m2  = sumField(newRevRows, 'quantity_month2');
+
+    const other_ns_m1 = sumField(otherRows, 'net_sales_month1');
+    const other_ns_m2 = sumField(otherRows, 'net_sales_month2');
+    const other_q_m1  = sumField(otherRows, 'quantity_month1');
+    const other_q_m2  = sumField(otherRows, 'quantity_month2');
+
+    const top80_m1 = safeDiv(top80_ns_m1, top80_q_m1);
+    const top80_m2 = safeDiv(top80_ns_m2, top80_q_m2);
+
+    const newRev_m1 = safeDiv(newRev_ns_m1, newRev_q_m1);
+    const newRev_m2 = safeDiv(newRev_ns_m2, newRev_q_m2);
+
+    const other_m1 = safeDiv(other_ns_m1, other_q_m1);
+    const other_m2 = safeDiv(other_ns_m2, other_q_m2);
+
+    return { x, values: { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2 } };
+  }
+
+  // ✅ DEFAULT: SUM metrics
   const m1Key = `${metricKeyBase}_month1`;
   const m2Key = `${metricKeyBase}_month2`;
 
@@ -218,10 +306,18 @@ const x = [`${m1Label}`, '', `${m2Label}`];
   const other_m1 = sumField(otherRows, m1Key);
   const other_m2 = sumField(otherRows, m2Key);
 
- 
-
-  return { x, values: { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2,  } };
+  return { x, values: { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2 } };
 };
+
+const getAllRows = () => ([
+  ...(categorizedGrowth.top_80_skus || []),
+  ...(categorizedGrowth.new_or_reviving_skus || []),
+  ...(categorizedGrowth.other_skus || []),
+]);
+
+const totalOf = (key: string) =>
+  getAllRows().reduce((a, r) => a + Number(r?.[key] ?? 0), 0);
+
 
 
 
@@ -240,6 +336,7 @@ useEffect(() => {
 
     const { x, values } = buildCompareSeries('net_sales');
     const { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2 } = values;
+    const currency = getCurrencySymbol();
 
     const hasAny =
       top80_m1 || top80_m2 || newRev_m1 || newRev_m2 || other_m1 || other_m2 
@@ -252,12 +349,37 @@ useEffect(() => {
     }
 
     const option: echarts.EChartsOption = {
+
+
 tooltip: {
   trigger: 'axis',
-  valueFormatter: (v: any) => Math.round(Number(v)).toLocaleString(),
+  formatter: (params: any) => {
+    // params: array of series points
+    const axisLabel = params?.[0]?.axisValueLabel ?? '';
+    const lines: string[] = [];
+    lines.push(`<div style="font-weight:700;margin-bottom:6px;">Net Sales  ${axisLabel}</div>`);
+
+    // reverse order: Top 80, Other, New/Reviving
+    const map = new Map(params.map((p: any) => [p.seriesName, p]));
+    const ordered = SERIES_ORDER.map(s => map.get(s.name)).filter(Boolean);
+
+    ordered.forEach((p: any) => {
+      lines.push(
+        `<div style="display:flex;align-items:center;gap:8px;margin:2px 0;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${p.color};"></span>
+          <span style="flex:1;">${p.seriesName}</span>
+          <span style="font-weight:700;">${currency}${fmtNum(p.data)}</span>
+        </div>`
+      );
+    });
+
+    return `<div style="min-width:180px;">${lines.join('')}</div>`;
+  },
 },
 
-      legend: { top: 0 },
+
+legend: { show: false },
+
       grid: { left: 50, right: 20, top: 40, bottom: 35 },
         color: ['#87AD12', '#AB64B5', '#F47A00',], // Net Sales palette
       xAxis: {
@@ -395,6 +517,7 @@ useEffect(() => {
 
     const { x, values } = buildCompareSeries('profit');
     const { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2 } = values;
+    const currency = getCurrencySymbol();
 
     const hasAny =
       top80_m1 || top80_m2 || newRev_m1 || newRev_m2 || other_m1 || other_m2 ;
@@ -409,10 +532,30 @@ useEffect(() => {
     const option: echarts.EChartsOption = {
 tooltip: {
   trigger: 'axis',
-  valueFormatter: (v: any) => Math.round(Number(v)).toLocaleString(),
+  formatter: (params: any) => {
+    const axisLabel = params?.[0]?.axisValueLabel ?? '';
+    const lines: string[] = [];
+    lines.push(`<div style="font-weight:700;margin-bottom:6px;">CM1 Profit ${axisLabel}</div>`);
+
+    const map = new Map(params.map((p: any) => [p.seriesName, p]));
+    const ordered = SERIES_ORDER.map(s => map.get(s.name)).filter(Boolean);
+
+    ordered.forEach((p: any) => {
+      lines.push(
+        `<div style="display:flex;align-items:center;gap:8px;margin:2px 0;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${p.color};"></span>
+          <span style="flex:1;">${p.seriesName}</span>
+          <span style="font-weight:700;">${currency}${fmtNum(p.data)}</span>
+        </div>`
+      );
+    });
+
+    return `<div style="min-width:180px;">${lines.join('')}</div>`;
+  },
 },
 
-      legend: { top: 0 },
+legend: { show: false },
+
       grid: { left: 50, right: 20, top: 40, bottom: 35 },
        color: ['#87AD12', '#AB64B5', '#F47A00',], // Net Sales palette
       xAxis: {
@@ -535,6 +678,434 @@ areaStyle: {
   categorizedGrowth.new_or_reviving_skus,
   categorizedGrowth.other_skus,
 ]);
+
+useEffect(() => {
+  const el = unitsChartRef.current;
+  if (!el) return;
+
+  const raf = requestAnimationFrame(() => {
+    if (unitsChartInstanceRef.current && unitsChartInstanceRef.current.getDom() !== el) {
+      unitsChartInstanceRef.current.dispose();
+      unitsChartInstanceRef.current = null;
+    }
+    if (!unitsChartInstanceRef.current) {
+      unitsChartInstanceRef.current = echarts.init(el);
+    }
+
+    const { x, values } = buildCompareSeries('quantity');
+    const { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2 } = values;
+
+    const hasAny = top80_m1 || top80_m2 || newRev_m1 || newRev_m2 || other_m1 || other_m2;
+    if (!hasAny) {
+      unitsChartInstanceRef.current?.clear();
+      unitsChartInstanceRef.current?.setOption({ title: { text: 'No data' } });
+      unitsChartInstanceRef.current?.resize();
+      return;
+    }
+
+    const option: echarts.EChartsOption = {
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: any) => {
+          const axisLabel = params?.[0]?.axisValueLabel ?? '';
+          const lines: string[] = [];
+          lines.push(`<div style="font-weight:700;margin-bottom:6px;">Units  ${axisLabel}</div>`);
+
+          const map = new Map(params.map((p: any) => [p.seriesName, p]));
+          const ordered = SERIES_ORDER.map(s => map.get(s.name)).filter(Boolean);
+
+          ordered.forEach((p: any) => {
+            lines.push(
+              `<div style="display:flex;align-items:center;gap:8px;margin:2px 0;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${p.color};"></span>
+                <span style="flex:1;">${p.seriesName}</span>
+                <span style="font-weight:700;">${fmtNum(p.data)}</span>
+              </div>`
+            );
+          });
+
+          return `<div style="min-width:180px;">${lines.join('')}</div>`;
+        },
+      },
+
+      legend: { show: false },
+      grid: { left: 50, right: 20, top: 40, bottom: 35 },
+      color: ['#87AD12', '#AB64B5', '#F47A00'],
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: x,
+        axisLabel: {
+          interval: 0,
+          margin: 20,
+          align: 'center',
+          formatter: (v: string, idx: number) => {
+            if (v === '') return '';
+            if (idx === 0) return `{m1|${v}}`;
+            if (idx === 2) return `{m2|${v}}`;
+            return v;
+          },
+          rich: {
+            m1: { align: 'right', padding: [0, 0, 0, 80] },
+            m2: { align: 'left', padding: [0, 80, 0, 0] },
+          },
+        },
+        splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { formatter: (v: any) => fmtNum(v) },
+      },
+
+      series: [
+        {
+          name: 'New/Reviving',
+          type: 'line',
+          stack: 'Total',
+          symbol: 'none',
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
+              { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
+              { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
+              { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+            ]),
+          },
+          data: [newRev_m1, newRev_m1, newRev_m2],
+        },
+        {
+          name: 'Other SKUs',
+          type: 'line',
+          stack: 'Total',
+          symbol: 'none',
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
+              { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
+              { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
+              { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+            ]),
+          },
+          data: [other_m1, other_m1, other_m2],
+        },
+        {
+          name: 'Top 80%',
+          type: 'line',
+          stack: 'Total',
+          symbol: 'none',
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
+              { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
+              { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
+              { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+            ]),
+          },
+          data: [top80_m1, top80_m1, top80_m2],
+          markLine: {
+            symbol: "none",
+            silent: true,
+            data: [{ xAxis: "" }],
+            lineStyle: { color: "#111827", width: 1, opacity: 0.35 },
+            label: { show: false },
+          },
+        },
+      ],
+    };
+
+    unitsChartInstanceRef.current!.setOption(option, true);
+    unitsChartInstanceRef.current!.resize();
+
+    const onResize = () => unitsChartInstanceRef.current?.resize();
+    window.addEventListener('resize', onResize);
+    const ro = new ResizeObserver(() => unitsChartInstanceRef.current?.resize());
+    ro.observe(el);
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      ro.disconnect();
+    };
+  });
+
+  return () => cancelAnimationFrame(raf);
+}, [
+  month1, year1, month2, year2,
+  categorizedGrowth.top_80_skus,
+  categorizedGrowth.new_or_reviving_skus,
+  categorizedGrowth.other_skus,
+]);
+
+// --- Reimbursement Fees chart ---
+useEffect(() => {
+  const el = aspChartRef.current;
+  if (!el) return;
+
+  const raf = requestAnimationFrame(() => {
+    if (aspChartInstanceRef.current && aspChartInstanceRef.current.getDom() !== el) {
+      aspChartInstanceRef.current.dispose();
+      aspChartInstanceRef.current = null;
+    }
+    if (!aspChartInstanceRef.current) {
+      aspChartInstanceRef.current = echarts.init(el);
+    }
+
+    const { x, values } = buildCompareSeries('asp');
+    const { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2 } = values;
+     const currency = getCurrencySymbol();
+
+    const hasAny =
+      top80_m1 || top80_m2 || newRev_m1 || newRev_m2 || other_m1 || other_m2;
+
+    if (!hasAny) {
+      aspChartInstanceRef.current?.clear();
+      aspChartInstanceRef.current?.setOption({ title: { text: 'No data' } });
+      aspChartInstanceRef.current?.resize();
+      return;
+    }
+
+    const option: echarts.EChartsOption = {
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: any) => {
+          const axisLabel = params?.[0]?.axisValueLabel ?? '';
+          const lines: string[] = [];
+          lines.push(`<div style="font-weight:700;margin-bottom:6px;">ASP  ${axisLabel}</div>`);
+
+          const map = new Map(params.map((p: any) => [p.seriesName, p]));
+          const ordered = SERIES_ORDER.map(s => map.get(s.name)).filter(Boolean);
+
+          ordered.forEach((p: any) => {
+            lines.push(
+              `<div style="display:flex;align-items:center;gap:8px;margin:2px 0;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${p.color};"></span>
+                <span style="flex:1;">${p.seriesName}</span>
+                <span style="font-weight:700;">${currency}${Number(p.data ?? 0).toFixed(2)}</span>
+              </div>`
+            );
+          });
+
+          return `<div style="min-width:180px;">${lines.join('')}</div>`;
+        },
+      },
+      legend: { show: false },
+      grid: { left: 50, right: 20, top: 40, bottom: 35 },
+      color: ['#87AD12', '#AB64B5', '#F47A00'],
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: x,
+        axisLabel: {
+          interval: 0,
+          margin: 20,
+          align: 'center',
+          formatter: (v: string, idx: number) => {
+            if (v === '') return '';
+            if (idx === 0) return `{m1|${v}}`;
+            if (idx === 2) return `{m2|${v}}`;
+            return v;
+          },
+          rich: {
+            m1: { align: 'right', padding: [0, 0, 0, 80] },
+            m2: { align: 'left', padding: [0, 80, 0, 0] },
+          },
+        },
+        splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {formatter: (value: number) => {
+      if (!value) return '0';
+      return Number.isInteger(value)
+        ? value.toString()
+        : value.toFixed(0);
+    } },
+      },
+      series: [
+        {
+          name: 'New/Reviving',
+          type: 'line',
+          stack: 'Total',
+          symbol: 'none',
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
+              { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
+              { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
+              { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+            ]),
+          },
+          data: [newRev_m1, newRev_m1, newRev_m2],
+        },
+        {
+          name: 'Other SKUs',
+          type: 'line',
+          stack: 'Total',
+          symbol: 'none',
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
+              { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
+              { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
+              { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+            ]),
+          },
+          data: [other_m1, other_m1, other_m2],
+        },
+        {
+          name: 'Top 80%',
+          type: 'line',
+          stack: 'Total',
+          symbol: 'none',
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
+              { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
+              { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
+              { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+            ]),
+          },
+          data: [top80_m1, top80_m1, top80_m2],
+          markLine: {
+            symbol: "none",
+            silent: true,
+            data: [{ xAxis: "" }],
+            lineStyle: { color: "#111827", width: 1, opacity: 0.35 },
+            label: { show: false },
+          },
+        },
+      ],
+    };
+
+    aspChartInstanceRef.current!.setOption(option, true);
+    aspChartInstanceRef.current!.resize();
+
+    const onResize = () => aspChartInstanceRef.current?.resize();
+    window.addEventListener('resize', onResize);
+    const ro = new ResizeObserver(() => aspChartInstanceRef.current?.resize());
+    ro.observe(el);
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      ro.disconnect();
+    };
+  });
+
+  return () => cancelAnimationFrame(raf);
+}, [
+  month1, year1, month2, year2,
+  categorizedGrowth.top_80_skus,
+  categorizedGrowth.new_or_reviving_skus,
+  categorizedGrowth.other_skus,
+]);
+
+useEffect(() => {
+  const el = totalsChartRef.current;
+  if (!el) return;
+
+  const raf = requestAnimationFrame(() => {
+    if (totalsChartInstanceRef.current && totalsChartInstanceRef.current.getDom() !== el) {
+      totalsChartInstanceRef.current.dispose();
+      totalsChartInstanceRef.current = null;
+    }
+    if (!totalsChartInstanceRef.current) totalsChartInstanceRef.current = echarts.init(el);
+
+    const m1Label = `${getAbbr(month1)}'${String(year1).slice(2)}`;
+    const m2Label = `${getAbbr(month2)}'${String(year2).slice(2)}`;
+    const x = [m1Label, '', m2Label];
+    const currency = getCurrencySymbol();
+
+    const netSales_m1 = totalOf('net_sales_month1');
+    const netSales_m2 = totalOf('net_sales_month2');
+
+    const profit_m1 = totalOf('profit_month1');
+    const profit_m2 = totalOf('profit_month2');
+
+    const otherExp_m1 = expenseTotals?.month1 ?? 0;
+    const otherExp_m2 = expenseTotals?.month2 ?? 0;
+
+    const adv_m1 = advertisingTotals?.month1 ?? 0;
+    const adv_m2 = advertisingTotals?.month2 ?? 0;
+
+    const reimb_m1 = reimbursementTotals?.month1 ?? 0;
+    const reimb_m2 = reimbursementTotals?.month2 ?? 0;
+
+    const hasAny =
+      netSales_m1 || netSales_m2 || profit_m1 || profit_m2 ||
+      otherExp_m1 || otherExp_m2 || adv_m1 || adv_m2 || reimb_m1 || reimb_m2;
+
+    if (!hasAny) {
+      totalsChartInstanceRef.current?.clear();
+      totalsChartInstanceRef.current?.setOption({ title: { text: 'No data' } });
+      totalsChartInstanceRef.current?.resize();
+      return;
+    }
+
+    const option: echarts.EChartsOption = {
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: any) => {
+          const axisLabel = params?.[0]?.axisValueLabel ?? '';
+          const lines: string[] = [];
+          lines.push(`<div style="font-weight:700;margin-bottom:6px;">Totals ${axisLabel}</div>`);
+          (params || []).forEach((p: any) => {
+            lines.push(
+              `<div style="display:flex;align-items:center;gap:8px;margin:2px 0;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${p.color};"></span>
+                <span style="flex:1;">${p.seriesName}</span>
+                <span style="font-weight:700;">${currency}${fmtNum(p.data)}</span>
+              </div>`
+            );
+          });
+          return `<div style="min-width:210px;">${lines.join('')}</div>`;
+        },
+      },
+      legend: { top: 8 },
+      grid: { left: 55, right: 20, top: 55, bottom: 35 },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: x,
+        splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { formatter: (v: any) => Math.round(Number(v)).toLocaleString() },
+      },
+      series: [
+        { name: 'Net Sales', type: 'line', symbol: 'none', data: [netSales_m1, netSales_m1, netSales_m2] },
+        { name: 'CM1 Profit', type: 'line', symbol: 'none', data: [profit_m1, profit_m1, profit_m2] },
+        { name: 'Other Expense', type: 'line', symbol: 'none', data: [otherExp_m1, otherExp_m1, otherExp_m2] },
+        { name: 'Advertising Total', type: 'line', symbol: 'none', data: [adv_m1, adv_m1, adv_m2] },
+        { name: 'Reimbursement Fee', type: 'line', symbol: 'none', data: [reimb_m1, reimb_m1, reimb_m2] },
+      ],
+    };
+
+    totalsChartInstanceRef.current!.setOption(option, true);
+    totalsChartInstanceRef.current!.resize();
+
+    const onResize = () => totalsChartInstanceRef.current?.resize();
+    window.addEventListener('resize', onResize);
+    const ro = new ResizeObserver(() => totalsChartInstanceRef.current?.resize());
+    ro.observe(el);
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      ro.disconnect();
+    };
+  });
+
+  return () => cancelAnimationFrame(raf);
+}, [
+  month1, year1, month2, year2,
+  categorizedGrowth.top_80_skus,
+  categorizedGrowth.new_or_reviving_skus,
+  categorizedGrowth.other_skus,
+  advertisingTotals,
+  expenseTotals,
+  reimbursementTotals,
+]);
+
+
 
 
 
@@ -668,6 +1239,10 @@ clone.unit_wise_profitability_month2 =
 clone.profit_month1 = row.profit_month1 ?? row.profit_prev ?? null;
 clone.profit_month2 = row.profit_month2 ?? row.profit_curr ?? null;
 
+clone.rembursement_fee_month1 = row.rembursement_fee_month1 ?? row.rembursement_fee_prev ?? null;
+clone.rembursement_fee_month2 = row.rembursement_fee_month2 ?? row.rembursement_fee_curr ?? null;
+
+
     return clone;
   };
 
@@ -714,7 +1289,7 @@ clone.profit_month2 = row.profit_month2 ?? row.profit_curr ?? null;
       setYear2(saved.year2 || '');
       setCategorizedGrowth(saved.categorizedGrowth || { top_80_skus: [], new_or_reviving_skus: [], other_skus: [] });
       setMonth2Label(saved.month2Label || '');
-      if (saved.activeTab) setActiveTab(saved.activeTab);
+      setActiveTab(saved.activeTab || 'all_skus');
     }
     const cachedInsights = loadInsightsFromStorage();
     if (cachedInsights && Object.keys(cachedInsights).length) {
@@ -796,6 +1371,7 @@ clone.profit_month2 = row.profit_month2 ?? row.profit_curr ?? null;
     e?.preventDefault?.();
     setError(null);
     setCategorizedGrowth({ top_80_skus: [], new_or_reviving_skus: [], other_skus: [] });
+    
     setMonth2Label('');
     setSkuInsights({});
     setModalOpen(false);
@@ -825,6 +1401,9 @@ const newCategorized = normalizeCategorizedGrowth(raw);
 
 setMonth2Label(newMonth2Label);
 setCategorizedGrowth(newCategorized);
+setReimbursementTotals(res.data?.reimbursement_totals ?? null);
+setAdvertisingTotals(res.data?.advertising_totals ?? null);
+setExpenseTotals(res.data?.expense_totals ?? null);
 
 // Save to localStorage (persist compare)
 saveCompareToStorage({
@@ -912,6 +1491,23 @@ saveCompareToStorage({
     return getInsightByProductName(item.product_name);
   };
 
+  const getCurrencySymbol = () => {
+  // Global => $, UK => £, baaki default $
+  const c = (countryName || '').toLowerCase();
+  if (c === 'uk') return '£';
+  if (c === 'global') return '$';
+  return '$';
+};
+
+const fmtNum = (v: any) => Math.round(Number(v || 0)).toLocaleString();
+
+const SERIES_ORDER = [
+  { name: 'Top 80%', color: '#F47A00' },
+  { name: 'Other SKUs', color: '#AB64B5' },
+  { name: 'New/Reviving', color: '#87AD12' },
+];
+
+
   // =====================
   // Export to Excel
   // =====================
@@ -984,8 +1580,8 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
     `CM1 Profit %age(${newAbbr})`,
     `CM1 Profit %age(${oldAbbr})`,
 
-    `Unit Profit ${newAbbr}`,
-    `Unit Profit ${oldAbbr}`,
+    `CM1 Unit Profit ${newAbbr}`,
+    `CM1 Unit Profit ${oldAbbr}`,
     'Change in Unit Profit (%age)',
   ];
 
@@ -1189,6 +1785,9 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
     return formatted;
   };
 
+console.log(Object.keys(categorizedGrowth.top_80_skus?.[0] || {}));
+
+
   // -------------------------
   // Sheet 1: All SKUs (Growth Comparison)
   // -------------------------
@@ -1283,6 +1882,105 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
 
   XLSX.writeFile(wb, filename);
 };
+
+const allRows = useMemo(() => ([
+  ...(categorizedGrowth.top_80_skus || []),
+  ...(categorizedGrowth.new_or_reviving_skus || []),
+  ...(categorizedGrowth.other_skus || []),
+]), [categorizedGrowth]);
+
+const sumKey = (k: string) =>
+  allRows.reduce((a, r: any) => a + Number(r?.[k] ?? 0), 0);
+
+const m1Label = `${getAbbr(month1)}'${String(year1).slice(2)}`;
+const m2Label = `${getAbbr(month2)}'${String(year2).slice(2)}`;
+const currency = getCurrencySymbol(); // same helper you already have
+
+const totalsLine = useMemo(() => {
+  const netSales_m1 = sumKey("net_sales_month1");
+  const netSales_m2 = sumKey("net_sales_month2");
+
+  const profit_m1 = sumKey("profit_month1");
+  const profit_m2 = sumKey("profit_month2");
+
+  const otherExp_m1 = expenseTotals?.month1 ?? 0;
+  const otherExp_m2 = expenseTotals?.month2 ?? 0;
+
+  const adv_m1 = advertisingTotals?.month1 ?? 0;
+  const adv_m2 = advertisingTotals?.month2 ?? 0;
+
+  const reimb_m1 = reimbursementTotals?.month1 ?? 0;
+  const reimb_m2 = reimbursementTotals?.month2 ?? 0;
+
+  // ✅ YAHAN ADD KARO (return se just pehle)
+  const ds = [
+    { key: "netSales", label: "Net Sales", data: [netSales_m1, netSales_m2], color: "#2CA9E0" },
+    { key: "cm1Profit", label: "CM1 Profit", data: [profit_m1, profit_m2], color: "#5EA49B" },
+    { key: "otherExpense", label: "Other Expense", data: [otherExp_m1, otherExp_m2], color: "#00627D" },
+    { key: "advertising", label: "Advertising Total", data: [adv_m1, adv_m2], color: "#F47A00" },
+    { key: "reimbursement", label: "Reimbursement Fee", data: [reimb_m1, reimb_m2], color: "#AB64B5" },
+  ];
+
+  const datasets = ds
+    .filter((d) => selectedTotals[d.key])
+    .map((d) => ({
+      label: d.label,
+      data: d.data,
+      fill: false,
+      borderColor: d.color,
+      backgroundColor: d.color,
+      tension: 0.1,
+    }));
+
+  // ✅ RETURN ME OLD datasets array replace karke yeh use karo
+  return {
+    data: {
+      labels: [m1Label, m2Label],
+      datasets, // ✅
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: "index" as const },
+      plugins: {
+        legend: { display: false },
+       tooltip: {
+    mode: "index" as const,
+    intersect: false,
+
+    backgroundColor: "#ffffff",      // ✅ white bg
+    titleColor: "#111827",           // ✅ dark text
+    bodyColor: "#111827",
+    borderColor: "#e5e7eb",          // ✅ light border
+    borderWidth: 1,
+    cornerRadius: 8,
+    padding: 10,
+
+    callbacks: {
+      label: (tooltipItem: any) => {
+        const label = tooltipItem.dataset.label || "";
+        const value = tooltipItem.raw as number;
+        return `${label}: ${currency}${Number(value ?? 0).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`;
+      },
+    },
+  },
+      },
+      scales: {
+        x: { title: { display: true, text: "Month" } },
+        y: { title: { display: true, text: `Amount (${currency})` } },
+      },
+    },
+  };
+}, [
+  m1Label, m2Label, currency,
+  expenseTotals, advertisingTotals, reimbursementTotals,
+  selectedTotals, // ✅ IMPORTANT dependency
+  allRows,        // (or categorizedGrowth deps)
+]);
+
 
 
   // =====================
@@ -1934,7 +2632,7 @@ const isLockedCurrent = (year: string, month: string) => {
   opacity: 1;
 }
 `}</style>
-
+<div className='w-full'>
       {/* Month selectors */}
       <h2 className="text-2xl font-bold text-[#414042] mb-2">
           Business Insights - AI Analyst&nbsp;
@@ -2018,7 +2716,7 @@ const disabled =
                     setMonth1(m.value);
                   }}
                 >
-                  {selected && !disabled && <div className="month-tag text-nowrap">Month 1</div>}
+                  {selected && !disabled && <div className="month-tag text-nowrap"></div>}
                   <span className="dot"></span>
                   <div className="month-label">
                     <span className="month-label-full">{m.label}</span>
@@ -2054,7 +2752,7 @@ const disabled =
                     setMonth2(m.value);
                   }}
                 >
-                  {selected && !disabled && <div className="month-tag text-nowrap">Month 2</div>}
+                  {selected && !disabled && <div className="month-tag text-nowrap"></div>}
                   <span className="dot"></span>
                   <div className="month-label">
                     <span className="month-label-full">{m.label}</span>
@@ -2074,40 +2772,120 @@ const disabled =
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
-      {/* Chart between toggle and table */}
-<div
-  style={{
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: 12,
-    marginTop: 14,
-    marginBottom: 10,
-  }}
->
-  <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 10, background: '#fff' }}>
-    <div style={{ fontWeight: 700, color: '#414042', marginBottom: 6 }}>
-      Net Sales
+     <div className="mt-4 mb-3 rounded-xl border border-gray-200 bg-white p-3 w-full bg-[#D9D9D933]">
+  <div className="text-2xl font-bold text-[#414042]">Profitability</div>
+
+ {/* Center labels like GraphPage */}
+<div className="mt-3 sm:mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-5 w-full mx-auto transition-opacity duration-300">
+  {[
+    { key: "netSales", label: "Net Sales", color: "#2CA9E0" },
+    { key: "cm1Profit", label: "CM1 Profit", color: "#5EA49B" },
+    { key: "otherExpense", label: "Other Expense", color: "#00627D" },
+    { key: "advertising", label: "Advertising Total", color: "#F47A00" },
+    { key: "reimbursement", label: "Reimbursement Fee", color: "#AB64B5" },
+  ].map(({ key, label, color }) => {
+    const isChecked = !!selectedTotals[key];
+
+    return (
+      <label
+        key={key}
+        className={[
+          "shrink-0 flex items-center gap-1 sm:gap-1.5",
+          "font-semibold select-none whitespace-nowrap",
+          "text-[9px] sm:text-[10px] md:text-[11px] lg:text-xs xl:text-sm",
+          "text-charcoal-500",
+          isChecked ? "opacity-100" : "opacity-40",
+          "cursor-pointer",
+        ].join(" ")}
+      >
+        <span
+          className="flex items-center justify-center h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-sm border transition"
+          style={{
+            borderColor: color,
+            backgroundColor: isChecked ? color : "white",
+          }}
+          onClick={() => toggleTotalsMetric(key)}
+        >
+          {isChecked && (
+            <svg viewBox="0 0 24 24" width="14" height="14" className="text-white">
+              <path
+                fill="currentColor"
+                d="M20.285 6.709a1 1 0 0 0-1.414-1.414L9 15.168l-3.879-3.88a1 1 0 0 0-1.414 1.415l4.586 4.586a1 1 0 0 0 1.414 0l10-10Z"
+              />
+            </svg>
+          )}
+        </span>
+
+        <span className="capitalize">{label}</span>
+      </label>
+    );
+  })}
+</div>
+
+{/* chart */}
+<div className=" h-[320px] sm:h-[360px] md:h-[400px] lg:h-[420px] w-full mt-2 sm:mt-3">
+  <Line data={totalsLine.data as any} options={totalsLine.options as any} />
+</div>
+
+</div>
+
+
+{/* ✅ ONE BOX */}
+<div className="mt-4 mb-3 rounded-xl border border-gray-200 bg-white p-3">
+ 
+  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+    <div>
+      <div className="text-2xl font-bold text-[#414042]">Units Sold</div>
+      <div ref={unitsChartRef} className="h-[320px] w-full" />
     </div>
-    <div ref={chartRef} style={{ width: '100%', height: 320 }} />
+
+    <div>
+      <div className="text-2xl font-bold text-[#414042]">Net Sales</div>
+      <div ref={chartRef} className="h-[320px] w-full" />
+    </div>
+  
+
+  {/* Row 2: Profit */}
+  <div className="mt-3">
+    <div className="text-2xl font-bold text-[#414042]">CM1 Profit</div>
+    <div ref={profitChartRef} className="h-[320px] w-full" />
   </div>
 
-  <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 10, background: '#fff' }}>
-    <div style={{ fontWeight: 700, color: '#414042', marginBottom: 6 }}>
-      CM1 Profit 
-    </div>
-    <div ref={profitChartRef} style={{ width: '100%', height: 320 }} />
+  <div className="mt-3">
+  <div className="text-2xl font-bold text-[#414042]">Average Selling Price</div>
+  <div ref={aspChartRef} className="h-[320px] w-full" />
+</div>
+</div>
+
+  {/* Shared legend bottom center */}
+  <div className="mt-3 flex flex-wrap justify-center gap-4 text-[12px] font-semibold text-[#414042]">
+    <span className="inline-flex items-center gap-2">
+      <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#F47A00]" />
+      Top 80%
+    </span>
+
+    <span className="inline-flex items-center gap-2">
+      <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#AB64B5]" />
+      Other SKUs
+    </span>
+
+    <span className="inline-flex items-center gap-2">
+      <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#87AD12]" />
+      New/Reviving
+    </span>
   </div>
 </div>
 
 
+
       {/* Table + actions */}
-{(['top_80_skus','new_or_reviving_skus','other_skus','all_skus'] as TabKey[]).some(
+{(['all_skus','top_80_skus','new_or_reviving_skus','other_skus'] as TabKey[]).some(
   (k) => (categorizedGrowth[k] || []).length > 0
 ) && (
         <div>
-          <div className='flex md:flex-row flex-col justify-between items-center mt-10'>
-            <div className='flex md:flex-row flex-col justify-between items-center w-full'>
-<h2 className="text-2xl font-bold text-[#414042] mb-4">Performance-based SKU split</h2>
+          <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start mt-10'>
+            <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start w-full'>
+<h2 className="xl:text-2xl text-xl font-bold text-[#414042] mb-4">Performance-based SKU split</h2>
             <div className='flex justify-center gap-3'>
 
   <div
@@ -2120,7 +2898,7 @@ const disabled =
               }}
               className='p-1'
             >
-{(['top_80_skus','new_or_reviving_skus','other_skus','all_skus'] as TabKey[]).map(key => (
+{(['all_skus','top_80_skus','new_or_reviving_skus','other_skus'] as TabKey[]).map(key => (
                 <button
                   key={key}
 onClick={() => setActiveTab(key)}
@@ -2145,7 +2923,7 @@ onClick={() => setActiveTab(key)}
 disabled={!['top_80_skus','new_or_reviving_skus','other_skus'].some(
   (k) => (categorizedGrowth[k as keyof CategorizedGrowth] as SkuItem[])?.length > 0
 )}
-              className="bg-custom-effect text-[#F8EDCE] rounded-sm px-4 flex items-center justify-end  disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-custom-effect text-[#F8EDCE] rounded-sm xl:px-4 px-3 text-nowrap flex items-center justify-end  disabled:opacity-50 disabled:cursor-not-allowed"
                style={{
                  boxShadow: "0px 4px 4px 0px #00000040",
                }}
@@ -2180,231 +2958,266 @@ exportToExcel(allRows, file);
           
           </div>
 
-          <div className="overflow-x-auto pt-4">
-            <table className="tablec w-full border-collapse md:text-sm text-xs">
-              <thead className="theadc">
-                <tr>
-                  <th>S.No.</th>
-<th className="text-left" style={{ textAlign: 'left' }}>Product Name</th>
-                  <th>Sales Mix ({month2Label || 'Month 2'})</th>
-                <th>Unit Growth (%)</th>
-<th>ASP Growth (%)</th>
-<th>Net Sales Growth (%)</th>
+          <div className="overflow-x-auto pt-4 ">
+<table className="tablec w-full border-collapse md:text-sm text-xs 2xl:min-w-full xl:min-w-[1000px]">
+  <thead className="theadc">
+    <tr>
+      <th>S.No.</th>
+      <th className="text-left" style={{ textAlign: 'left' }}>Product Name</th>
+      <th>Sales Mix ({month2Label || 'Month 2'})</th>
 
-                  {activeTab!=='new_or_reviving_skus' && <th>Sales Mix Change (%)</th>}
-                  <th>CM1 Profit Impact (%)</th>
-                 <th>Profit Per Unit (%)</th>
+      {activeTab !== 'new_or_reviving_skus' && <th>Sales Mix Change (%)</th>}
 
-                  {Object.keys(skuInsights).length > 0 && <th>AI Insight</th>}
-                </tr>
-              </thead>
+      <th>Unit Growth (%)</th>
+      <th>ASP Growth (%)</th>
+      <th>Net Sales Growth (%)</th>
 
-              <tbody>
-{currentTabData?.map((item, idx) => (
-                  <tr key={idx} className="">
-                    <td className="border border-[#414042] px-2 py-2.5 text-center text-[#414042]">{idx + 1}</td>
-                  <td className="border border-[#414042] px-2 py-2.5 text-left text-[#414042]" style={{ textAlign: 'left' }}>
-  {String(item.product_name).trim() === '0' ? (
-    <span className="sku-zero-wrap">
-      <span className="sku-zero">{item.sku || 'N/A'}</span>
-      <span className="sku-zero-tooltip">Product name is 0; SKU is used.</span>
-    </span>
-  ) : (
-    item.product_name
-  )}
-</td>
-                    <td className="border border-[#414042] px-2 py-2.5 text-center">
-                      {item['Sales Mix (Month2)'] != null
-                        ? `${Number(item['Sales Mix (Month2)']).toFixed(2)}%` : 'N/A'}
-                    </td>
+      <th>CM1 Profit Impact (%)</th>
+      <th>CM1 Profit Per Unit (%)</th>
 
-{[
-  { field: 'Unit Growth' },
-  { field: 'ASP Growth' },
-  { field: 'Net Sales Growth' },
-  ...(activeTab !== 'new_or_reviving_skus' ? [{ field: 'Sales Mix Change' }] : []),
-   { field: 'CM1 Profit Impact' },
-  { field: 'Profit Per Unit' },
- 
-].map(({ field }) => {
-  const growth = item[field] as GrowthCategory | undefined;
+      {Object.keys(skuInsights).length > 0 && <th>AI Insight</th>}
+    </tr>
+  </thead>
 
-  if (!growth || growth.value == null) {
-    return (
-      <td key={field} className="border border-[#414042] px-2 py-2.5 text-center">
-        N/A
-      </td>
-    );
-  }
-
-  const val = Number(growth.value);
-  const sign = val >= 0 ? '+' : '';
-  const text = `${sign}${val.toFixed(2)}%`;
-
-  if (growth.category === 'High Growth') {
-    return (
-      <td key={field} className="border border-[#414042] px-2 py-2.5 text-center" style={{ fontWeight: 600 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#5EA68E' }}>
-          <FaArrowUp size={12} />
-          {text}
-        </span>
-      </td>
-    );
-  }
-
-  if (growth.category === 'Negative Growth') {
-    return (
-      <td key={field} className="border border-[#414042] px-2 py-2.5 text-center" style={{ fontWeight: 600 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#FF5C5C' }}>
-          <FaArrowDown size={12} />
-          {text}
-        </span>
-      </td>
-    );
-  }
-
-  // Low Growth / No Growth / No Data etc.
- return (
-    <td
-      key={field}
-      className="border border-[#414042] px-2 py-2.5 text-center text-[#414042]"
-      style={{ fontWeight: 600, color: '#414042' }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#414042' }}>
-        {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
-        {text}
-      </span>
-    </td>
-  );
-})}
-
-                  
-
-                  {Object.keys(skuInsights).length > 0 && (
-  <td className="border border-[#414042] px-2 text-nowrap py-2.5 text-center">
+  <tbody>
     {(() => {
-      // ✅ Only for All SKUs tab + Others row => show expand button
-      if (
-        activeTab === 'all_skus' &&
-        String(item?.product_name ?? '').toLowerCase().trim() === 'others'
-      ) {
+      const isNewRev = activeTab === 'new_or_reviving_skus';
+      const hasSkus = (currentTabData?.length ?? 0) > 0;
+      const showInsight = Object.keys(skuInsights).length > 0;
+
+      // ✅ Case 1: New/Reviving AND no SKUs => show 1 dummy row with ---
+      if (isNewRev && !hasSkus) {
         return (
-          <button
-            className="font-semibold underline text-[#414042]"
-            style={{ margin: 0 }}
-            onClick={() => setExpandAllSkusOthers(true)}
-          >
-            Expand SKUs
-          </button>
+          <tr>
+            <td className="border border-[#414042] px-2 py-2.5 text-center text-[#414042]">1</td>
+            <td className="border border-[#414042] px-2 py-2.5 text-left text-[#414042]" style={{ textAlign: 'left' }}>
+              ---
+            </td>
+
+            {/* Sales Mix (Month2) */}
+            <td className="border border-[#414042] px-2 py-2.5 text-center">---</td>
+
+            {/* ✅ Sales Mix Change column is NOT shown for new_or_reviving_skus */}
+
+            {/* Growth columns */}
+            <td className="border border-[#414042] px-2 py-2.5 text-center">---</td>
+            <td className="border border-[#414042] px-2 py-2.5 text-center">---</td>
+            <td className="border border-[#414042] px-2 py-2.5 text-center">---</td>
+            <td className="border border-[#414042] px-2 py-2.5 text-center">---</td>
+            <td className="border border-[#414042] px-2 py-2.5 text-center">---</td>
+
+            {showInsight && (
+              <td className="border border-[#414042] px-2 text-nowrap py-2.5 text-center">---</td>
+            )}
+          </tr>
         );
       }
 
-      // Normal insight behavior
-      const entry = getInsightForItem(item);
+      // ✅ Case 2 (default): render SKU rows as-is (your existing code)
+      return currentTabData?.map((item, idx) => (
+        <tr key={idx} className="">
+          <td className="border border-[#414042] px-2 py-2.5 text-center text-[#414042]">
+            {idx + 1}
+          </td>
 
-      if (entry) {
-        return (
-          <button
-            className="font-semibold underline text-[#414042]"
-            style={{ margin: 0 }}
-            onClick={() => {
-              setSelectedSku(entry[0]);
-              setModalOpen(true);
-              setFbType(null);
-              setFbText('');
-              setFbSuccess(false);
-            }}
+          <td
+            className="border border-[#414042] px-2 py-2.5 text-left text-[#414042]"
+            style={{ textAlign: 'left' }}
           >
-            View Insights
-          </button>
-        );
-      }
+            {String(item.product_name).trim() === '0' ? (
+              <span className="sku-zero-wrap">
+                <span className="sku-zero">{item.sku || 'N/A'}</span>
+                <span className="sku-zero-tooltip">Product name is 0; SKU is used.</span>
+              </span>
+            ) : (
+              item.product_name
+            )}
+          </td>
 
-      return (
-        <em style={{ color: '#888' }}>
-          --
-          <br />
-        </em>
-      );
+          <td className="border border-[#414042] px-2 py-2.5 text-center">
+            {item['Sales Mix (Month2)'] != null
+              ? `${Number(item['Sales Mix (Month2)']).toFixed(2)}%`
+              : 'N/A'}
+          </td>
+
+          {[
+            ...(activeTab !== 'new_or_reviving_skus' ? [{ field: 'Sales Mix Change' }] : []),
+            { field: 'Unit Growth' },
+            { field: 'ASP Growth' },
+            { field: 'Net Sales Growth' },
+            { field: 'CM1 Profit Impact' },
+            { field: 'Profit Per Unit' },
+          ].map(({ field }) => {
+            const growth = item[field] as GrowthCategory | undefined;
+
+            if (!growth || growth.value == null) {
+              return (
+                <td key={field} className="border border-[#414042] px-2 py-2.5 text-center">
+                  N/A
+                </td>
+              );
+            }
+
+            const val = Number(growth.value);
+            const sign = val >= 0 ? '+' : '';
+            const text = `${sign}${val.toFixed(2)}%`;
+
+            if (growth.category === 'High Growth') {
+              return (
+                <td
+                  key={field}
+                  className="border border-[#414042] px-2 py-2.5 text-center"
+                  style={{ fontWeight: 600 }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#5EA68E' }}>
+                    <FaArrowUp size={12} />
+                    {text}
+                  </span>
+                </td>
+              );
+            }
+
+            if (growth.category === 'Negative Growth') {
+              return (
+                <td
+                  key={field}
+                  className="border border-[#414042] px-2 py-2.5 text-center"
+                  style={{ fontWeight: 600 }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#FF5C5C' }}>
+                    <FaArrowDown size={12} />
+                    {text}
+                  </span>
+                </td>
+              );
+            }
+
+            // Low Growth / No Growth / No Data etc.
+            return (
+              <td
+                key={field}
+                className="border border-[#414042] px-2 py-2.5 text-center text-[#414042]"
+                style={{ fontWeight: 600, color: '#414042' }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#414042' }}>
+                  {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
+                  {text}
+                </span>
+              </td>
+            );
+          })}
+
+          {Object.keys(skuInsights).length > 0 && (
+            <td className="border border-[#414042] px-2 text-nowrap py-2.5 text-center">
+              {(() => {
+                // ✅ Only for All SKUs tab + Others row => show expand button
+                if (
+                  activeTab === 'all_skus' &&
+                  String(item?.product_name ?? '').toLowerCase().trim() === 'others'
+                ) {
+                  return (
+                    <button
+                      className="font-semibold underline text-[#414042]"
+                      style={{ margin: 0 }}
+                      onClick={() => setExpandAllSkusOthers(true)}
+                    >
+                      Expand SKUs
+                    </button>
+                  );
+                }
+
+                // Normal insight behavior
+                const entry = getInsightForItem(item);
+
+                if (entry) {
+                  return (
+                    <button
+                      className="font-semibold underline text-[#414042]"
+                      style={{ margin: 0 }}
+                      onClick={() => {
+                        setSelectedSku(entry[0]);
+                        setModalOpen(true);
+                        setFbType(null);
+                        setFbText('');
+                        setFbSuccess(false);
+                      }}
+                    >
+                      View Insights
+                    </button>
+                  );
+                }
+
+                return (
+                  <em style={{ color: '#888' }}>
+                    --
+                    <br />
+                  </em>
+                );
+              })()}
+            </td>
+          )}
+        </tr>
+      ));
     })()}
-  </td>
-)}
+  </tbody>
 
-                  </tr>
-                ))}
-              </tbody>
-
-            <tfoot>
+ <tfoot>
   <tr className="bg-[#D9D9D9E5]">
     <td className="border border-[#414042] px-2 py-2.5 text-center"></td>
+
     <td className="border border-[#414042] px-2 py-2.5 text-left font-bold">
       <strong>Total</strong>
     </td>
 
-    {/* Sales Mix total */}
+    {/* Sales Mix */}
     <td className="border border-[#414042] px-2 py-2.5 text-center font-bold">
       {(() => {
         const rows = (categorizedGrowth[activeTab] || []) as any[];
-        const sum = rows.reduce((s, r) => s + Number(r?.['Sales Mix (Month2)'] ?? 0), 0);
+        const sum = rows.reduce(
+          (s, r) => s + Number(r?.['Sales Mix (Month2)'] ?? 0),
+          0
+        );
         return `${sum.toFixed(2)}%`;
       })()}
     </td>
 
-    {/* Growth totals computed from month1/month2 totals */}
     {(() => {
       const rows = (categorizedGrowth[activeTab] || []) as any[];
 
-      const sum = (key: string) =>
-        rows.reduce((s, r) => s + Number(r?.[key] ?? 0), 0);
+      const sum = (k: string) =>
+        rows.reduce((s, r) => s + Number(r?.[k] ?? 0), 0);
 
       const pct = (m1: number, m2: number) => {
-        if (!Number.isFinite(m1) || !Number.isFinite(m2)) return null;
-        if (m1 === 0) return 0; // same rule as backend
+        if (m1 === 0) return 0;
         return ((m2 - m1) / m1) * 100;
       };
 
-      const totalQty = pct(sum('quantity_month1'), sum('quantity_month2'));
-      const totalAsp = pct(sum('asp_month1'), sum('asp_month2'));
-      const totalSales = pct(sum('net_sales_month1'), sum('net_sales_month2'));
-
-      // Sales mix change: use summed sales_mix_month1/month2 if present, else blank
-      const mix1 = sum('sales_mix_month1');
-      const mix2 = sum('sales_mix_month2');
-      const totalMixChange =
-        mix1 || mix2 ? pct(mix1, mix2) : null;
-
-      const totalUnitProfit = pct(
-        sum('unit_wise_profitability_month1'),
-        sum('unit_wise_profitability_month2')
-      );
-      const totalProfit = pct(sum('profit_month1'), sum('profit_month2'));
-
       const cells = [
-        totalQty,
-        totalAsp,
-        totalSales,
-        ...(activeTab !== 'new_or_reviving_skus' ? [totalMixChange] : []),
-        totalUnitProfit,
-        totalProfit,
+        ...(activeTab !== 'new_or_reviving_skus'
+          ? [pct(sum('sales_mix_month1'), sum('sales_mix_month2'))]
+          : []),
+        pct(sum('quantity_month1'), sum('quantity_month2')),
+        pct(sum('asp_month1'), sum('asp_month2')),
+        pct(sum('net_sales_month1'), sum('net_sales_month2')),
+        pct(sum('unit_wise_profitability_month1'), sum('unit_wise_profitability_month2')),
+        pct(sum('profit_month1'), sum('profit_month2')),
       ];
 
       return cells.map((v, i) => (
         <td key={i} className="border border-[#414042] px-2 py-2.5 text-center font-bold">
-          {v == null ? '' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`}
+          {`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`}
         </td>
       ));
     })()}
 
     {Object.keys(skuInsights).length > 0 && (
-      <td className="border border-[#414042] px-2 py-2.5 text-center"></td>
+      <td className="border border-[#414042] px-2 py-2.5 text-center font-bold"></td>
     )}
   </tr>
 </tfoot>
 
-
-
-            </table>
-            < div className='flex justify-end mt-2'>
+</table>
+            < div className='flex justify-center mt-2'>
  <div
   style={{
     display: 'flex',
@@ -2427,16 +3240,30 @@ exportToExcel(allRows, file);
       <FaArrowDown size={12} /> Negative growth
     </span>
   </span>
-
-  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
-    <span style={{ color: '#414042' }}>+ / -</span> Low growth
+ 
+  <span
+  style={{
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+  }}
+>
+  <span style={{ color: '#414042', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+    <FaArrowUp size={12} /> + / <FaArrowDown size={12} /> -
   </span>
+  Low growth
+</span>
 </div>
             </div>
              
           </div>
         </div>
       )}
+</div>
+
+
 
       {/* Insight Modal */}
 {(() => {
@@ -2519,3 +3346,6 @@ exportToExcel(allRows, file);
 };
 
 export default MonthsforBI;
+
+
+
