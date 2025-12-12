@@ -607,6 +607,14 @@ def _normalize_plan_for_sku_language(plan: dict, query: str) -> dict:
 
     return plan
 
+def _currency_for_country(country: str | None) -> tuple[str, str]:
+    c = (country or "").strip().upper()
+    if c == "UK":
+        return ("GBP", "£")
+    if c == "US":
+        return ("USD", "$")
+    # fallback
+    return ("USD", "$")
 
 
 
@@ -615,7 +623,16 @@ def _build_format_guidance(user_query: str, analysis: Optional[dict], has_table:
     Craft a small, deterministic formatting guide that adapts
     to what data we have. The LLM will follow this to produce consistent answers.
     """
-    currency = (analysis or {}).get("currency", "USD")
+    # --- NEW: derive currency + symbol from country (UK=>GBP/£, US=>USD/$) ---
+    country = (analysis or {}).get("country")
+    if not country:
+        try:
+            country = parse_country_strict(user_query)  # returns "UK"/"US"/None
+        except Exception:
+            country = None
+
+    currency, currency_symbol = _currency_for_country(country)
+
     unit_hint = (analysis or {}).get("unit_hint", "")  # e.g. "Units", "Orders"
     period_label = _fmt_period_label(analysis)
 
@@ -644,7 +661,7 @@ def _build_format_guidance(user_query: str, analysis: Optional[dict], has_table:
     guidance.append("5) One-line tip: a short, practical recommendation.")
     guidance.append("")
     guidance.append("Formatting rules:")
-    guidance.append("- Currency: two decimals and thousands separators (e.g., $12,345.67).")
+    guidance.append(f"- Currency: two decimals and thousands separators (e.g., {currency_symbol}12,345.67).")
     guidance.append("- Percentages: one decimal if <10%, otherwise no more than one decimal; include ±.")
     guidance.append("- Use ▲ for increases and ▼ for decreases next to percentages.")
     if unit_hint:
@@ -655,7 +672,7 @@ def _build_format_guidance(user_query: str, analysis: Optional[dict], has_table:
     examples = []
     if has_totals:
         examples.append(
-            "KPI: Net Sales **$1,234,567.89** (MoM ▲ +6.4%, +$74,321) • Units **98,765** (MoM ▼ −2.1%)"
+            f"KPI: Net Sales **{currency_symbol}1,234,567.89** (MoM ▲ +6.4%, +{currency_symbol}74,321) • Units **98,765** (MoM ▼ −2.1%)"
         )
     if has_mom:
         examples.append("MoM = (Current − Previous) / Previous × 100%. Show both % and absolute delta.")
@@ -666,6 +683,7 @@ def _build_format_guidance(user_query: str, analysis: Optional[dict], has_table:
         guidance.append("\nExamples (style):\n- " + "\n- ".join(examples))
 
     return "\n".join(guidance)
+
 
 
 

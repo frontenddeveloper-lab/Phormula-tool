@@ -1063,7 +1063,8 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
       const aspNew = pickNew(row, 'asp_month1', 'asp_month2');
 
       const mixOld = pickOld(row, 'sales_mix_month1', 'sales_mix_month2');
-      const mixNew = pickNew(row, 'sales_mix_month1', 'sales_mix_month2') ?? row?.['Sales Mix (Month2)'];
+      const mixNew = row?.['Sales Mix (Month2)'] ?? pickNew(row, 'sales_mix_month1', 'sales_mix_month2');
+
 
       const cm1Old = pickOld(row, 'profit_month1', 'profit_month2');
       const cm1New = pickNew(row, 'profit_month1', 'profit_month2');
@@ -1123,8 +1124,12 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
         acc.nsOld += num(pickOld(r, 'net_sales_month1', 'net_sales_month2'));
         acc.nsNew += num(pickNew(r, 'net_sales_month1', 'net_sales_month2'));
 
-        acc.mixOld += num(pickOld(r, 'sales_mix_month1', 'sales_mix_month2'));
-        acc.mixNew += num(pickNew(r, 'sales_mix_month1', 'sales_mix_month2') ?? r?.['Sales Mix (Month2)']);
+        const mixOldRaw = (pickOld(r, 'sales_mix_month1', 'sales_mix_month2'));
+        acc.mixOld += num(mixOldRaw);
+
+        const mixNewRaw = (r?.['Sales Mix (Month2)'] ?? pickNew(r, 'sales_mix_month1', 'sales_mix_month2'));
+        acc.mixNew += num(mixNewRaw);
+
 
         acc.cm1Old += num(pickOld(r, 'profit_month1', 'profit_month2'));
         acc.cm1New += num(pickNew(r, 'profit_month1', 'profit_month2'));
@@ -2341,25 +2346,33 @@ exportToExcel(allRows, file);
       <strong>Total</strong>
     </td>
 
-    {/* Sales Mix total */}
+    {/* ✅ Sales Mix total – match what is DISPLAYED */}
     <td className="border border-[#414042] px-2 py-2.5 text-center font-bold">
       {(() => {
-        const rows = (categorizedGrowth[activeTab] || []) as any[];
-        const sum = rows.reduce((s, r) => s + Number(r?.['Sales Mix (Month2)'] ?? 0), 0);
+        const displayRows =
+          activeTab === 'all_skus'
+            ? (currentTabData as any[])
+            : ((categorizedGrowth[activeTab] || []) as any[]);
+
+        const sum = displayRows.reduce(
+          (s, r) => s + Number(r?.['Sales Mix (Month2)'] ?? 0),
+          0
+        );
+
         return `${sum.toFixed(2)}%`;
       })()}
     </td>
 
-    {/* Growth totals computed from month1/month2 totals */}
+    {/* ✅ Growth totals – ALWAYS use full dataset */}
     {(() => {
-      const rows = (categorizedGrowth[activeTab] || []) as any[];
+      const fullRows = (categorizedGrowth[activeTab] || []) as any[];
 
       const sum = (key: string) =>
-        rows.reduce((s, r) => s + Number(r?.[key] ?? 0), 0);
+        fullRows.reduce((s, r) => s + Number(r?.[key] ?? 0), 0);
 
       const pct = (m1: number, m2: number) => {
         if (!Number.isFinite(m1) || !Number.isFinite(m2)) return null;
-        if (m1 === 0) return 0; // same rule as backend
+        if (m1 === 0) return 0;
         return ((m2 - m1) / m1) * 100;
       };
 
@@ -2367,16 +2380,19 @@ exportToExcel(allRows, file);
       const totalAsp = pct(sum('asp_month1'), sum('asp_month2'));
       const totalSales = pct(sum('net_sales_month1'), sum('net_sales_month2'));
 
-      // Sales mix change: use summed sales_mix_month1/month2 if present, else blank
+      // ✅ Sales Mix Change = percentage points
       const mix1 = sum('sales_mix_month1');
       const mix2 = sum('sales_mix_month2');
       const totalMixChange =
-        mix1 || mix2 ? pct(mix1, mix2) : null;
+        Number.isFinite(mix1) && Number.isFinite(mix2)
+          ? Number((mix2 - mix1).toFixed(2))
+          : null;
 
       const totalUnitProfit = pct(
         sum('unit_wise_profitability_month1'),
         sum('unit_wise_profitability_month2')
       );
+
       const totalProfit = pct(sum('profit_month1'), sum('profit_month2'));
 
       const cells = [
@@ -2389,7 +2405,10 @@ exportToExcel(allRows, file);
       ];
 
       return cells.map((v, i) => (
-        <td key={i} className="border border-[#414042] px-2 py-2.5 text-center font-bold">
+        <td
+          key={i}
+          className="border border-[#414042] px-2 py-2.5 text-center font-bold"
+        >
           {v == null ? '' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`}
         </td>
       ));
@@ -2400,6 +2419,7 @@ exportToExcel(allRows, file);
     )}
   </tr>
 </tfoot>
+
 
 
 
