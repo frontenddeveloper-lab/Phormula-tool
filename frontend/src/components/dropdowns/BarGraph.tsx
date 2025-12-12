@@ -1674,33 +1674,94 @@ const Bargraph: React.FC<BargraphProps> = ({
 
   // ✅ FIXED: Always pass ?country=<countryName>
   // - If GLOBAL: also pass &homeCurrency=<homeCurrency>
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const url = new URL("http://127.0.0.1:5000/upload_history");
+  // useEffect(() => {
+  //   const fetchData = async () => {
+  //     setLoading(true);
+  //     try {
+  //       const url = new URL("http://127.0.0.1:5000/upload_history");
 
-        url.searchParams.set("country", countryName.toLowerCase());
-        if (isGlobalPage && normalizedHomeCurrency) {
-          url.searchParams.set("homeCurrency", normalizedHomeCurrency);
-        }
+  //       url.searchParams.set("country", countryName.toLowerCase());
+  //       if (isGlobalPage && normalizedHomeCurrency) {
+  //         url.searchParams.set("homeCurrency", normalizedHomeCurrency);
+  //       }
 
-        const response = await fetch(url.toString(), {
-          method: "GET",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+  //       const response = await fetch(url.toString(), {
+  //         method: "GET",
+  //         headers: token ? { Authorization: `Bearer ${token}` } : {},
+  //       });
+
+  //       const result = (await response.json()) as { uploads?: UploadRow[] };
+  //       setData(result.uploads ?? []);
+  //     } catch (error) {
+  //       console.error("Failed to fetch upload history:", error);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
+
+  //   fetchData();
+  // }, [countryName, token, isGlobalPage, normalizedHomeCurrency]);
+
+// 🔹 Fetch upload history (homeCurrency only for GLOBAL)
+useEffect(() => {
+  const fetchData = async () => {
+    setLoading(true);
+
+    try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
+
+      const url = new URL("http://127.0.0.1:5000/upload_history");
+
+      // ✅ Only send homeCurrency for GLOBAL
+      if (isGlobalPage && homeCurrency) {
+        url.searchParams.set("homeCurrency", normalizedHomeCurrency);
+      }
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      const result = (await response.json()) as { uploads?: UploadRow[] };
+
+      if (result?.uploads) {
+        const rows = result.uploads;
+
+        const isUsd = normalizedHomeCurrency === "usd";
+
+        const filtered = rows.filter((item) => {
+          const itemCountry = (item.country || "").toLowerCase();
+
+          // ✅ GLOBAL page filtering
+          if (isGlobalPage) {
+            // USD can be stored as "global" OR "global_usd"
+            if (isUsd) {
+              return itemCountry === "global" || itemCountry === "global_usd";
+            }
+            // Non-USD global currencies: "global_inr", "global_cad", ...
+            return itemCountry === `global_${normalizedHomeCurrency}`;
+          }
+
+          // ✅ Non-global pages: "uk", "us", etc.
+          return itemCountry === countryName.toLowerCase();
         });
 
-        const result = (await response.json()) as { uploads?: UploadRow[] };
-        setData(result.uploads ?? []);
-      } catch (error) {
-        console.error("Failed to fetch upload history:", error);
-      } finally {
-        setLoading(false);
+        setData(filtered);
+      } else {
+        setData([]);
       }
-    };
+    } catch (error) {
+      console.error("Failed to fetch upload history:", error);
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchData();
-  }, [countryName, token, isGlobalPage, normalizedHomeCurrency]);
+  fetchData();
+}, [countryName, homeCurrency, normalizedHomeCurrency, isGlobalPage]);
+
 
   useEffect(() => {
     const fetchUser = async () => {

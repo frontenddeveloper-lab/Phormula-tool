@@ -775,7 +775,7 @@
 // // //             />
 // // //           )}
 
-         
+
 // // //         </div>
 
 // // //       </div>
@@ -3369,20 +3369,26 @@ const GraphPage: React.FC<GraphPageProps> = ({
         if (json?.uploads) {
           const rows = json.uploads as UploadRow[];
 
+          const isUsd = normalizedHomeCurrency === "usd";
+
           const filtered = rows.filter((item) => {
             const itemCountry = (item.country || "").toLowerCase();
 
             if (isGlobalPage) {
-              // ✅ ONLY pick the correct global currency bucket
-              // prefer global_<currency>, fallback to plain global if homeCurrency not passed
-              return itemCountry === globalCountryKey;
+              if (isUsd) {
+                // ✅ USD global supports BOTH legacy + converted
+                return itemCountry === "global" || itemCountry === "global_usd";
+              }
+              // ✅ Non-USD global currencies
+              return itemCountry === `global_${normalizedHomeCurrency}`;
             }
 
-            // ✅ Normal country pages
-            return itemCountry === (countryName || "").toLowerCase();
+            // ✅ Normal country pages (UK, US, etc.)
+            return itemCountry === countryName.toLowerCase();
           });
 
           setData(filtered);
+
         } else {
           setData([]);
         }
