@@ -1936,7 +1936,7 @@ const totalsLine = useMemo(() => {
     { key: "cm1Profit", label: "CM1 Profit", data: [profit_m1, profit_m2], color: "#5EA49B" },
     { key: "otherExpense", label: "Other Expense", data: [otherExp_m1, otherExp_m2], color: "#00627D" },
     { key: "advertising", label: "Advertising Total", data: [adv_m1, adv_m2], color: "#F47A00" },
-    { key: "reimbursement", label: "Reimbursement Fee", data: [reimb_m1, reimb_m2], color: "#AB64B5" },
+    { key: "reimbursement", label: "Reimbursement", data: [reimb_m1, reimb_m2], color: "#AB64B5" },
   ];
 
   const datasets = ds
@@ -2800,7 +2800,7 @@ const disabled =
     { key: "cm1Profit", label: "CM1 Profit", color: "#5EA49B" },
     { key: "otherExpense", label: "Other Expense", color: "#00627D" },
     { key: "advertising", label: "Advertising Total", color: "#F47A00" },
-    { key: "reimbursement", label: "Reimbursement Fee", color: "#AB64B5" },
+    { key: "reimbursement", label: "Reimbursement", color: "#AB64B5" },
   ].map(({ key, label, color }) => {
     const isChecked = !!selectedTotals[key];
 
@@ -3092,7 +3092,7 @@ exportToExcel(allRows, file);
     <FaArrowUp size={12} />
   </span>
 
-  <span className="tabular-nums inline-block w-[10px] text-right">
+  <span className="tabular-nums inline-block w-[50px] text-right">
     {text}
   </span>
 </span>
@@ -3113,7 +3113,7 @@ exportToExcel(allRows, file);
     <FaArrowDown size={12} />
   </span>
 
-  <span className="tabular-nums inline-block w-[10px] text-right">
+  <span className="tabular-nums inline-block w-[50px] text-right">
     {text}
   </span>
 </span>
@@ -3134,7 +3134,7 @@ exportToExcel(allRows, file);
     {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
   </span>
 
-  <span className="tabular-nums inline-block w-[10px] text-right">
+  <span className="tabular-nums inline-block w-[50px] text-right">
     {text}
   </span>
 </span>
@@ -3201,7 +3201,7 @@ exportToExcel(allRows, file);
   <tr className="bg-[#D9D9D9E5]">
     <td className="border border-[#414042] px-2 py-2.5 text-center"></td>
 
-    <td className="border border-[#414042] px-2 py-2.5 text-left font-bold">
+    <td className="border border-[#414042] px-2 py-2.5 text-left font-bold" style={{ textAlign: 'left' }}>
       <strong>Total</strong>
     </td>
 
@@ -3239,11 +3239,54 @@ exportToExcel(allRows, file);
         pct(sum('profit_month1'), sum('profit_month2')),
       ];
 
-      return cells.map((v, i) => (
-        <td key={i} className="border border-[#414042] px-2 py-2.5 text-center font-bold">
-          {`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`}
-        </td>
-      ));
+     return cells.map((v, i) => {
+  const val = Number(v);
+  const sign = val >= 0 ? '+' : '';
+  const text = `${sign}${val.toFixed(2)}%`;
+
+  // ✅ total ka classification:
+  // High Growth: val >= 5
+  // Negative Growth: val < 0
+  // Low Growth: baaki sab (0 to <5)
+  if (val >= 5) {
+    return (
+      <td key={i} className="border border-[#414042] px-2 py-2.5 text-center font-bold" style={{ fontWeight: 600 }}>
+        <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#5EA68E]">
+          <span className="w-4 flex justify-center">
+            <FaArrowUp size={12} />
+          </span>
+          <span className="tabular-nums inline-block w-[50px] text-right">{text}</span>
+        </span>
+      </td>
+    );
+  }
+
+  if (val < 0) {
+    return (
+      <td key={i} className="border border-[#414042] px-2 py-2.5 text-center font-bold" style={{ fontWeight: 600 }}>
+        <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#FF5C5C]">
+          <span className="w-4 flex justify-center">
+            <FaArrowDown size={12} />
+          </span>
+          <span className="tabular-nums inline-block w-[50px] text-right">{text}</span>
+        </span>
+      </td>
+    );
+  }
+
+  // ✅ Low Growth (neutral) — arrow sign ke basis pe (same as table body)
+  return (
+    <td key={i} className="border border-[#414042] px-2 py-2.5 text-center font-bold" style={{ fontWeight: 600, color: '#414042' }}>
+      <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#414042]">
+        <span className="w-4 flex justify-center">
+          {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
+        </span>
+        <span className="tabular-nums inline-block w-[50px] text-right">{text}</span>
+      </span>
+    </td>
+  );
+});
+
     })()}
 
     {Object.keys(skuInsights).length > 0 && (

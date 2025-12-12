@@ -2258,6 +2258,12 @@ FBA_FEE_KEYS = [
     "prep", "label", "repack", "warehouse", "handling"
 ]
 
+# ✅ ServiceFee / storage billing keywords that should NOT be counted as FBA fees
+SERVICE_FEE_EXCLUDE_KEYS = [
+    "storagebilling", "fbastoragebilling", "storagefee", "inventorystorage",
+    "agedinventory", "longtermstorage", "ltstorage", "storage"
+]
+
 # Withheld/facilitator tax keywords (marketplace withheld)
 WITHHELD_TAX_KEYS = [
     "withheld", "marketplacewithheld", "withheldtax", "taxwithheld"
@@ -2358,7 +2364,7 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # =========================================================
-    # ✅ FEES + WITHHELD TAX (NO 2x)
+    # ✅ FEES + WITHHELD TAX (NO 2x) + DIVIDE BY 2 FOR FEES
     # =========================================================
     selling_fees = 0.0
     fba_fees = 0.0
@@ -2404,6 +2410,12 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         is_selling_fee = _contains_any(path_str, SELLING_FEE_KEYS)
         is_fba_fee = _contains_any(path_str, FBA_FEE_KEYS)
 
+        # ✅ exclude ServiceFee / storage billing from fba_fees
+        is_service_fee_like = (
+            (ttype or "").lower().replace(" ", "") == "servicefee"
+            or _contains_any(path_str, SERVICE_FEE_EXCLUDE_KEYS)
+        )
+
         # --- Withheld / facilitator tax
         if is_withheld:
             marketplace_withheld_tax += amt
@@ -2415,14 +2427,13 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         # --- NET Selling fee (avoid 2x by skipping parent totals)
         if is_selling_fee and (not is_tax) and (not is_fba_fee):
             children = node.get("breakdowns") if _node_has_children(node) else None
-            # if any NON-TAX selling-fee descendant exists, parent is a total -> skip parent
             if _has_non_tax_fee_descendant(children, SELLING_FEE_KEYS):
                 continue
             selling_fees += amt
             continue
 
-        # --- NET FBA fee (avoid 2x by skipping parent totals)
-        if is_fba_fee and (not is_tax):
+        # --- NET FBA fee (avoid 2x by skipping parent totals) + ✅ exclude ServiceFee storage rows
+        if is_fba_fee and (not is_tax) and (not is_service_fee_like):
             children = node.get("breakdowns") if _node_has_children(node) else None
             if _has_non_tax_fee_descendant(children, FBA_FEE_KEYS):
                 continue
@@ -2467,10 +2478,17 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     if other_transaction_fees > 0:
         other_transaction_fees = -abs(other_transaction_fees)
 
+    
+
     if marketplace_withheld_tax > 0:
         marketplace_withheld_tax = -abs(marketplace_withheld_tax)
     if marketplace_facilitator_tax > 0:
         marketplace_facilitator_tax = -abs(marketplace_facilitator_tax)
+
+    # ✅ Your requirement: selling_fees and fba_fees should be 1x -> divide by 2
+    # (do NOT affect other columns)
+    selling_fees = selling_fees / 2.0 if abs(selling_fees) > 1e-12 else selling_fees
+    fba_fees = fba_fees / 2.0 if abs(fba_fees) > 1e-12 else fba_fees
 
     # ------------------- SALES TAX COLLECTED (YOU WANT IT = WITHHELD TAX) -------------------
     sales_tax_collected = marketplace_withheld_tax
@@ -2531,7 +2549,7 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         "other_transaction_fees": other_transaction_fees,
         "other": 0.0,
 
-        "sales_tax_collected": sales_tax_collected,          # ✅ equals withheld tax (your requirement)
+        "sales_tax_collected": sales_tax_collected,          # ✅ equals withheld tax
         "regulatory_fee": 0.0,
         "tax_on_regulatory_fee": 0.0,
         "account_type": None,
