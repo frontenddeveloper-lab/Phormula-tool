@@ -1529,6 +1529,7 @@ const SERIES_ORDER = [
   // =====================
   // Export to Excel
   // =====================
+// =====================
 const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
   // ✅ IMPORTANT: backend fields are tied to month1(old) / month2(new). Keep fixed mapping.
   const isM2New = true;
@@ -1600,7 +1601,7 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
 
     `CM1 Unit Profit ${newAbbr}`,
     `CM1 Unit Profit ${oldAbbr}`,
-    'Change in Unit Profit (%age)',
+    'Change in CM1 Unit Profit (%age)',
   ];
 
   /**
@@ -1656,12 +1657,15 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
       return name !== 'total' && !name.includes('total (top 80') && name !== 'total (top 80%)';
     });
 
+    // ✅ FIX: compute Sales Mix from Net Sales totals (prevents totals > 100 due to rounding)
+    const totalNsNew = clean.reduce((s, r) => s + num(pickNew(r, 'net_sales_month1', 'net_sales_month2')), 0);
+    const totalNsOld = clean.reduce((s, r) => s + num(pickOld(r, 'net_sales_month1', 'net_sales_month2')), 0);
+
     const formatted = clean.map((row) => {
       const unitGrowth = row['Unit Growth'] as GrowthCategory | undefined;
       const aspGrowth = row['ASP Growth'] as GrowthCategory | undefined;
       const grossSalesGrowth = row['Gross Sales Growth'] as GrowthCategory | undefined;
       const netSalesGrowth = row['Net Sales Growth'] as GrowthCategory | undefined;
-      const mixGrowth = row['Sales Mix Change'] as GrowthCategory | undefined;
       const unitProfitGrowth = row['Profit Per Unit'] as GrowthCategory | undefined;
 
       const qtyOld = pickOld(row, 'quantity_month1', 'quantity_month2');
@@ -1676,8 +1680,9 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
       const aspOld = pickOld(row, 'asp_month1', 'asp_month2');
       const aspNew = pickNew(row, 'asp_month1', 'asp_month2');
 
-      const mixOld = pickOld(row, 'sales_mix_month1', 'sales_mix_month2');
-      const mixNew = pickNew(row, 'sales_mix_month1', 'sales_mix_month2') ?? row?.['Sales Mix (Month2)'];
+      // ✅ FIX: recompute mix from Net Sales instead of using stored % (which may be rounded)
+      const mixOld = totalNsOld ? (num(nsOld) / totalNsOld) * 100 : null;
+      const mixNew = totalNsNew ? (num(nsNew) / totalNsNew) * 100 : null;
 
       const cm1Old = pickOld(row, 'profit_month1', 'profit_month2');
       const cm1New = pickNew(row, 'profit_month1', 'profit_month2');
@@ -1710,7 +1715,9 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
 
         [`Sales Mix ${newAbbr}`]: mixNew ?? null,
         [`Sales Mix ${oldAbbr}`]: mixOld ?? null,
-        'Change in Sales Mix (%age)': mixGrowth?.value ?? null,
+
+        // ✅ FIX: compute change from recomputed mixes (keeps columns consistent)
+        'Change in Sales Mix (%age)': mixOld != null && mixNew != null ? mixNew - mixOld : null,
 
         [`CM1 Profit ${newAbbr}`]: cm1New ?? null,
         [`CM1 Profit ${oldAbbr}`]: cm1Old ?? null,
@@ -1719,9 +1726,9 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
         [`CM1 Profit %age(${newAbbr})`]: cm1PctNew ?? null,
         [`CM1 Profit %age(${oldAbbr})`]: cm1PctOld ?? null,
 
-        [`Unit Profit ${newAbbr}`]: upNew ?? null,
-        [`Unit Profit ${oldAbbr}`]: upOld ?? null,
-        'Change in Unit Profit (%age)': unitProfitGrowth?.value ?? null,
+        [`CM1 Unit Profit ${newAbbr}`]: upNew ?? null,
+        [`CM1 Unit Profit ${oldAbbr}`]: upOld ?? null,
+        'Change in CM1 Unit Profit (%age)': unitProfitGrowth?.value ?? null,
       };
     });
 
@@ -1737,8 +1744,7 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
         acc.nsOld += num(pickOld(r, 'net_sales_month1', 'net_sales_month2'));
         acc.nsNew += num(pickNew(r, 'net_sales_month1', 'net_sales_month2'));
 
-        acc.mixOld += num(pickOld(r, 'sales_mix_month1', 'sales_mix_month2'));
-        acc.mixNew += num(pickNew(r, 'sales_mix_month1', 'sales_mix_month2') ?? r?.['Sales Mix (Month2)']);
+        // ✅ FIX: do NOT sum Sales Mix % values
 
         acc.cm1Old += num(pickOld(r, 'profit_month1', 'profit_month2'));
         acc.cm1New += num(pickNew(r, 'profit_month1', 'profit_month2'));
@@ -1748,7 +1754,7 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
 
         return acc;
       },
-      { qtyOld: 0, qtyNew: 0, gsOld: 0, gsNew: 0, nsOld: 0, nsNew: 0, mixOld: 0, mixNew: 0, cm1Old: 0, cm1New: 0, upOld: 0, upNew: 0 }
+      { qtyOld: 0, qtyNew: 0, gsOld: 0, gsNew: 0, nsOld: 0, nsNew: 0, cm1Old: 0, cm1New: 0, upOld: 0, upNew: 0 }
     );
 
     const safeDiv = (a: number, b: number) => (b ? a / b : null);
@@ -1759,8 +1765,11 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
     const totalCm1PctOld = profitPct(totals.cm1Old, totals.nsOld);
     const totalCm1PctNew = profitPct(totals.cm1New, totals.nsNew);
 
-    const totalSalesMixOld = round2(totals.mixOld);
-    const totalSalesMixNew = round2(totals.mixNew);
+    // ✅ FIX: Total Sales Mix should be exactly 100% only when there is net sales
+    const totalSalesMixOld = totalNsOld ? 100 : null;
+    const totalSalesMixNew = totalNsNew ? 100 : null;
+
+    // ✅ Total mix is 100% in both months (if there is sales), so change should be 0%
     const totalSalesMixChange =
       totalSalesMixOld != null && totalSalesMixNew != null ? pct(totalSalesMixOld, totalSalesMixNew) : null;
 
@@ -1795,16 +1804,15 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
       [`CM1 Profit %age(${newAbbr})`]: totalCm1PctNew,
       [`CM1 Profit %age(${oldAbbr})`]: totalCm1PctOld,
 
-      [`Unit Profit ${newAbbr}`]: totals.upNew,
-      [`Unit Profit ${oldAbbr}`]: totals.upOld,
-      'Change in Unit Profit (%age)': pct(totals.upOld, totals.upNew),
+      [`CM1 Unit Profit ${newAbbr}`]: totals.upNew,
+      [`CM1 Unit Profit ${oldAbbr}`]: totals.upOld,
+      'Change in CM1 Unit Profit (%age)': pct(totals.upOld, totals.upNew),
     });
 
     return formatted;
   };
 
-console.log(Object.keys(categorizedGrowth.top_80_skus?.[0] || {}));
-
+  console.log(Object.keys(categorizedGrowth.top_80_skus?.[0] || {}));
 
   // -------------------------
   // Sheet 1: All SKUs (Growth Comparison)
@@ -1900,6 +1908,7 @@ console.log(Object.keys(categorizedGrowth.top_80_skus?.[0] || {}));
 
   XLSX.writeFile(wb, filename);
 };
+// =====================
 
 const allRows = useMemo(() => ([
   ...(categorizedGrowth.top_80_skus || []),

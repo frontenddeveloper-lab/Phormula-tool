@@ -459,11 +459,13 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
             )
             print(sku_grouped[["product_name", "unit_wise_profitability"]])
 
-            total_sales = abs(sku_grouped["net_sales"].sum())  # lowercase column name
-            total_profit = abs(sku_grouped["profit"].sum())
+            temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
+
+            total_sales = abs(temp["net_sales"].sum())
+            total_profit = abs(temp["profit"].sum())
+
             print(total_profit)
             print(total_sales)
-
             sku_grouped["profit_mix"] = sku_grouped.apply(
                 lambda row: (row["profit"] / total_profit) * 100 if total_profit != 0 else 0,
                 axis=1
@@ -1036,8 +1038,13 @@ def process_global_quarterly_skuwise_data(user_id, country, month, year, q, db_u
                 axis=1
             )
 
-            total_sales = abs(sku_grouped["net_sales"].sum())
-            total_profit = abs(sku_grouped["profit"].sum())
+            temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
+
+            total_sales = abs(temp["net_sales"].sum())
+            total_profit = abs(temp["profit"].sum())
+
+            print(total_profit)
+            print(total_sales)
 
             sku_grouped["profit_mix"] = sku_grouped.apply(
                 lambda row: (row["profit"] / total_profit) * 100 if total_profit != 0 else 0,
@@ -1248,8 +1255,11 @@ def process_global_yearly_skuwise_data(user_id, country, year):
             )
             print(sku_grouped[["product_name", "unit_wise_profitability"]])
 
-            total_sales = abs(sku_grouped["net_sales"].sum())  # lowercase column name
-            total_profit = abs(sku_grouped["profit"].sum())
+            temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
+
+            total_sales = abs(temp["net_sales"].sum())
+            total_profit = abs(temp["profit"].sum())
+
             print(total_profit)
             print(total_sales)
 
