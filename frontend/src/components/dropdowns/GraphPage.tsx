@@ -3779,9 +3779,9 @@ const GraphPage: React.FC<GraphPageProps> = ({
                     "font-semibold select-none whitespace-nowrap",
                     "text-[9px] sm:text[10px] md:text-[11px] lg:text-xs xl:text-sm",
                     "text-charcoal-500",
-                    isChecked ? "opacity-100" : "opacity-40",
                     allValuesZero ? "cursor-not-allowed" : "cursor-pointer",
                   ].join(" ")}
+
                 >
                   <span
                     className="flex items-center justify-center h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-sm border transition"

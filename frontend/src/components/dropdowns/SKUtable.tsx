@@ -914,7 +914,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
                                             <div className="flex items-center justify-center gap-1">
                                                 Net Taxes
-                                                <Tooltip text="Net Taxes Formula: Net Taxes = Shipping Credits Tax + Giftwrap Credits Tax + Promotional Rebates tax + Marketplace Withheld Tax" />
+                                                <Tooltip text="Net Taxes Formula: Shipping Credits Tax + Giftwrap Credits Tax + Promotional Rebates tax - Marketplace Withheld Tax" />
                                             </div>
                                         </th>
 
@@ -969,10 +969,10 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                         </td>
                                         {showamazonfee && (
                                             <>
-                                                <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]">
+                                                <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
                                                     (-)
                                                 </td>
-                                                <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ">
+                                                <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]  text-[#ff5c5c]">
                                                     (-)
                                                 </td>
                                             </>
@@ -1088,8 +1088,6 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                             </td>
                                         </tr>
                                     )}
-
-                                    {/* Summary rows */}
 
                                     {/* Summary rows */}
                                     <tr>
@@ -1340,7 +1338,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
                         <div className="overflow-x-auto rounded-xl border border-gray-300">
                             <table className="w-full table-auto border-collapse">
                                 <thead>
-                                    <tr className="bg-[#ff5c5c] font-bold text-white">
+                                    <tr className="bg-[#ff5c5c] font-bold text-[#f8edcf]">
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
                                             Product Name
                                         </th>

@@ -413,12 +413,16 @@ axisLabel: {
 
         splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
       },
-      yAxis: {
-        type: 'value',
- axisLabel: {
-    formatter: (v: any) => Math.round(Number(v)).toLocaleString(),
-  },
-      },
+    yAxis: {
+  type: 'value',
+  name: `Amount (${currency})`,
+  nameLocation: 'middle',
+  nameGap: 45,
+  axisLabel: {
+    formatter: (v: number) => `${Math.round(v).toLocaleString()}`
+  }
+},
+
       
     series: [
   {
@@ -589,12 +593,16 @@ axisLabel: {
 
         splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
       },
-      yAxis: {
-        type: 'value',
- axisLabel: {
-    formatter: (v: any) => Math.round(Number(v)).toLocaleString(),
-  },
-      },
+yAxis: {
+  type: 'value',
+  name: `Amount (${currency})`,
+  nameLocation: 'middle',
+  nameGap: 45,
+  axisLabel: {
+    formatter: (v: number) => `${Math.round(v).toLocaleString()}`
+  }
+},
+
    series: [
   {
     name: 'New/Reviving',
@@ -752,10 +760,17 @@ useEffect(() => {
         },
         splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
       },
-      yAxis: {
-        type: 'value',
-        axisLabel: { formatter: (v: any) => fmtNum(v) },
-      },
+    yAxis: {
+  type: 'value',
+  name: 'Nos.',
+  nameLocation: 'middle',
+  nameGap: 45,
+  axisLabel: {
+    formatter: (v: number) => `${Math.round(v).toLocaleString()}`
+  }
+}
+
+,
 
       series: [
         {
@@ -912,7 +927,10 @@ useEffect(() => {
         splitLine: { show: true, lineStyle: { type: 'dashed', opacity: 0.35 } },
       },
       yAxis: {
-        type: 'value',
+       type: 'value',
+  name: `Amount (${currency})`,
+  nameLocation: 'middle',
+  nameGap: 45,
         axisLabel: {formatter: (value: number) => {
       if (!value) return '0';
       return Number.isInteger(value)
@@ -1511,6 +1529,7 @@ const SERIES_ORDER = [
   // =====================
   // Export to Excel
   // =====================
+// =====================
 const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
   // ✅ IMPORTANT: backend fields are tied to month1(old) / month2(new). Keep fixed mapping.
   const isM2New = true;
@@ -1582,7 +1601,7 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
 
     `CM1 Unit Profit ${newAbbr}`,
     `CM1 Unit Profit ${oldAbbr}`,
-    'Change in Unit Profit (%age)',
+    'Change in CM1 Unit Profit (%age)',
   ];
 
   /**
@@ -1638,12 +1657,15 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
       return name !== 'total' && !name.includes('total (top 80') && name !== 'total (top 80%)';
     });
 
+    // ✅ FIX: compute Sales Mix from Net Sales totals (prevents totals > 100 due to rounding)
+    const totalNsNew = clean.reduce((s, r) => s + num(pickNew(r, 'net_sales_month1', 'net_sales_month2')), 0);
+    const totalNsOld = clean.reduce((s, r) => s + num(pickOld(r, 'net_sales_month1', 'net_sales_month2')), 0);
+
     const formatted = clean.map((row) => {
       const unitGrowth = row['Unit Growth'] as GrowthCategory | undefined;
       const aspGrowth = row['ASP Growth'] as GrowthCategory | undefined;
       const grossSalesGrowth = row['Gross Sales Growth'] as GrowthCategory | undefined;
       const netSalesGrowth = row['Net Sales Growth'] as GrowthCategory | undefined;
-      const mixGrowth = row['Sales Mix Change'] as GrowthCategory | undefined;
       const unitProfitGrowth = row['Profit Per Unit'] as GrowthCategory | undefined;
 
       const qtyOld = pickOld(row, 'quantity_month1', 'quantity_month2');
@@ -1658,8 +1680,9 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
       const aspOld = pickOld(row, 'asp_month1', 'asp_month2');
       const aspNew = pickNew(row, 'asp_month1', 'asp_month2');
 
-      const mixOld = pickOld(row, 'sales_mix_month1', 'sales_mix_month2');
-      const mixNew = pickNew(row, 'sales_mix_month1', 'sales_mix_month2') ?? row?.['Sales Mix (Month2)'];
+      // ✅ FIX: recompute mix from Net Sales instead of using stored % (which may be rounded)
+      const mixOld = totalNsOld ? (num(nsOld) / totalNsOld) * 100 : null;
+      const mixNew = totalNsNew ? (num(nsNew) / totalNsNew) * 100 : null;
 
       const cm1Old = pickOld(row, 'profit_month1', 'profit_month2');
       const cm1New = pickNew(row, 'profit_month1', 'profit_month2');
@@ -1692,7 +1715,9 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
 
         [`Sales Mix ${newAbbr}`]: mixNew ?? null,
         [`Sales Mix ${oldAbbr}`]: mixOld ?? null,
-        'Change in Sales Mix (%age)': mixGrowth?.value ?? null,
+
+        // ✅ FIX: compute change from recomputed mixes (keeps columns consistent)
+        'Change in Sales Mix (%age)': mixOld != null && mixNew != null ? mixNew - mixOld : null,
 
         [`CM1 Profit ${newAbbr}`]: cm1New ?? null,
         [`CM1 Profit ${oldAbbr}`]: cm1Old ?? null,
@@ -1701,9 +1726,9 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
         [`CM1 Profit %age(${newAbbr})`]: cm1PctNew ?? null,
         [`CM1 Profit %age(${oldAbbr})`]: cm1PctOld ?? null,
 
-        [`Unit Profit ${newAbbr}`]: upNew ?? null,
-        [`Unit Profit ${oldAbbr}`]: upOld ?? null,
-        'Change in Unit Profit (%age)': unitProfitGrowth?.value ?? null,
+        [`CM1 Unit Profit ${newAbbr}`]: upNew ?? null,
+        [`CM1 Unit Profit ${oldAbbr}`]: upOld ?? null,
+        'Change in CM1 Unit Profit (%age)': unitProfitGrowth?.value ?? null,
       };
     });
 
@@ -1719,8 +1744,7 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
         acc.nsOld += num(pickOld(r, 'net_sales_month1', 'net_sales_month2'));
         acc.nsNew += num(pickNew(r, 'net_sales_month1', 'net_sales_month2'));
 
-        acc.mixOld += num(pickOld(r, 'sales_mix_month1', 'sales_mix_month2'));
-        acc.mixNew += num(pickNew(r, 'sales_mix_month1', 'sales_mix_month2') ?? r?.['Sales Mix (Month2)']);
+        // ✅ FIX: do NOT sum Sales Mix % values
 
         acc.cm1Old += num(pickOld(r, 'profit_month1', 'profit_month2'));
         acc.cm1New += num(pickNew(r, 'profit_month1', 'profit_month2'));
@@ -1730,7 +1754,7 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
 
         return acc;
       },
-      { qtyOld: 0, qtyNew: 0, gsOld: 0, gsNew: 0, nsOld: 0, nsNew: 0, mixOld: 0, mixNew: 0, cm1Old: 0, cm1New: 0, upOld: 0, upNew: 0 }
+      { qtyOld: 0, qtyNew: 0, gsOld: 0, gsNew: 0, nsOld: 0, nsNew: 0, cm1Old: 0, cm1New: 0, upOld: 0, upNew: 0 }
     );
 
     const safeDiv = (a: number, b: number) => (b ? a / b : null);
@@ -1741,8 +1765,11 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
     const totalCm1PctOld = profitPct(totals.cm1Old, totals.nsOld);
     const totalCm1PctNew = profitPct(totals.cm1New, totals.nsNew);
 
-    const totalSalesMixOld = round2(totals.mixOld);
-    const totalSalesMixNew = round2(totals.mixNew);
+    // ✅ FIX: Total Sales Mix should be exactly 100% only when there is net sales
+    const totalSalesMixOld = totalNsOld ? 100 : null;
+    const totalSalesMixNew = totalNsNew ? 100 : null;
+
+    // ✅ Total mix is 100% in both months (if there is sales), so change should be 0%
     const totalSalesMixChange =
       totalSalesMixOld != null && totalSalesMixNew != null ? pct(totalSalesMixOld, totalSalesMixNew) : null;
 
@@ -1777,16 +1804,15 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
       [`CM1 Profit %age(${newAbbr})`]: totalCm1PctNew,
       [`CM1 Profit %age(${oldAbbr})`]: totalCm1PctOld,
 
-      [`Unit Profit ${newAbbr}`]: totals.upNew,
-      [`Unit Profit ${oldAbbr}`]: totals.upOld,
-      'Change in Unit Profit (%age)': pct(totals.upOld, totals.upNew),
+      [`CM1 Unit Profit ${newAbbr}`]: totals.upNew,
+      [`CM1 Unit Profit ${oldAbbr}`]: totals.upOld,
+      'Change in CM1 Unit Profit (%age)': pct(totals.upOld, totals.upNew),
     });
 
     return formatted;
   };
 
-console.log(Object.keys(categorizedGrowth.top_80_skus?.[0] || {}));
-
+  console.log(Object.keys(categorizedGrowth.top_80_skus?.[0] || {}));
 
   // -------------------------
   // Sheet 1: All SKUs (Growth Comparison)
@@ -1882,6 +1908,7 @@ console.log(Object.keys(categorizedGrowth.top_80_skus?.[0] || {}));
 
   XLSX.writeFile(wb, filename);
 };
+// =====================
 
 const allRows = useMemo(() => ([
   ...(categorizedGrowth.top_80_skus || []),
@@ -1918,7 +1945,7 @@ const totalsLine = useMemo(() => {
     { key: "cm1Profit", label: "CM1 Profit", data: [profit_m1, profit_m2], color: "#5EA49B" },
     { key: "otherExpense", label: "Other Expense", data: [otherExp_m1, otherExp_m2], color: "#00627D" },
     { key: "advertising", label: "Advertising Total", data: [adv_m1, adv_m2], color: "#F47A00" },
-    { key: "reimbursement", label: "Reimbursement Fee", data: [reimb_m1, reimb_m2], color: "#AB64B5" },
+    { key: "reimbursement", label: "Reimbursement", data: [reimb_m1, reimb_m2], color: "#AB64B5" },
   ];
 
   const datasets = ds
@@ -2489,7 +2516,7 @@ const isLockedCurrent = (year: string, month: string) => {
     background-color:#2c3e50; color:#f8edcf; font-weight:bold;
   }
   .styled-button:hover, .compare-button:hover{ background-color:#1f2a36; }
-  .month-form{ max-width:100%; margin:15px 0; border:1px solid #000000; padding:10px; background:#fff; }
+  .month-form{ max-width:100%; margin:15px 0; border:1px solid #e4e7ec ; padding:10px; background:#fff; }
   .month-tag{ font-size:12px; font-weight:bold; color:#414042; position:absolute; top:-25px; }
   .highlight{ color:#60a68e; }
   .subtitle{ margin-top:0; color:#414042; font-size:14px; }
@@ -2635,10 +2662,10 @@ const isLockedCurrent = (year: string, month: string) => {
 <div className='w-full'>
       {/* Month selectors */}
       <h2 className="text-2xl font-bold text-[#414042] mb-2">
-          Business Insights - AI Analyst&nbsp;
-          <span className="text-[#5EA68E]">
-             {countryName && formatCountryLabel(countryName)}<span className="text-[#5EA68E] px-2">
-           {month1 && year1 && month2 && year2
+          Business Insights - AI Analyst&nbsp;- 
+          <span className="text-[#5EA68E] pl-1">
+              {countryName && formatCountryLabel(countryName)}<span className="text-[#5EA68E] px-2">
+           {/* {month1 && year1 && month2 && year2
   ? (() => {
       const monthToIndex = (m: string) => {
         const s = String(m).trim().toLowerCase();
@@ -2687,12 +2714,12 @@ const isLockedCurrent = (year: string, month: string) => {
 
       return `(${getAbbr(newMonth)}'${ny.slice(2)} vs ${getAbbr(oldMonth)}'${oy.slice(2)})`;
     })()
-  : ''}
+  : ''} */}
 
 </span>
           </span>
         </h2>
-        <p><i className="">Select the year and month for both periods to compare growth metrics and totals.</i></p>
+        <p><i className="">Select the year and month for both periods to compare growth metrics.</i></p>
       <form onSubmit={handleSubmit} className="month-form ">
         {/* Row 1 */}
         <div className="month-row">
@@ -2772,7 +2799,7 @@ const disabled =
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
-     <div className="mt-4 mb-3 rounded-xl border border-gray-200 bg-white p-3 w-full bg-[#D9D9D933]">
+     <div className="mt-4 mb-3 rounded-xl border border-gray-200  p-3 w-full bg-[#D9D9D933]">
   <div className="text-2xl font-bold text-[#414042]">Profitability</div>
 
  {/* Center labels like GraphPage */}
@@ -2782,7 +2809,7 @@ const disabled =
     { key: "cm1Profit", label: "CM1 Profit", color: "#5EA49B" },
     { key: "otherExpense", label: "Other Expense", color: "#00627D" },
     { key: "advertising", label: "Advertising Total", color: "#F47A00" },
-    { key: "reimbursement", label: "Reimbursement Fee", color: "#AB64B5" },
+    { key: "reimbursement", label: "Reimbursement", color: "#AB64B5" },
   ].map(({ key, label, color }) => {
     const isChecked = !!selectedTotals[key];
 
@@ -2858,7 +2885,7 @@ const disabled =
 </div>
 
   {/* Shared legend bottom center */}
-  <div className="mt-3 flex flex-wrap justify-center gap-4 text-[12px] font-semibold text-[#414042]">
+  <div className="mt-3 flex flex-wrap justify-center gap-4 text-[14px] font-semibold text-[#414042]">
     <span className="inline-flex items-center gap-2">
       <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#F47A00]" />
       Top 80%
@@ -2882,8 +2909,8 @@ const disabled =
 {(['all_skus','top_80_skus','new_or_reviving_skus','other_skus'] as TabKey[]).some(
   (k) => (categorizedGrowth[k] || []).length > 0
 ) && (
-        <div>
-          <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start mt-10'>
+        <div className='border border-gray-200 rounded-xl p-4 mt-6 w-full bg-white'>
+          <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start '>
             <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start w-full'>
 <h2 className="xl:text-2xl text-xl font-bold text-[#414042] mb-4">Performance-based SKU split</h2>
             <div className='flex justify-center gap-3'>
@@ -3069,10 +3096,16 @@ exportToExcel(allRows, file);
                   className="border border-[#414042] px-2 py-2.5 text-center"
                   style={{ fontWeight: 600 }}
                 >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#5EA68E' }}>
-                    <FaArrowUp size={12} />
-                    {text}
-                  </span>
+                  <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#5EA68E]">
+  <span className="w-4 flex justify-center">
+    <FaArrowUp size={12} />
+  </span>
+
+  <span className="tabular-nums inline-block w-[10px] text-right">
+    {text}
+  </span>
+</span>
+
                 </td>
               );
             }
@@ -3084,10 +3117,16 @@ exportToExcel(allRows, file);
                   className="border border-[#414042] px-2 py-2.5 text-center"
                   style={{ fontWeight: 600 }}
                 >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#FF5C5C' }}>
-                    <FaArrowDown size={12} />
-                    {text}
-                  </span>
+                 <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#FF5C5C]">
+  <span className="w-4 flex justify-center">
+    <FaArrowDown size={12} />
+  </span>
+
+  <span className="tabular-nums inline-block w-[10px] text-right">
+    {text}
+  </span>
+</span>
+
                 </td>
               );
             }
@@ -3099,10 +3138,16 @@ exportToExcel(allRows, file);
                 className="border border-[#414042] px-2 py-2.5 text-center text-[#414042]"
                 style={{ fontWeight: 600, color: '#414042' }}
               >
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#414042' }}>
-                  {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
-                  {text}
-                </span>
+                <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#414042]">
+  <span className="w-4 flex justify-center">
+    {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
+  </span>
+
+  <span className="tabular-nums inline-block w-[10px] text-right">
+    {text}
+  </span>
+</span>
+
               </td>
             );
           })}
@@ -3165,7 +3210,7 @@ exportToExcel(allRows, file);
   <tr className="bg-[#D9D9D9E5]">
     <td className="border border-[#414042] px-2 py-2.5 text-center"></td>
 
-    <td className="border border-[#414042] px-2 py-2.5 text-left font-bold">
+    <td className="border border-[#414042] px-2 py-2.5 text-left font-bold " style={{ textAlign: 'left' }}>
       <strong>Total</strong>
     </td>
 
@@ -3177,7 +3222,9 @@ exportToExcel(allRows, file);
           (s, r) => s + Number(r?.['Sales Mix (Month2)'] ?? 0),
           0
         );
-        return `${sum.toFixed(2)}%`;
+        const rounded = Number(sum.toFixed(2));
+        const fixed = Math.abs(rounded - 100) < 0.05 ? 100 : rounded;
+        return `${fixed.toFixed(2)}%`;
       })()}
     </td>
 
@@ -3194,7 +3241,7 @@ exportToExcel(allRows, file);
 
       const cells = [
         ...(activeTab !== 'new_or_reviving_skus'
-          ? [pct(sum('sales_mix_month1'), sum('sales_mix_month2'))]
+          ? [0]
           : []),
         pct(sum('quantity_month1'), sum('quantity_month2')),
         pct(sum('asp_month1'), sum('asp_month2')),
@@ -3203,11 +3250,70 @@ exportToExcel(allRows, file);
         pct(sum('profit_month1'), sum('profit_month2')),
       ];
 
-      return cells.map((v, i) => (
-        <td key={i} className="border border-[#414042] px-2 py-2.5 text-center font-bold">
-          {`${v >= 0 ? '+' : ''}${v.toFixed(2)}%`}
-        </td>
-      ));
+      return cells.map((v, i) => {
+        const val = Number(v);
+        const sign = val >= 0 ? '+' : '';
+        const text = `${sign}${val.toFixed(2)}%`;
+
+        // ✅ Total row classification:
+        // High Growth: val >= 5
+        // Negative Growth: val < 0
+        // Low Growth: 0 <= val < 5 (or any other neutral)
+        if (val >= 5) {
+          return (
+            <td
+              key={i}
+              className="border border-[#414042] px-2 py-2.5 text-center font-bold"
+              style={{ fontWeight: 600 }}
+            >
+              <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#5EA68E]">
+                <span className="w-4 flex justify-center">
+                  <FaArrowUp size={12} />
+                </span>
+                <span className="tabular-nums inline-block w-[10px] text-right">
+                  {text}
+                </span>
+              </span>
+            </td>
+          );
+        }
+
+        if (val < 0) {
+          return (
+            <td
+              key={i}
+              className="border border-[#414042] px-2 py-2.5 text-center font-bold"
+              style={{ fontWeight: 600 }}
+            >
+              <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#FF5C5C]">
+                <span className="w-4 flex justify-center">
+                  <FaArrowDown size={12} />
+                </span>
+                <span className="tabular-nums inline-block w-[10px] text-right">
+                  {text}
+                </span>
+              </span>
+            </td>
+          );
+        }
+
+        return (
+          <td
+            key={i}
+            className="border border-[#414042] px-2 py-2.5 text-center font-bold"
+            style={{ fontWeight: 600, color: '#414042' }}
+          >
+            <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#414042]">
+              <span className="w-4 flex justify-center">
+                {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
+              </span>
+              <span className="tabular-nums inline-block w-[10px] text-right">
+                {text}
+              </span>
+            </span>
+          </td>
+        );
+      });
     })()}
 
     {Object.keys(skuInsights).length > 0 && (
@@ -3224,7 +3330,7 @@ exportToExcel(allRows, file);
     alignItems: 'center',
     gap: 14,
     flexWrap: 'wrap',
-    fontSize: 12,
+    fontSize: 14 ,
     color: '#414042',
     marginTop: 6,
   }}

@@ -2109,15 +2109,26 @@ def list_amazon_connections():
 #         "transactions": all_rows,
 #     }), 200
 
-
 from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime, timezone
 import io
 import pandas as pd
 from flask import jsonify, request, send_file
 
-# NOTE: assumed existing in your project:
-# amazon_api_bp, amazon_client, amazon_user, jwt, SECRET_KEY, _apply_region_and_marketplace_from_request
+# =========================================================
+# OUTPUT COLUMNS (MATCH YOUR MTD FILE)
+# =========================================================
+MTD_COLUMNS = [
+    "date_time", "settlement_id", "type", "order_id", "sku", "description", "quantity",
+    "marketplace", "fulfilment", "order_city", "order_state", "order_postal",
+    "tax_collection_model",
+    "product_sales", "product_sales_tax", "postage_credits", "shipping_credits",
+    "shipping_credits_tax", "gift_wrap_credits", "giftwrap_credits_tax",
+    "promotional_rebates", "promotional_rebates_tax",
+    "sales_tax_collected", "marketplace_withheld_tax", "marketplace_facilitator_tax",
+    "selling_fees", "fba_fees", "other_transaction_fees", "other", "total",
+    "account_type", "regulatory_fee", "tax_on_regulatory_fee", "bucket",
+]
 
 
 # =========================================================
@@ -2170,140 +2181,116 @@ def _extract_sku_and_qty_from_contexts(
 
 
 # =========================================================
-# BREAKDOWN WALKERS
+# BREAKDOWN WALK + CLASSIFIERS
 # =========================================================
-def _walk_breakdowns_collect(breakdowns: Optional[List[Dict[str, Any]]]) -> List[Tuple[str, float, bool]]:
+def _walk_leaf_breakdowns(breakdowns: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
     """
-    Collect all breakdown nodes as tuples:
-      (breakdownType_lower, currencyAmount_float, is_leaf)
+    Return ONLY leaf breakdown nodes (no children) from a breakdown tree.
+    Using leaf nodes avoids double counting when Amazon nests totals.
     """
-    out: List[Tuple[str, float, bool]] = []
+    leaves: List[Dict[str, Any]] = []
 
-    def walk(nodes: Optional[List[Dict[str, Any]]]):
+    def walk(nodes: List[Dict[str, Any]]):
         for b in nodes or []:
-            btype = str(b.get("breakdownType", "")).lower()
-            amt = ((b.get("breakdownAmount") or {}).get("currencyAmount")) or 0
-            try:
-                amt_f = float(amt)
-            except (TypeError, ValueError):
-                amt_f = 0.0
-
             children = b.get("breakdowns")
             has_children = isinstance(children, list) and len(children) > 0
-            is_leaf = not has_children
-
-            out.append((btype, amt_f, is_leaf))
-
-            if has_children:
+            if not has_children:
+                leaves.append(b)
+            else:
                 walk(children)
 
     walk(breakdowns or [])
+    return leaves
+
+
+def _walk_all_breakdowns_with_path(
+    breakdowns: Optional[List[Dict[str, Any]]]
+) -> List[Tuple[Dict[str, Any], str, List[str]]]:
+    """
+    Walk all breakdown nodes (including parents) and return:
+      (node, normalized_node_type, path_types_including_node)
+    The path is a list of normalized breakdownType strings from root->node.
+    """
+    out: List[Tuple[Dict[str, Any], str, List[str]]] = []
+
+    def walk(nodes: List[Dict[str, Any]], path: List[str]):
+        for b in nodes or []:
+            t = _btype(b)
+            new_path = path + [t]
+            out.append((b, t, new_path))
+            children = b.get("breakdowns")
+            if isinstance(children, list) and children:
+                walk(children, new_path)
+
+    walk(breakdowns or [], [])
     return out
 
 
-def _sum_by_predicate(
-    collected: List[Tuple[str, float, bool]],
-    predicate,
-    leaf_only: bool = False
+def _amt(b: Dict[str, Any]) -> float:
+    v = ((b.get("breakdownAmount") or {}).get("currencyAmount")) or 0
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _btype(b: Dict[str, Any]) -> str:
+    return str(b.get("breakdownType", "")).lower().replace(" ", "")
+
+
+def _contains_any(s: str, needles: List[str]) -> bool:
+    return any(n in s for n in needles)
+
+
+# Selling fees keywords (EU often uses "referralfee", "variableclosingfee", etc.)
+SELLING_FEE_KEYS = [
+    "referral", "commission", "sellingfee",
+    "variableclosing", "closingfee", "fixedclosing",
+    "peritem", "subscription", "platformfee"
+]
+
+# FBA fee keywords (catch the ones that were leaking into other_transaction_fees)
+FBA_FEE_KEYS = [
+    "fba", "fulfillment", "fulfilment", "pickpack", "pick_pack",
+    "outbound", "inbound", "transport", "transportation",
+    "storage", "longtermstorage", "ltstorage",
+    "removal", "disposal", "returnsprocessing", "returnprocessing",
+    "prep", "label", "repack", "warehouse", "handling"
+]
+
+# ✅ ServiceFee / storage billing keywords that should NOT be counted as FBA fees
+SERVICE_FEE_EXCLUDE_KEYS = [
+    "storagebilling", "fbastoragebilling", "storagefee", "inventorystorage",
+    "agedinventory", "longtermstorage", "ltstorage", "storage"
+]
+
+# Withheld/facilitator tax keywords (marketplace withheld)
+WITHHELD_TAX_KEYS = [
+    "withheld", "marketplacewithheld", "withheldtax", "taxwithheld"
+]
+
+FACILITATOR_TAX_KEYS = [
+    "facilitator", "marketplacefacilitator"
+]
+
+# Promo keys
+PROMO_KEYS = ["promotion", "discount", "rebate", "coupon"]
+
+
+def _sum_where(
+    leaves: List[Dict[str, Any]],
+    pred,
 ) -> float:
     total = 0.0
-    for btype, amt, is_leaf in collected:
-        if leaf_only and not is_leaf:
-            continue
-        if predicate(btype):
-            total += amt
+    for b in leaves:
+        t = _btype(b)
+        if pred(t):
+            total += _amt(b)
     return total
 
 
 # =========================================================
-# CLASSIFIERS (priority-safe)
-# =========================================================
-def _is_principal(btype: str) -> bool:
-    return (("principal" in btype) or ("itemprice" in btype) or ("item_price" in btype)) and ("tax" not in btype)
-
-
-def _is_sales_tax(btype: str) -> bool:
-    return ("tax" in btype) and ("shipping" not in btype) and ("ship" not in btype)
-
-
-def _is_shipping_credit(btype: str) -> bool:
-    return (("shipping" in btype) or ("shipcharge" in btype) or ("shippingcharges" in btype)) and ("tax" not in btype)
-
-
-def _is_shipping_tax(btype: str) -> bool:
-    return ("tax" in btype) and (("shipping" in btype) or ("ship" in btype))
-
-
-def _is_promo(btype: str) -> bool:
-    return (("promotion" in btype) or ("discount" in btype) or ("promo" in btype)) and ("tax" not in btype)
-
-
-def _is_promo_tax(btype: str) -> bool:
-    return (("promotion" in btype) or ("discount" in btype) or ("promo" in btype)) and ("tax" in btype)
-
-
-def _is_selling_fee(btype: str) -> bool:
-    return ("referral" in btype) or ("variableclosing" in btype) or ("closingfee" in btype) or ("closing_fee" in btype)
-
-
-def _is_fba_fee(btype: str) -> bool:
-    return (
-        ("fba" in btype)
-        or ("fulfillmentbyamazon" in btype)
-        or ("fulfilmentbyamazon" in btype)
-        or ("fulfillmentfee" in btype)
-        or ("pickpack" in btype)
-        or ("weightbased" in btype)
-        or ("orderhandling" in btype)
-        or ("perunitfulfillment" in btype)
-        or ("fbaperunit" in btype)
-    )
-
-
-def _is_other_tx_fee(btype: str) -> bool:
-    # IMPORTANT: exclude selling/fba so it never leaks into other_transaction_fees
-    if _is_fba_fee(btype) or _is_selling_fee(btype):
-        return False
-    return ("chargeback" in btype) or ("holdback" in btype)
-
-
-def _is_marketplace_withheld_tax(btype: str) -> bool:
-    return ("marketplacewithheldtax" in btype) or ("withheldtax" in btype)
-
-
-def _is_marketplace_facilitator_tax(btype: str) -> bool:
-    return ("marketplacefacilitator" in btype) and ("tax" in btype)
-
-
-# =========================================================
-# SOURCE-PRIORITY SUM (prevents 2x)
-# =========================================================
-def _sum_prefer_item(
-    item_nodes: List[Tuple[str, float, bool]],
-    tx_nodes: List[Tuple[str, float, bool]],
-    predicate,
-    leaf_only: bool = False,
-) -> float:
-    v = _sum_by_predicate(item_nodes, predicate, leaf_only=leaf_only)
-    if abs(v) > 1e-9:
-        return v
-    return _sum_by_predicate(tx_nodes, predicate, leaf_only=leaf_only)
-
-
-def _sum_prefer_tx(
-    item_nodes: List[Tuple[str, float, bool]],
-    tx_nodes: List[Tuple[str, float, bool]],
-    predicate,
-    leaf_only: bool = False,
-) -> float:
-    v = _sum_by_predicate(tx_nodes, predicate, leaf_only=leaf_only)
-    if abs(v) > 1e-9:
-        return v
-    return _sum_by_predicate(item_nodes, predicate, leaf_only=leaf_only)
-
-
-# =========================================================
-# FLATTEN TRANSACTION (MTD columns)
+# FLATTEN TRANSACTION (FULL MTD SCHEMA)
 # =========================================================
 def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     posted_date = tx.get("postedDate")
@@ -2317,6 +2304,7 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
 
     order_id = _extract_order_id_from_related_identifiers(tx.get("relatedIdentifiers") or [])
 
+    # Item-level (sku/qty + item breakdowns)
     sku = None
     quantity = None
     item_breakdowns: List[Dict[str, Any]] = []
@@ -2329,65 +2317,215 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
 
     tx_breakdowns: List[Dict[str, Any]] = tx.get("breakdowns") or []
 
-    item_nodes = _walk_breakdowns_collect(item_breakdowns)
-    tx_nodes = _walk_breakdowns_collect(tx_breakdowns)
+    # Leaf nodes
+    item_leaves = _walk_leaf_breakdowns(item_breakdowns)
+    tx_leaves = _walk_leaf_breakdowns(tx_breakdowns)
 
-    # ------------------- SALES / TAX (prefer ITEM, leaf only) -------------------
-    product_sales_net = _sum_prefer_item(item_nodes, tx_nodes, _is_principal, leaf_only=True)
+    # ------------------- PRODUCT SALES (VAT-INCLUSIVE AS YOU WANT) -------------------
+    product_sales_net = _sum_where(
+        item_leaves,
+        lambda t: (_contains_any(t, ["principal", "itemprice"]) and ("tax" not in t))
+    )
 
-    # fallback (rare)
+    # If principal missing, fall back to totalAmount
     if abs(product_sales_net) < 1e-9:
         try:
             product_sales_net = float(total_amount or 0.0)
         except (TypeError, ValueError):
             product_sales_net = 0.0
 
-    product_sales_tax = _sum_prefer_item(item_nodes, tx_nodes, _is_sales_tax, leaf_only=True)
+    product_sales_tax = _sum_where(
+        item_leaves,
+        lambda t: ("tax" in t) and ("shipping" not in t) and (not _contains_any(t, PROMO_KEYS))
+    )
 
-    # ✅ VAT-inclusive product_sales
+    # VAT-inclusive product sales
     product_sales = product_sales_net + product_sales_tax
 
-    shipping_credits = _sum_prefer_item(item_nodes, tx_nodes, _is_shipping_credit, leaf_only=True)
-    shipping_credits_tax = _sum_prefer_item(item_nodes, tx_nodes, _is_shipping_tax, leaf_only=True)
-    postage_credits = shipping_credits
+    # ------------------- SHIPPING / POSTAGE -------------------
+    shipping_credits = _sum_where(
+        item_leaves,
+        lambda t: (("shipping" in t or "shipcharge" in t or "shippingcharges" in t) and ("tax" not in t))
+    )
+    shipping_credits_tax = _sum_where(
+        item_leaves,
+        lambda t: ("shipping" in t and "tax" in t)
+    )
+    postage_credits = shipping_credits  # your UK behavior
 
-    # ------------------- PROMOS (prefer ITEM, leaf only) -------------------
-    promo_base = _sum_prefer_item(item_nodes, tx_nodes, _is_promo, leaf_only=True)
-    promo_tax = _sum_prefer_item(item_nodes, tx_nodes, _is_promo_tax, leaf_only=True)
+    # ------------------- PROMOTIONS (SPLIT: rebates vs rebates_tax) -------------------
+    promotional_rebates = _sum_where(
+        item_leaves,
+        lambda t: _contains_any(t, PROMO_KEYS) and ("tax" not in t)
+    )
+    promotional_rebates_tax = _sum_where(
+        item_leaves,
+        lambda t: _contains_any(t, PROMO_KEYS) and ("tax" in t)
+    )
 
-    # ✅ promotional_rebates includes promo tax (your -0.40 = -0.33 + -0.07 case)
-    promotional_rebates_tax = promo_tax
-    promotional_rebates = promo_base + promotional_rebates_tax
+    # =========================================================
+    # ✅ FEES + WITHHELD TAX (NO 2x) + DIVIDE BY 2 FOR FEES
+    # =========================================================
+    selling_fees = 0.0
+    fba_fees = 0.0
+    other_transaction_fees = 0.0
+    marketplace_withheld_tax = 0.0
+    marketplace_facilitator_tax = 0.0
 
-    # ------------------- MARKETPLACE TAXES (prefer TX, all levels) -------------------
-    marketplace_withheld_tax = _sum_prefer_tx(item_nodes, tx_nodes, _is_marketplace_withheld_tax, leaf_only=False)
-    marketplace_facilitator_tax = _sum_prefer_tx(item_nodes, tx_nodes, _is_marketplace_facilitator_tax, leaf_only=False)
+    def _node_has_children(n: Dict[str, Any]) -> bool:
+        ch = n.get("breakdowns")
+        return isinstance(ch, list) and len(ch) > 0
 
-    # ------------------- FEES (prefer TX, all levels) -------------------
-    selling_fees_raw = _sum_prefer_tx(item_nodes, tx_nodes, _is_selling_fee, leaf_only=False)
-    fba_fees_raw = _sum_prefer_tx(item_nodes, tx_nodes, _is_fba_fee, leaf_only=False)
-    other_transaction_fees_raw = _sum_prefer_tx(item_nodes, tx_nodes, _is_other_tx_fee, leaf_only=False)
+    def _has_non_tax_fee_descendant(children: Optional[List[Dict[str, Any]]], fee_keys: List[str]) -> bool:
+        """
+        True if any descendant has a NON-TAX amount and matches fee_keys.
+        If true, parent is a total -> skip parent to avoid 2x.
+        """
+        for c in children or []:
+            ct = _btype(c)
+            camt = _amt(c)
+            is_tax = ("tax" in ct)
+            is_fee = _contains_any(ct, fee_keys)
+            if (not is_tax) and is_fee and abs(camt) > 1e-12:
+                return True
 
-    selling_fees = -abs(selling_fees_raw) if abs(selling_fees_raw) > 1e-9 else 0.0
-    fba_fees = -abs(fba_fees_raw) if abs(fba_fees_raw) > 1e-9 else 0.0
-    other_transaction_fees = -abs(other_transaction_fees_raw) if abs(other_transaction_fees_raw) > 1e-9 else 0.0
+            gch = c.get("breakdowns")
+            if isinstance(gch, list) and gch:
+                if _has_non_tax_fee_descendant(gch, fee_keys):
+                    return True
+        return False
 
-    sales_tax_collected = product_sales_tax + shipping_credits_tax
+    # Walk ALL nodes (for net fees + withheld/facilitator)
+    for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
+        amt = _amt(node)
+        if abs(amt) < 1e-12:
+            continue
 
+        path_str = "".join(path)
+        is_tax = ("tax" in t) or ("tax" in path_str)
+
+        is_withheld = _contains_any(path_str, WITHHELD_TAX_KEYS)
+        is_facilitator = _contains_any(path_str, FACILITATOR_TAX_KEYS)
+
+        is_selling_fee = _contains_any(path_str, SELLING_FEE_KEYS)
+        is_fba_fee = _contains_any(path_str, FBA_FEE_KEYS)
+
+        # ✅ exclude ServiceFee / storage billing from fba_fees
+        is_service_fee_like = (
+            (ttype or "").lower().replace(" ", "") == "servicefee"
+            or _contains_any(path_str, SERVICE_FEE_EXCLUDE_KEYS)
+        )
+
+        # --- Withheld / facilitator tax
+        if is_withheld:
+            marketplace_withheld_tax += amt
+            continue
+        if is_facilitator:
+            marketplace_facilitator_tax += amt
+            continue
+
+        # --- NET Selling fee (avoid 2x by skipping parent totals)
+        if is_selling_fee and (not is_tax) and (not is_fba_fee):
+            children = node.get("breakdowns") if _node_has_children(node) else None
+            if _has_non_tax_fee_descendant(children, SELLING_FEE_KEYS):
+                continue
+            selling_fees += amt
+            continue
+
+        # --- NET FBA fee (avoid 2x by skipping parent totals) + ✅ exclude ServiceFee storage rows
+        if is_fba_fee and (not is_tax) and (not is_service_fee_like):
+            children = node.get("breakdowns") if _node_has_children(node) else None
+            if _has_non_tax_fee_descendant(children, FBA_FEE_KEYS):
+                continue
+            fba_fees += amt
+            continue
+
+    # --- OTHER TRANSACTION FEES: take only LEAF tax nodes to avoid 2x totals
+    for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
+        if _node_has_children(node):
+            continue  # ✅ only leaf nodes
+
+        amt = _amt(node)
+        if abs(amt) < 1e-12:
+            continue
+
+        path_str = "".join(path)
+
+        # skip withheld/facilitator tax from other_transaction_fees
+        if _contains_any(path_str, WITHHELD_TAX_KEYS) or _contains_any(path_str, FACILITATOR_TAX_KEYS):
+            continue
+
+        is_tax = ("tax" in t) or ("tax" in path_str)
+        is_fee_related = (
+            _contains_any(path_str, SELLING_FEE_KEYS)
+            or _contains_any(path_str, FBA_FEE_KEYS)
+            or ("fee" in path_str)
+        )
+
+        if is_tax and is_fee_related and (not _contains_any(path_str, PROMO_KEYS)):
+            other_transaction_fees += amt
+            continue
+
+        if _contains_any(path_str, ["chargeback", "holdback"]):
+            other_transaction_fees += amt
+            continue
+
+    # Keep your sign normalization behavior
+    if selling_fees > 0:
+        selling_fees = -abs(selling_fees)
+    # =========================================================
+    # ✅ MERGE OTHER TRANSACTION FEES INTO FBA FEES
+    # =========================================================
+
+    # Move all other_transaction_fees into fba_fees
+    if abs(other_transaction_fees) > 1e-12:
+        fba_fees += other_transaction_fees
+        other_transaction_fees = 0.0
+
+    # Keep FBA fees negative
+    if fba_fees > 0:
+        fba_fees = -abs(fba_fees)
+
+    if other_transaction_fees > 0:
+        other_transaction_fees = -abs(other_transaction_fees)
+
+    
+
+    if marketplace_withheld_tax > 0:
+        marketplace_withheld_tax = -abs(marketplace_withheld_tax)
+    if marketplace_facilitator_tax > 0:
+        marketplace_facilitator_tax = -abs(marketplace_facilitator_tax)
+
+    # ✅ Your requirement: selling_fees and fba_fees should be 1x -> divide by 2
+    # (do NOT affect other columns)
+    selling_fees = selling_fees / 2.0 if abs(selling_fees) > 1e-12 else selling_fees
+    fba_fees = fba_fees / 2.0 if abs(fba_fees) > 1e-12 else fba_fees
+
+    # ------------------- SALES TAX COLLECTED (YOU WANT IT = WITHHELD TAX) -------------------
+    sales_tax_collected = marketplace_withheld_tax
+    if abs(sales_tax_collected) < 1e-9:
+        # fallback if withheld not present
+        sales_tax_collected = product_sales_tax + shipping_credits_tax
+        if sales_tax_collected > 0:
+            sales_tax_collected = -abs(sales_tax_collected)
+
+    # ------------------- TOTAL (KEEP YOUR NET STYLE) -------------------
     total_calc = (
         product_sales
         + shipping_credits
         + postage_credits
         - promotional_rebates
+        - promotional_rebates_tax
         + selling_fees
         + fba_fees
         + other_transaction_fees
-        - sales_tax_collected
-        - marketplace_withheld_tax
-        - marketplace_facilitator_tax
+        + marketplace_withheld_tax
+        + marketplace_facilitator_tax
+        - sales_tax_collected  # if you want settlement-style net; adjust if needed
     )
 
-    return {
+    # Build full MTD schema row
+    row: Dict[str, Any] = {
         "date_time": posted_date,
         "settlement_id": None,
         "type": ttype,
@@ -2396,6 +2534,7 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         "description": desc,
         "quantity": quantity,
         "marketplace": marketplace,
+
         "fulfilment": None,
         "order_city": None,
         "order_state": None,
@@ -2409,9 +2548,9 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         "shipping_credits_tax": shipping_credits_tax,
         "gift_wrap_credits": 0.0,
         "giftwrap_credits_tax": 0.0,
-        "promotional_rebates": promotional_rebates,
-        "promotional_rebates_tax": promotional_rebates_tax,
-        "sales_tax_collected": sales_tax_collected,
+
+        "promotional_rebates": promotional_rebates,          # ✅ excludes promo tax
+        "promotional_rebates_tax": promotional_rebates_tax,  # ✅ promo tax separate
 
         "marketplace_withheld_tax": marketplace_withheld_tax,
         "marketplace_facilitator_tax": marketplace_facilitator_tax,
@@ -2420,12 +2559,17 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         "fba_fees": fba_fees,
         "other_transaction_fees": other_transaction_fees,
         "other": 0.0,
-        "total": total_calc,
-        "account_type": None,
+
+        "sales_tax_collected": sales_tax_collected,          # ✅ equals withheld tax
         "regulatory_fee": 0.0,
         "tax_on_regulatory_fee": 0.0,
+        "account_type": None,
+
+        "total": total_calc,
         "bucket": tstatus,
     }
+
+    return row
 
 
 # =========================================================
@@ -2433,6 +2577,15 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
 # =========================================================
 @amazon_api_bp.route("/amazon_api/finances/monthly_transactions", methods=["GET"])
 def finances_monthly_transactions():
+    """
+    Query params:
+      - year (int, default: current UTC year)
+      - month (int, default: 6)
+      - transaction_status (optional, default RELEASED)
+      - marketplace_id (optional)
+      - transaction_type (optional, e.g. Shipment)
+      - format (json | excel)
+    """
     # -------- auth --------
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -2447,6 +2600,7 @@ def finances_monthly_transactions():
     except jwt.InvalidTokenError:
         return jsonify({"success": False, "error": "Invalid token"}), 401
 
+    # -------- params --------
     now_utc = datetime.now(timezone.utc)
     try:
         year = int(request.args.get("year", now_utc.year))
@@ -2461,8 +2615,10 @@ def finances_monthly_transactions():
     transaction_type_filter = request.args.get("transaction_type")
     response_format = (request.args.get("format") or "json").lower()
 
+    # -------- region + marketplace override --------
     _apply_region_and_marketplace_from_request()
 
+    # -------- load refresh token for this user + region --------
     au = amazon_user.query.filter_by(user_id=user_id, region=amazon_client.region).first()
     if not au or not au.refresh_token:
         return jsonify({
@@ -2473,8 +2629,10 @@ def finances_monthly_transactions():
 
     amazon_client.refresh_token = au.refresh_token
 
+    # -------- date range --------
     posted_after, posted_before = _month_date_range_utc(year, month)
 
+    # -------- call Finances API (pagination) --------
     params: Dict[str, Any] = {
         "postedAfter": posted_after,
         "postedBefore": posted_before,
@@ -2502,8 +2660,11 @@ def finances_monthly_transactions():
             tstatus = (tx or {}).get("transactionStatus")
             ttype = (tx or {}).get("transactionType")
 
+            # hard filter
             if tstatus != "RELEASED":
                 continue
+
+            # optional type filter
             if transaction_type_filter and ttype != transaction_type_filter:
                 continue
 
@@ -2514,24 +2675,11 @@ def finances_monthly_transactions():
             break
         params = {"nextToken": next_token}
 
+    # -------- excel --------
     if response_format == "excel":
         df = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
-
-        # force MTD-style columns/order
-        mtd_cols = [
-            "date_time", "settlement_id", "type", "order_id", "sku", "description", "quantity",
-            "marketplace", "fulfilment", "order_city", "order_state", "order_postal",
-            "tax_collection_model", "product_sales", "product_sales_tax", "postage_credits",
-            "shipping_credits", "shipping_credits_tax", "gift_wrap_credits", "giftwrap_credits_tax",
-            "promotional_rebates", "promotional_rebates_tax", "sales_tax_collected",
-            "marketplace_withheld_tax", "marketplace_facilitator_tax",
-            "selling_fees", "fba_fees", "other_transaction_fees", "other", "total",
-            "account_type", "regulatory_fee", "tax_on_regulatory_fee", "bucket"
-        ]
-        for c in mtd_cols:
-            if c not in df.columns:
-                df[c] = None
-        df = df[mtd_cols]
+        # ✅ force full MTD schema (and ensure missing cols appear)
+        df = df.reindex(columns=MTD_COLUMNS, fill_value=0.0)
 
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -2546,6 +2694,7 @@ def finances_monthly_transactions():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
+    # -------- json --------
     return jsonify({
         "success": True,
         "year": year,

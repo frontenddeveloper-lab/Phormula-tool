@@ -849,7 +849,26 @@ type DropdownsProps = {
   initialMonth: string;
   initialYear: string;
 };
+type ComparisonItem = {
+  label: string;
+  value?: number;
+  diffPct?: number | null;
+};
 
+const monthIndexMap: Record<string, number> = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+};
+
+const getPrevMonthLabel = (selectedMonth: string, selectedYear: number) => {
+  const idx = monthIndexMap[selectedMonth.toLowerCase()];
+  if (idx === undefined) return "Last month";
+
+  const prev = new Date(selectedYear, idx - 1, 1);
+  const mon = prev.toLocaleString("en-US", { month: "short" }); // Nov
+  const yy = String(prev.getFullYear()).slice(-2); // 25
+  return `${mon}'${yy}`; // Nov'25
+};
 
 
 /* ---------------------- Utils ---------------------- */
@@ -894,6 +913,25 @@ const getQuarterFromMonth = (m: string): Quarter | "" => {
   }
   return "";
 };
+
+const getPrevQuarterLabel = (q: Quarter, selectedYear: number) => {
+  const order: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
+  const idx = order.indexOf(q);
+  if (idx === -1) return "Prev quarter";
+
+  const prevIdx = (idx - 1 + 4) % 4;
+  const prevQuarter = order[prevIdx];
+
+  const prevYear = idx === 0 ? selectedYear - 1 : selectedYear; // if Q1 -> prev is Q4 of prev year
+  const yy = String(prevYear).slice(-2);
+
+  return `${prevQuarter}'${yy}`; // Q4'25
+};
+
+const getPrevYearLabel = (selectedYear: number) => {
+  return String(selectedYear - 1); // 2024
+};
+
 
 /* ---------------------- Component ---------------------- */
 const Dropdowns: React.FC<DropdownsProps> = ({
@@ -1199,8 +1237,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   return (
     <div ref={layoutRef} className="space-y-5 relative">
       {/* Back / Title */}
-      <div className="flex flex-col leading-tight">
-        {/* TOP ROW: Title + Country */}
+      {/* <div className="flex flex-col leading-tight">
         <div className="flex gap-2">
           <PageBreadcrumb
             pageTitle="Financial Metrics -"
@@ -1216,16 +1253,55 @@ const Dropdowns: React.FC<DropdownsProps> = ({
           </span>
         </div>
 
-        {/* SUBTITLE */}
+   
         <p className="text-sm text-charcoal-500 mt-1">
           Track your profitability and key metrics
         </p>
+      </div> */}
+
+       <div className="w-full flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        {/* LEFT: Title + Subtitle */}
+        <div className="flex flex-col leading-tight w-full md:w-auto">
+          <div className="flex items-baseline gap-2">
+            <PageBreadcrumb
+              pageTitle="Financial Metrics -"
+              variant="page"
+              align="left"
+              textSize="2xl"
+            />
+
+            <span className="text-green-500 font-bold text-lg sm:text-2xl md:text-2xl">
+              {countryName?.toLowerCase() === "global"
+                ? "Global"
+                : countryName?.toUpperCase()}
+            </span>
+          </div>
+
+          <p className="text-sm text-charcoal-500 mt-1">
+            Track your profitability and key metrics
+          </p>
+        </div>
+
+        {/* RIGHT: Filters */}
+        <div className="flex w-full md:w-auto justify-start md:justify-end">
+          <PeriodFiltersTable
+            range={range === "" ? "monthly" : (range as "monthly" | "quarterly" | "yearly")}
+            selectedMonth={selectedMonth}
+            selectedQuarter={selectedQuarter || ""}
+            selectedYear={selectedYear}
+            yearOptions={yearOptions}
+            onRangeChange={handleRangeChange}
+            onMonthChange={handleMonthChange}
+            onQuarterChange={handleQuarterChange}
+            onYearChange={handleYearChange}
+          />
+        </div>
       </div>
 
       {/* WRAPPER: stacked layout */}
       <div className="flex flex-col gap-5 w-full">
         {/* Top Row: Period Filter + Upload MTD Button */}
-        <div className="w-full flex flex-col md:flex-row gap-3 items-center justify-between">
+        {/* <div className="w-full flex flex-col md:flex-row gap-3 items-center justify-between">
           <PeriodFiltersTable
             range={
               range === ""
@@ -1241,184 +1317,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             onQuarterChange={handleQuarterChange}
             onYearChange={handleYearChange}
           />
-
-          {/* {countryName.toLowerCase() !== "global" && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setShowUploadModal(true)}
-              startIcon={<AiOutlinePlus className="text-yellow-200" />}
-            >
-              Upload MTD(s)
-            </Button>
-          )} */}
-        </div>
-
-        {/* Summary Cards */}
-        {/* {uploadsData?.summary &&
-          (() => {
-            const summary = displayData;
-            const comparisons: SummaryComparisons | undefined = uploadsData?.summaryComparisons;
-
-            const isSummaryZero =
-              summary.unit_sold === 0 &&
-              summary.total_sales === 0 &&
-              summary.total_expense === 0 &&
-              summary.cm2_profit === 0;
-
-            const cm2Percent =
-              summary.total_sales > 0
-                ? (summary.cm2_profit / summary.total_sales) * 100
-                : 0;
-
-            const formatMoney = (val: number) =>
-              `${currencySymbol} ${val.toLocaleString(undefined, {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2,
-              })}`;
-
-            const formatUnits = (val: number) =>
-              val.toLocaleString(undefined, {
-                maximumFractionDigits: 0,
-              });
-
-            const formatPercent = (val: number) =>
-              `${val.toLocaleString(undefined, {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2,
-              })}%`;
-
-
-
-            const getComparisons = (metric: keyof Summary) => {
-              const current = summary[metric] ?? 0;
-
-              const lm = comparisons?.lastMonth?.[metric];
-              const lq = comparisons?.lastQuarter?.[metric];
-              const ly = comparisons?.lastYear?.[metric];
-
-              const makeItem = (label: string, prevVal?: number) => {
-                if (prevVal === undefined) return null;
-                const diffPct =
-                  prevVal === 0 ? null : ((current - prevVal) / prevVal) * 100;
-
-                return { label, value: prevVal, diffPct };
-              };
-
-              return [
-                makeItem("Last month", lm),
-                makeItem("Last quarter", lq),
-                makeItem("Last year", ly),
-              ].filter(
-                (x): x is { label: string; value: number; diffPct: number | null } =>
-                  Boolean(x)
-              );
-            };
-
-            const renderComparisons = (
-              metric: keyof Summary,
-              formatter: (val: number) => string
-            ) => {
-              const items = getComparisons(metric);
-              if (!items.length) return null;
-
-              return (
-                <div className="mt-2 space-y-1">
-                  {items.map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between text-[10px] text-charcoal-400"
-                    >
-                      <span>{item.label}</span>
-                      <span className="flex items-center gap-1">
-                        <span>{formatter(item.value)}</span>
-                        {item.diffPct !== null && (
-                          <span
-                            className={
-                              item.diffPct >= 0 ? "text-emerald-600" : "text-red-600"
-                            }
-                          >
-                            {item.diffPct >= 0 ? "▲" : "▼"}{" "}
-                            {Math.abs(item.diffPct).toFixed(1)}%
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              );
-            };
-
-
-            return (
-              <div
-                className={[
-                  "w-full flex flex-wrap gap-7",
-                  isSummaryZero ? "opacity-30" : "opacity-100",
-                ].join(" ")}
-              >
-                
-                <div className="flex-1 min-w-[180px] max-w-xs rounded-2xl border border-[#87AD12] bg-[#87AD1226] shadow-sm px-4 py-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Units</span>
-                    <FaBoxArchive color="#87AD12" size={16} />
-                  </div>
-                  <div className="text-xl font-extrabold text-charcoal-500">
-                    {formatUnits(summary.unit_sold)}
-                  </div>
-
-                  {renderComparisons("unit_sold", formatUnits)}
-                </div>
-
-                <div className="flex-1 min-w-[180px] max-w-xs rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Sales</span>
-                    <FcSalesPerformance fill="000" color="#000" size={16} />
-                  </div>
-                  <div className="text-xl font-extrabold text-charcoal-500">
-                    {formatMoney(summary.total_sales)}
-                  </div>
-
-                  {renderComparisons("total_sales", formatMoney)}
-                </div>
-
-                <div className="flex-1 min-w-[180px] max-w-xs rounded-2xl border border-[#FF5C5C] bg-[#FF5C5C26] shadow-sm px-4 py-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Expenses</span>
-                    <MdEditDocument color="#FF5C5C" size={16} />
-                  </div>
-                  <div className="text-xl font-extrabold text-charcoal-500">
-                    {formatMoney(summary.total_expense)}
-                  </div>
-
-                  {renderComparisons("total_expense", formatMoney)}
-                </div>
-
-                <div className="flex-1 min-w-[180px] max-w-xs rounded-2xl border border-[#AB64B5] bg-[#AB64B526] shadow-sm px-4 py-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">CM2 Profit</span>
-                    <TbMoneybag fill="#AB64B5" color="#AB64B5" size={16} />
-                  </div>
-                  <div className="text-xl font-extrabold text-charcoal-500">
-                    {formatMoney(summary.cm2_profit)}
-                  </div>
-
-                  {renderComparisons("cm2_profit", formatMoney)}
-                </div>
-
-
-                <div className="flex-1 min-w-[180px] max-w-xs rounded-2xl border border-[#00627B] bg-[#00627B26] shadow-sm px-4 py-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">CM2 Profit %</span>
-                    <FaMoneyBillTrendUp color="#00627B" size={16} />
-                  </div>
-                  <div className="text-xl font-extrabold text-charcoal-500">
-                    {formatPercent(cm2Percent)}
-                  </div>
-                </div>
-              </div>
-            );
-          })()} */}
+        </div> */}
 
         {/* Summary Cards */}
         {uploadsData?.summary &&
@@ -1449,9 +1348,10 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
             const formatMoney = (val: number) =>
               `${currencySymbol} ${val.toLocaleString(undefined, {
-                minimumFractionDigits: 0,
+                minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}`;
+
 
             const formatUnits = (val: number) =>
               val.toLocaleString(undefined, {
@@ -1465,33 +1365,51 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               })}%`;
 
             // ---------- numeric comparisons helper ----------
-            const getComparisons = (metric: keyof Summary) => {
-              if (!comparisons) return [];
 
+            const getComparisons = (metric: keyof Summary): ComparisonItem[] => {
               const current = summary[metric] ?? 0;
 
-              const lm = comparisons.lastMonth?.[metric];
-              const lq = comparisons.lastQuarter?.[metric];
-              const ly = comparisons.lastYear?.[metric];
+              const rawComparisons =
+                (uploadsData as any).summaryComparisons ??
+                (uploadsData as any).summary_comparisons;
 
-              const makeItem = (label: string, prevVal?: number) => {
-                if (prevVal === undefined) return null;
-                const diffPct =
-                  prevVal === 0 ? null : ((current - prevVal) / prevVal) * 100;
+              const comparisons: SummaryComparisons | undefined = rawComparisons
+                ? (rawComparisons as SummaryComparisons)
+                : undefined;
 
+              const lm = comparisons?.lastMonth?.[metric];
+              const lq = comparisons?.lastQuarter?.[metric];
+              const ly = comparisons?.lastYear?.[metric];
+
+              const makeItem = (label: string, prevVal?: number): ComparisonItem => {
+                if (typeof prevVal !== "number") return { label, value: undefined, diffPct: null };
+                const diffPct = prevVal === 0 ? null : ((current - prevVal) / prevVal) * 100;
                 return { label, value: prevVal, diffPct };
               };
 
-              return [
-                makeItem("Last month", lm),
-                makeItem("Last quarter", lq),
-                makeItem("Last year", ly),
-              ].filter(
-                (x): x is { label: string; value: number; diffPct: number | null } =>
-                  Boolean(x)
-              );
-            };
+              const yNum = Number(selectedYear);
 
+              if (range === "monthly") {
+                const label =
+                  selectedMonth && yNum ? getPrevMonthLabel(selectedMonth, yNum) : "Prev month";
+                return [makeItem(label, lm)];
+              }
+
+              if (range === "quarterly") {
+                const label =
+                  selectedQuarter && yNum
+                    ? getPrevQuarterLabel(selectedQuarter as Quarter, yNum)
+                    : "Prev quarter";
+                return [makeItem(label, lq)];
+              }
+
+              if (range === "yearly") {
+                const label = yNum ? getPrevYearLabel(yNum) : "Prev year";
+                return [makeItem(label, ly)];
+              }
+
+              return [];
+            };
             // const renderComparisons = (
             //   metric: keyof Summary,
             //   formatter: (val: number) => string
@@ -1540,88 +1458,96 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               metric: keyof Summary,
               formatter: (val: number) => string
             ) => {
-              let items = getComparisons(metric);
-
-              // ✅ HIDE last quarter when Monthly view is selected
-              if (range === "monthly") {
-                items = items.filter((item) => item.label !== "Last quarter");
-              }
-
+              const items = getComparisons(metric);
               if (!items.length) return null;
 
               return (
                 <div className="mt-3 space-y-1.5">
-                  {items.map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between text-[11px]"
-                    >
-                      {/* LEFT: label + value */}
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-semibold text-gray-600">
-                          {item.label}
-                        </span>
-                        <span className="font-semibold text-gray-700">
-                          {formatter(item.value)}
-                        </span>
-                      </div>
+                  {items.map((item) => {
+                    const hasValue = typeof item.value === "number" && !isNaN(item.value);
+                    const hasDiff =
+                      typeof item.diffPct === "number" && !isNaN(item.diffPct);
 
-                      {/* RIGHT: percentage */}
-                      {item.diffPct !== null && (
+                    return (
+                      <div
+                        key={item.label}
+                        className="flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-baseline gap-1">
+                          <span className="font-semibold text-gray-600">{item.label}:</span>
+                          <span className="font-semibold text-gray-700">
+                            {hasValue ? formatter(item.value!) : "-"}
+                          </span>
+                        </div>
+
                         <span
-                          className={`font-bold ${item.diffPct >= 0 ? "text-emerald-600" : "text-red-600"
+                          className={`font-bold ${hasDiff
+                            ? item.diffPct! >= 0
+                              ? "text-emerald-600"
+                              : "text-red-600"
+                            : "text-gray-400"
                             }`}
                         >
-                          {item.diffPct >= 0 ? "▲" : "▼"}{" "}
-                          {Math.abs(item.diffPct).toFixed(1)}%
+                          {hasDiff ? (
+                            <>
+                              {item.diffPct! >= 0 ? "▲" : "▼"}{" "}
+                              {Math.abs(item.diffPct!).toFixed(1)}%
+                            </>
+                          ) : (
+                            "-"
+                          )}
                         </span>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             };
 
-
-
             const getCm2Percent = (s?: Summary) =>
               s && s.total_sales > 0 ? (s.cm2_profit / s.total_sales) * 100 : 0;
 
-            const cm2PercentComparisons = () => {
+            const cm2PercentComparisons = (): ComparisonItem[] => {
               if (!comparisons) return [];
 
-              const lm = comparisons.lastMonth
-                ? getCm2Percent(comparisons.lastMonth)
-                : undefined;
-              const lq = comparisons.lastQuarter
-                ? getCm2Percent(comparisons.lastQuarter)
-                : undefined;
-              const ly = comparisons.lastYear
-                ? getCm2Percent(comparisons.lastYear)
-                : undefined;
+              const yNum = Number(selectedYear);
 
-              const makeItem = (label: string, prevVal?: number) => {
-                if (prevVal === undefined) return null;
-                const diffPct =
-                  prevVal === 0 ? null : ((cm2Percent - prevVal) / prevVal) * 100;
+              const prevMonth = comparisons.lastMonth ? getCm2Percent(comparisons.lastMonth) : undefined;
+              const prevQuarter = comparisons.lastQuarter ? getCm2Percent(comparisons.lastQuarter) : undefined;
+              const prevYear = comparisons.lastYear ? getCm2Percent(comparisons.lastYear) : undefined;
 
+              const makeItem = (label: string, prevVal?: number): ComparisonItem => {
+                if (typeof prevVal !== "number") return { label, value: undefined, diffPct: null };
+                const diffPct = prevVal === 0 ? null : ((cm2Percent - prevVal) / prevVal) * 100;
                 return { label, value: prevVal, diffPct };
               };
 
-              return [
-                makeItem("Last month", lm),
-                makeItem("Last quarter", lq),
-                makeItem("Last year", ly),
-              ].filter(
-                (x): x is { label: string; value: number; diffPct: number | null } =>
-                  Boolean(x)
-              );
+              if (range === "monthly") {
+                const label =
+                  selectedMonth && yNum ? getPrevMonthLabel(selectedMonth, yNum) : "Prev month";
+                return [makeItem(label, prevMonth)];
+              }
+
+              if (range === "quarterly") {
+                const label =
+                  selectedQuarter && yNum
+                    ? getPrevQuarterLabel(selectedQuarter as Quarter, yNum)
+                    : "Prev quarter";
+                return [makeItem(label, prevQuarter)];
+              }
+
+              if (range === "yearly") {
+                const label = yNum ? getPrevYearLabel(yNum) : "Prev year";
+                return [makeItem(label, prevYear)];
+              }
+
+              return [];
             };
 
             const renderCm2PercentComparisons = () => {
               let items = cm2PercentComparisons();
 
-              // ✅ Hide last quarter in Monthly view
+              // ✅ Hide last quarter only in Monthly view
               if (range === "monthly") {
                 items = items.filter((item) => item.label !== "Last quarter");
               }
@@ -1630,35 +1556,51 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
               return (
                 <div className="mt-3 space-y-1.5">
-                  {items.map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between text-[11px]"
-                    >
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-semibold text-gray-600">
-                          {item.label}
-                        </span>
-                        <span className="font-semibold text-gray-700">
-                          {formatPercent(item.value)}
-                        </span>
-                      </div>
+                  {items.map((item) => {
+                    const hasValue =
+                      typeof item.value === "number" && !isNaN(item.value);
+                    const hasDiff =
+                      typeof item.diffPct === "number" && !isNaN(item.diffPct);
 
-                      {item.diffPct !== null && (
+                    return (
+                      <div
+                        key={item.label}
+                        className="flex items-center justify-between text-xs"
+                      >
+                        {/* LEFT: label + value */}
+                        <div className="flex items-baseline gap-1">
+                          <span className="font-semibold text-gray-600">
+                            {item.label}:
+                          </span>
+                          <span className="font-semibold text-gray-700">
+                            {hasValue ? formatPercent(item.value) : "-"}
+                          </span>
+                        </div>
+
+                        {/* RIGHT: percentage */}
                         <span
-                          className={`font-bold ${item.diffPct >= 0 ? "text-emerald-600" : "text-red-600"
+                          className={`font-bold ${hasDiff
+                            ? item.diffPct! >= 0
+                              ? "text-emerald-600"
+                              : "text-red-600"
+                            : "text-gray-400"
                             }`}
                         >
-                          {item.diffPct >= 0 ? "▲" : "▼"}{" "}
-                          {Math.abs(item.diffPct).toFixed(1)}%
+                          {hasDiff ? (
+                            <>
+                              {item.diffPct! >= 0 ? "▲" : "▼"}{" "}
+                              {Math.abs(item.diffPct!).toFixed(1)}%
+                            </>
+                          ) : (
+                            "-"
+                          )}
                         </span>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               );
             };
-
 
 
             return (
@@ -1866,7 +1808,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
       {showNoDataOverlay && (
         <div
-          className="fixed inset-y-0 z-[99999] flex items-center justify-center pointer-events-none"
+          className="fixed inset-y-0 z-[9999] flex items-center justify-center pointer-events-none"
           style={{ left: overlayBounds.left, width: overlayBounds.width || "100%" }}
         >
           <div className="bg-white border border-[#D9D9D9] rounded-xl shadow-xl p-6 max-w-lg w-[90%] text-center pointer-events-auto">
