@@ -412,6 +412,10 @@ def product_names():
 ##DJ's NEW CODE FOR GROWTH + AI INSIGHTS Donot change anything here unless discussed with DJ##
 
 # ===== Growth + AI Insights (NEW PART) =====
+
+CURRENT_MONTH = datetime.now().month
+CURRENT_YEAR = datetime.now().year
+
 def month_key(month, year):
     return f"{month[:3].lower()}_{year}"
 
@@ -424,6 +428,7 @@ def calculate_growth(new, old):
 
 def get_latest_two_tables(all_tables, user_id, country):
     candidates = []
+    now = datetime.now()
 
     for table in all_tables:
         prefix = f"skuwisemonthly_{user_id}_{country}_"
@@ -436,6 +441,10 @@ def get_latest_two_tables(all_tables, user_id, country):
             year = int(''.join(filter(str.isdigit, suffix)))
             month_num = datetime.strptime(month.capitalize(), "%B").month
 
+            # ❌ EXCLUDE CURRENT MONTH (MTD)
+            if year == now.year and month_num == now.month:
+                continue
+
             candidates.append({
                 "table": table,
                 "month": month,
@@ -445,8 +454,11 @@ def get_latest_two_tables(all_tables, user_id, country):
         except:
             continue
 
+    # Sort by year + month descending
     candidates.sort(key=lambda x: (x["year"], x["month_num"]), reverse=True)
+
     return candidates[:2]
+
 
 
 def fetch_metrics(conn, table_name, product_name=None, sku=None):
