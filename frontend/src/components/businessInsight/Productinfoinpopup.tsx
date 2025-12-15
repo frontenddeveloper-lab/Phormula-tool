@@ -71,7 +71,7 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
     global: true
   });
 
-  const GBP_TO_USD_RATE = 1.27;
+
 
   // Generate years (e.g., last 5 years)
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
@@ -132,24 +132,20 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
     return () => clearTimeout(timeoutId);
   }, [searchQuery]);
 
-  const getCurrencySymbol = (country?: string) => {
-    switch ((country || '').toLowerCase()) {
-      case "uk":
-        return "£";
-      case "india":
-        return "₹";
-      case "us":
-        return "$";
-      case "europe":
-      case "eu":
-        return "€";
-      case "global":
-        return "$";
-      default:
-        return "¤"; // generic currency symbol
-    }
-  };
-  const currencySymbol = countryName ? getCurrencySymbol(countryName) : '¤';
+  // Currency for chart: follow the same behavior as TrendChartSection/ProductwisePerformance.
+  // If the page scope is UK, show GBP; otherwise default to USD.
+  const pageScope = (countryName || "global").toLowerCase();
+  const baseCurrency: "GBP" | "USD" = pageScope === "uk" ? "GBP" : "USD";
+
+  const currencySymbol = baseCurrency === "GBP" ? "£" : "$";
+
+  // Lowercase currency for backend keys (uk_gbp / uk_usd)
+  const baseCurrencyLower = baseCurrency.toLowerCase() as "gbp" | "usd";
+
+  // Map UI country keys (uk/global/us) to backend keys based on currency (e.g., uk_gbp vs uk_usd).
+  // If a key is already suffixed, keep it as-is.
+  const backendKeyFor = (country: string) => (country.includes("_") ? country : `${country}_${baseCurrencyLower}`);
+
 
   const fetchProductData = async () => {
     setLoading(true);
@@ -158,6 +154,7 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
     try {
       // Get selected countries as array
       const countries = Object.keys(selectedCountries).filter(country => selectedCountries[country]);
+      const backendCountries = countries.map((c) => backendKeyFor(c));
 
       // Prepare request payload
       const requestPayload = {
@@ -165,7 +162,7 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
         time_range: timeRange,
         year: selectedYear,
         quarter: timeRange === 'Quarterly' ? selectedQuarter : null,
-        countries: countries
+        countries: backendCountries
       };
 
       console.log('Sending request:', requestPayload);
@@ -257,7 +254,7 @@ const prepareChartData = () => {
     (a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b)
   );
 
-  if (!labels.length) return [];
+  if (!labels.length) return []; 
 
   const getMetric = (country: string, month: string) => {
     const countryBlock: any = (data.data as any)[country];
@@ -278,20 +275,18 @@ const prepareChartData = () => {
   };
 
   return labels.map((month) => {
-    const ukRaw = getMetric('uk', month);
-    const usRaw = getMetric('us', month);
-    const globalRaw = getMetric('global', month);
+const ukRaw = getMetric(backendKeyFor('uk'), month);
+const usRaw = getMetric(backendKeyFor('us'), month);
+const globalRaw = getMetric(backendKeyFor('global'), month);
 
-    const ukUSD = ukRaw * GBP_TO_USD_RATE;
-    const globalUSD = (ukUSD + usRaw) !== 0 ? (ukUSD + usRaw) : globalRaw;
+const point: Record<string, any> = { month };
 
-    const point: Record<string, any> = { month };
+if (selectedCountries.uk) point.uk = ukRaw;
+if (selectedCountries.us) point.us = usRaw;
+if (selectedCountries.global) point.global = globalRaw;
 
-    if (selectedCountries.uk) point.uk = ukUSD;
-    if (selectedCountries.us) point.us = usRaw;
-    if (selectedCountries.global) point.global = globalUSD;
+return point;
 
-    return point;
   });
 };
 
@@ -307,13 +302,14 @@ const prepareChartData = () => {
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
+    return new Intl.NumberFormat(baseCurrency === "GBP" ? "en-GB" : "en-US", {
+      style: "currency",
+      currency: baseCurrency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
   };
+
 
   const buildChartJSData = () => {
     const raw = prepareChartData();
@@ -322,7 +318,10 @@ const prepareChartData = () => {
     const labels = raw.map(item => item.month);
   const datasets = Object.keys(selectedCountries)
   .filter(country => selectedCountries[country])
-  .filter(country => Array.isArray((data?.data as any)?.[country]) && ((data?.data as any)?.[country].length > 0))
+  .filter(country => {
+        const k = backendKeyFor(country);
+        return Array.isArray((data?.data as any)?.[k]) && ((data?.data as any)?.[k].length > 0);
+      })
       .map(country => ({
         label: country.toUpperCase(),
         data: raw.map(item => item[country] || 0),

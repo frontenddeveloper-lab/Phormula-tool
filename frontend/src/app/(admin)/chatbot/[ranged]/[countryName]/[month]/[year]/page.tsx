@@ -85,6 +85,102 @@ const cleanMarkdown = (s = '') =>
     .replace(/\*{1,3}/g, '')
     .trim()
 
+
+function analyticsTextToMarkdown(raw = ''): string {
+  const text = raw.replace(/\r\n/g, '\n').trim()
+  if (!text) return ''
+
+  // Normalize spaces but keep newlines
+  const normalized = text
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  // --- Split SUMMARY / ACTIONS even if they're in same line ---
+  const upper = normalized.toUpperCase()
+  const sIdx = upper.indexOf('SUMMARY')
+  const aIdx = upper.indexOf('ACTIONS')
+
+  const summaryPart =
+    sIdx >= 0 && aIdx > sIdx ? normalized.slice(sIdx + 'SUMMARY'.length, aIdx).trim() : ''
+  const actionsPart =
+    aIdx >= 0 ? normalized.slice(aIdx + 'ACTIONS'.length).trim() : normalized.trim()
+
+  const splitSentences = (s: string) =>
+    s
+      .replace(/\s+/g, ' ')
+      .split(/(?<=[.?!])\s+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+
+  let md = ''
+
+  // --- SUMMARY ---
+  if (sIdx >= 0) {
+    md += `## **SUMMARY**\n\n`
+    const bullets = splitSentences(summaryPart)
+    bullets.forEach((b) => {
+      md += `- ${b}\n`
+    })
+    md += `\n---\n\n`
+  }
+
+  // --- ACTIONS ---
+  md += `## **ACTIONS**\n\n`
+
+  // Handle both:
+  // 1) "Product name - Classic ..." (single line)
+  // 2) Multi-line blocks
+  const productChunks = actionsPart
+    .split(/Product\s*name\s*[-:]\s*/i)
+    .map((x) => x.trim())
+    .filter(Boolean)
+
+  // If "Product name -" not present, fallback to old newline-based logic (optional)
+  if (productChunks.length === 0) return md.trim()
+
+  let p = 0
+
+  for (const chunk of productChunks) {
+    p++
+
+    // Product name = text before first known sentence starter
+    const nameMatch = chunk.match(
+      /^(.*?)(?=\s+(There is|The increase|The ASP|Sales mix|The sales mix)\b)/i
+    )
+    const productName = (nameMatch?.[1] || chunk.split('. ')[0] || chunk).trim()
+
+    // Body = rest after productName
+    const body = chunk.slice(productName.length).trim()
+    const sentences = splitSentences(body)
+
+    const metric1 = sentences[0] || ''
+    const metric2 = sentences[1] || ''
+
+    // Remaining sentences -> action (often "Review..." / "Check...")
+    const rest = sentences.slice(2).join(' ').trim()
+    const actionText = rest.replace(/^Actions?\s*[:\-]\s*/i, '').trim()
+
+    // Outer numbered product
+    md += `${p}. **${productName}**\n`
+
+    // Inner points (2 only)
+    if (metric1) md += `    1. ${metric1}\n`
+    if (metric2) md += `    2. ${metric2}\n`
+
+    // Actions bold (no numeral)
+    if (actionText) md += `\n    **Actions: ${actionText}**\n\n`
+
+    md += `\n`
+  }
+
+  return md.trim()
+}
+
+
+
+
+
 function parseAIResponse(rawText: string): ParsedAI {
   const result: ParsedAI = { title: '', details: [], weeks: [] }
   if (!rawText) return result
@@ -505,7 +601,14 @@ export default function ChatbotPage() {
                               )
                             } else {
                               // Default: render as Markdown
-                              return <ReactMarkdown>{msg.text}</ReactMarkdown>
+const formatted = analyticsTextToMarkdown(msg.text);
+
+return (
+  <div className="markdown-body">
+    <ReactMarkdown>{formatted || msg.text}</ReactMarkdown>
+  </div>
+);
+
                             }
                           })()
                         ) : (

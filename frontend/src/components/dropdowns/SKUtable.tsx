@@ -10,6 +10,7 @@ import PageBreadcrumb from "../common/PageBreadCrumb";
 import { FiDownload } from "react-icons/fi";
 import DownloadIconButton from "../ui/button/DownloadIconButton";
 import { FaCaretLeft, FaCaretRight } from "react-icons/fa";
+import Tooltip from "./Tooltip";
 
 /* ---------- Types ---------- */
 
@@ -21,7 +22,11 @@ type SKUtableProps = {
     quarter?: string;
     year: string | number;
     countryName: string;
+    /** 👇 NEW, only used when countryName === 'global' */
+    homeCurrency?: string;
 };
+
+
 
 type TableRow = {
     product_name?: string;
@@ -82,23 +87,29 @@ type JwtPayload = {
 
 /* ---------- Helpers ---------- */
 
-const getCurrencySymbol = (country: string) => {
-    switch (country.toLowerCase()) {
+const getCurrencySymbol = (codeOrCountry: string) => {
+    switch (codeOrCountry.toLowerCase()) {
         case "uk":
+        case "gb":
+        case "gbp":
             return "£";
         case "india":
+        case "in":
+        case "inr":
             return "₹";
         case "us":
+        case "usa":
+        case "usd":
             return "$";
         case "europe":
         case "eu":
+        case "eur":
             return "€";
-        case "global":
-            return "$";
         default:
             return "¤";
     }
 };
+
 
 const capitalizeFirstLetter = (str: string) =>
     str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
@@ -107,6 +118,24 @@ const convertToAbbreviatedMonth = (m?: string) =>
     m ? capitalizeFirstLetter(m).slice(0, 3) : "";
 
 /* ---------- Component ---------- */
+const getDisplayProductNameFromRow = (row: TableRow): string => {
+    const name = row.product_name;
+
+    // Treat "0" / 0 / empty as "no name"
+    const hasName =
+        name !== undefined &&
+        name !== null &&
+        name !== "" &&
+        name !== "0";
+
+    if (hasName) return String(name);
+
+    if (row.sku !== undefined && row.sku !== null) {
+        return String(row.sku);
+    }
+
+    return "";
+};
 
 const SKUtable: React.FC<SKUtableProps> = ({
     range,
@@ -114,6 +143,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
     quarter = "",
     year,
     countryName,
+    homeCurrency,
 }) => {
     const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
     const [showModal, setShowModal] = useState(false);
@@ -140,7 +170,14 @@ const SKUtable: React.FC<SKUtableProps> = ({
     const [showprofit, setshowprofit] = useState(false);
     const [userData, setUserData] = useState<{ brand_name?: string; company_name?: string } | null>(null);
 
-    const currencySymbol = getCurrencySymbol(countryName || "");
+    // const currencySymbol = getCurrencySymbol(countryName || "");
+
+    const isGlobalPage = countryName.toLowerCase() === "global";
+
+    const currencySymbol = isGlobalPage
+        ? getCurrencySymbol(homeCurrency || "usd")   // GLOBAL → home currency
+        : getCurrencySymbol(countryName || "");      // Country route → country currency
+
     const yearShort =
         typeof year === "string" ? year.toString().slice(-2) : String(year).slice(-2);
 
@@ -325,33 +362,59 @@ const SKUtable: React.FC<SKUtableProps> = ({
                             ? `skuwisemonthly_${userid}_${countryName}_${(month || "").toLowerCase()}${year}_table`
                             : `skuwisemonthly_${userid}_${countryName.toLowerCase()}_${(month || "").toLowerCase()}${year}`;
 
-                    response = await fetch(
-                        `http://127.0.0.1:5000/skutableprofit/${skuwiseFileName}`,
-                        {
-                            method: "GET",
-                            headers: token ? { Authorization: `Bearer ${token}` } : {},
-                            cache: "no-store",
-                        }
-                    );
-                } else if (range === "quarterly") {
+                    const url = new URL(`http://127.0.0.1:5000/skutableprofit/${skuwiseFileName}`);
+
+                    // ✅ send these always (backend uses them if present)
+                    url.searchParams.set("country", countryName);
+                    url.searchParams.set("month", (month || "").toLowerCase());
+                    url.searchParams.set("year", String(year));
+
+                    // ✅ GLOBAL only
+                    if (isGlobalPage && homeCurrency) {
+                        url.searchParams.set("homeCurrency", homeCurrency.toLowerCase());
+                    }
+
+                    response = await fetch(url.toString(), {
+                        method: "GET",
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        cache: "no-store",
+                    });
+                }
+                else if (range === "quarterly") {
                     const backendQuarter = quarterMapping[quarter] || "";
-                    response = await fetch(
-                        `http://127.0.0.1:5000/quarterlyskutable?quarter=${backendQuarter}&country=${countryName}&year=${year}&userid=${userid}`,
-                        {
-                            method: "GET",
-                            headers: token ? { Authorization: `Bearer ${token}` } : {},
-                            cache: "no-store",
-                        }
-                    );
-                } else if (range === "yearly") {
-                    response = await fetch(
-                        `http://127.0.0.1:5000/YearlySKU?&country=${countryName}&year=${year}`,
-                        {
-                            method: "GET",
-                            headers: token ? { Authorization: `Bearer ${token}` } : {},
-                            cache: "no-store",
-                        }
-                    );
+
+                    const url = new URL("http://127.0.0.1:5000/quarterlyskutable");
+                    url.searchParams.set("quarter", backendQuarter);
+                    url.searchParams.set("country", countryName);
+                    url.searchParams.set("year", String(year));
+                    url.searchParams.set("userid", String(userid)); // not used by backend, but harmless
+
+                    // ✅ GLOBAL only
+                    if (isGlobalPage && homeCurrency) {
+                        url.searchParams.set("homeCurrency", homeCurrency.toLowerCase());
+                    }
+
+                    response = await fetch(url.toString(), {
+                        method: "GET",
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        cache: "no-store",
+                    });
+                }
+                else if (range === "yearly") {
+                    const url = new URL("http://127.0.0.1:5000/YearlySKU");
+                    url.searchParams.set("country", countryName);
+                    url.searchParams.set("year", String(year));
+
+                    // ✅ GLOBAL only
+                    if (isGlobalPage && homeCurrency) {
+                        url.searchParams.set("homeCurrency", homeCurrency.toLowerCase());
+                    }
+
+                    response = await fetch(url.toString(), {
+                        method: "GET",
+                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        cache: "no-store",
+                    });
                 }
 
                 if (!response || !response.ok) {
@@ -423,16 +486,24 @@ const SKUtable: React.FC<SKUtableProps> = ({
     /* --------- Top/Bottom helpers --------- */
     function getTop5Profitable(data: TableRow[]) {
         const rows = data.slice(0, -1);
-        const top5 = [...rows].sort((a, b) => (b.profit || 0) - (a.profit || 0)).slice(0, 5);
+        const top5 = [...rows]
+            .sort((a, b) => (b.profit || 0) - (a.profit || 0))
+            .slice(0, 5);
 
         const totalProfit = top5.reduce((s, r) => s + (r.profit || 0), 0);
         const totalProfitMix = top5.reduce((s, r) => s + (r.profit_mix || 0), 0);
         const totalSalesMix = top5.reduce((s, r) => s + (r.sales_mix || 0), 0);
-        const totalUnitWise = top5.reduce((s, r) => s + (r.unit_wise_profitability || 0), 0);
+        const totalUnitWise = top5.reduce(
+            (s, r) => s + (r.unit_wise_profitability || 0),
+            0
+        );
 
         const formatted = top5.map((item) => ({
-            product_name: item.product_name,
-            profit: (item.profit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            product_name: getDisplayProductNameFromRow(item),
+            profit: (item.profit || 0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }),
             profitMix: (item.profit_mix || 0).toFixed(2),
             salesMix: (item.sales_mix || 0).toFixed(2),
             unit_wise_profitability: (item.unit_wise_profitability || 0).toFixed(2),
@@ -443,7 +514,10 @@ const SKUtable: React.FC<SKUtableProps> = ({
         return {
             rows: formatted,
             totals: {
-                profit: totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                profit: totalProfit.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                }),
                 profitMix: totalProfitMix.toFixed(2),
                 salesMix: totalSalesMix.toFixed(2),
                 unit_wise_profitability: totalUnitWise.toFixed(2),
@@ -451,18 +525,27 @@ const SKUtable: React.FC<SKUtableProps> = ({
         };
     }
 
+
     function getBottom5Profitable(data: TableRow[]) {
         const rows = data.slice(0, -1);
-        const bottom5 = [...rows].sort((a, b) => (a.profit || 0) - (b.profit || 0)).slice(0, 5);
+        const bottom5 = [...rows]
+            .sort((a, b) => (a.profit || 0) - (b.profit || 0))
+            .slice(0, 5);
 
         const totalProfit = bottom5.reduce((s, r) => s + (r.profit || 0), 0);
         const totalProfitMix = bottom5.reduce((s, r) => s + (r.profit_mix || 0), 0);
         const totalSalesMix = bottom5.reduce((s, r) => s + (r.sales_mix || 0), 0);
-        const totalUnitWise = bottom5.reduce((s, r) => s + (r.unit_wise_profitability || 0), 0);
+        const totalUnitWise = bottom5.reduce(
+            (s, r) => s + (r.unit_wise_profitability || 0),
+            0
+        );
 
         const formatted = bottom5.map((item) => ({
-            product_name: item.product_name,
-            profit: (item.profit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            product_name: getDisplayProductNameFromRow(item),
+            profit: (item.profit || 0).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }),
             profitMix: (item.profit_mix || 0).toFixed(2),
             salesMix: (item.sales_mix || 0).toFixed(2),
             unit_wise_profitability: (item.unit_wise_profitability || 0).toFixed(2),
@@ -473,7 +556,10 @@ const SKUtable: React.FC<SKUtableProps> = ({
         return {
             rows: formatted,
             totals: {
-                profit: totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                profit: totalProfit.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                }),
                 profitMix: totalProfitMix.toFixed(2),
                 salesMix: totalSalesMix.toFixed(2),
                 unit_wise_profitability: totalUnitWise.toFixed(2),
@@ -503,23 +589,21 @@ const SKUtable: React.FC<SKUtableProps> = ({
 
     const getTitle = () => {
         if (range === "monthly") {
-            return `Profit Breakup (SKU Level) - <span style="color: #5EA68E;">${convertToAbbreviatedMonth(
-                month
-            )}'${yearShort}</span>`;
+            return `Profit Breakup (SKU Level)`;
         } else if (range === "quarterly") {
-            return `Profit Breakup (SKU Level) - <span style="color: #5EA68E;">${quarter}'${yearShort}</span>`;
+            return `Profit Breakup (SKU Level)`;
         } else {
-            return `Profit Breakup (SKU Level) - <span style="color: #5EA68E;">Year'${yearShort}</span>`;
+            return `Profit Breakup (SKU Level)`;
         }
     };
 
     const getTitle2 = () => {
         if (range === "monthly") {
-            return `Profit Breakup (SKU Level) - ${convertToAbbreviatedMonth(month)}'${yearShort}`;
+            return `Profit Breakup (SKU Level)`;
         } else if (range === "quarterly") {
-            return `Profit Breakup (SKU Level) - ${quarter}'${yearShort}`;
+            return `Profit Breakup (SKU Level)`;
         } else {
-            return `Profit Breakup (SKU Level) - Year'${yearShort}`;
+            return `Profit Breakup (SKU Level)`;
         }
     };
 
@@ -793,18 +877,23 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                             className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
                                         >
                                             {/* Left Icon */}
-                                            <span className="absolute left-2 top-1/2 -translate-y-1/2">
+                                            <span
+                                                className={`absolute left-2 top-1/2 caret-pulse`}
+                                            >
                                                 {showamazonfee ? <FaCaretRight /> : <FaCaretLeft />}
                                             </span>
 
                                             {/* Center Text */}
-                                            <span>Amazon Fees</span>
+                                            <span>Amazon Fees </span>
 
                                             {/* Right Icon */}
-                                            <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                                            <span
+                                                className={`absolute right-2 top-1/2 caret-pulse`}
+                                            >
                                                 {showamazonfee ? <FaCaretLeft /> : <FaCaretRight />}
                                             </span>
                                         </th>
+
                                         {showamazonfee && (
                                             <>
                                                 <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
@@ -816,28 +905,37 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                             </>
                                         )}
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                                            Net Credits
+                                            <div className="flex items-center justify-center gap-1">
+                                                Net Credits
+                                                <Tooltip text="Net Credits Formula: Postage Credits + Gift Wrap Credits" />
+                                            </div>
                                         </th>
+
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                                            Net Taxes
+                                            <div className="flex items-center justify-center gap-1">
+                                                Net Taxes
+                                                <Tooltip text="Net Taxes Formula: Shipping Credits Tax + Giftwrap Credits Tax + Promotional Rebates tax - Marketplace Withheld Tax" />
+                                            </div>
                                         </th>
+
                                         <th
                                             onClick={handleprofitClick}
                                             className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
                                         >
                                             {/* Left Icon */}
-                                            <span className="absolute left-2 top-1/2 -translate-y-1/2">
+                                            <span className="absolute left-2 top-1/2 caret-pulse">
                                                 {showprofit ? <FaCaretRight /> : <FaCaretLeft />}
                                             </span>
 
                                             {/* Center Text */}
-                                            <span>CM1 Profit</span>
+                                            <span>CM1 Profit </span>
 
                                             {/* Right Icon */}
-                                            <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                                            <span className="absolute right-2 top-1/2 caret-pulse">
                                                 {showprofit ? <FaCaretLeft /> : <FaCaretRight />}
                                             </span>
                                         </th>
+
 
                                         {showprofit && (
                                             <>
@@ -874,7 +972,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
                                                     (-)
                                                 </td>
-                                                <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
+                                                <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]  text-[#ff5c5c]">
                                                     (-)
                                                 </td>
                                             </>
@@ -903,7 +1001,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                                 <tr
                                                     key={index}
                                                     className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${isLastRow ? "bg-gray-200 font-semibold" : ""
-                                                        } ${isCostZero ? "text-[#ff5c5c]" : ""}`}
+                                                        } ${isCostZero ? "" : ""}`}
                                                 >
                                                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
                                                         {isLastRow ? "" : index + 1}
@@ -913,7 +1011,26 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                                         const col = column as keyof TableRow;
                                                         const isProductName = col === "product_name";
                                                         const raw = row[col];
-                                                        const cellContent = formatValue(raw as any, col as string);
+
+                                                        // base formatted value
+                                                        let cellContent: string | number = formatValue(raw as any, col as string);
+
+                                                        // --- special handling for product name ---
+                                                        let isNameMissing = false;
+                                                        if (isProductName) {
+                                                            const name = row.product_name;
+                                                            isNameMissing =
+                                                                name === undefined ||
+                                                                name === null ||
+                                                                name === "" ||
+                                                                name === "0" ||
+                                                                (name as any) === 0;
+
+                                                            // if name is missing / 0, show SKU instead (for monthly, quarterly, yearly)
+                                                            if (isNameMissing && row.sku) {
+                                                                cellContent = String(row.sku);
+                                                            }
+                                                        }
 
                                                         return (
                                                             <td
@@ -923,18 +1040,21 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                                             >
                                                                 {isProductName && !isLastRow ? (
                                                                     <span
-                                                                        onClick={() => handleProductClick(String(raw || ""))}
+                                                                        onClick={() => handleProductClick(String(cellContent || ""))}
                                                                         className="inline-block max-w-[220px] cursor-pointer truncate align-middle text-[#60a68e] no-underline"
-                                                                    // title={String(cellContent || "")}
                                                                     >
                                                                         {String(cellContent || "")}
-                                                                        {(isCostZero || !raw) && (
-                                                                            <span className="ml-1 text-[#ff5c5c]">
-                                                                                {row.sku && (
-                                                                                    <strong title="Product name is not available & COGS is zero because You need to Upload SKU data file.">
-                                                                                        {row.sku}
-                                                                                    </strong>
-                                                                                )}
+
+                                                                        {(isCostZero || isNameMissing) && (
+                                                                            <span className="ml-1">
+                                                                                {/* only show SKU text next to name if it's DIFFERENT
+                  from what we're already displaying, so no duplicates */}
+                                                                                {row.sku &&
+                                                                                    row.sku !== cellContent && (
+                                                                                        <strong title="Product name is not available & COGS is zero because You need to Upload SKU data file.">
+                                                                                            {row.sku}
+                                                                                        </strong>
+                                                                                    )}
                                                                                 <i
                                                                                     className="fa-solid fa-circle-info ml-1 cursor-pointer"
                                                                                     title="Product name is not available & COGS is zero because You need to Upload SKU data file."
@@ -947,16 +1067,14 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                                                         )}
                                                                     </span>
                                                                 ) : (
-                                                                    <span
-                                                                        className="inline-block max-w-[220px] truncate"
-                                                                    // title={String(cellContent || "")}
-                                                                    >
+                                                                    <span className="inline-block max-w-[220px] truncate">
                                                                         {cellContent as React.ReactNode}
                                                                     </span>
                                                                 )}
                                                             </td>
                                                         );
                                                     })}
+
                                                 </tr>
                                             );
                                         })
@@ -970,8 +1088,6 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                             </td>
                                         </tr>
                                     )}
-
-                                    {/* Summary rows */}
 
                                     {/* Summary rows */}
                                     <tr>
@@ -1117,10 +1233,10 @@ const SKUtable: React.FC<SKUtableProps> = ({
                     <div className="flex-1">
                         <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
                             <PageBreadcrumb pageTitle="Most 5 Profitable Products" variant="page" align="left" textSize="2xl" />
-                            <span className="text-green-500 ">&nbsp;({currencySymbol})</span>
+                            {/* <span className="text-green-500 ">&nbsp;({currencySymbol})</span> */}
                         </div>
 
-                       <div className="overflow-x-auto rounded-xl border border-gray-300">
+                        <div className="overflow-x-auto rounded-xl border border-gray-300">
                             <table className="w-full table-auto border-collapse">
                                 <thead>
                                     <tr className="bg-green-500 font-bold text-[#f8edcf]">
@@ -1128,7 +1244,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                             Product Name
                                         </th>
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                                            CM1 Profit
+                                            CM1 Profit {' '}({currencySymbol})
                                         </th>
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
                                             Profit Mix (%)
@@ -1137,7 +1253,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                             Sales Mix (%)
                                         </th>
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                                            CM1 Profit per Unit
+                                            CM1 Profit per Unit {' '}({currencySymbol})
                                         </th>
                                     </tr>
                                 </thead>
@@ -1217,17 +1333,17 @@ const SKUtable: React.FC<SKUtableProps> = ({
                     <div className="flex-1">
                         <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
                             <PageBreadcrumb pageTitle="Least 5 Profitable Products" variant="page" align="left" textSize="2xl" />
-                            <span className="text-[#5EA68E]">&nbsp;({currencySymbol})</span>
+                            {/* <span className="text-[#5EA68E]">&nbsp;({currencySymbol})</span> */}
                         </div>
-                     <div className="overflow-x-auto rounded-xl border border-gray-300">
+                        <div className="overflow-x-auto rounded-xl border border-gray-300">
                             <table className="w-full table-auto border-collapse">
                                 <thead>
-                                    <tr className="bg-[#ff5c5c] font-bold text-white">
+                                    <tr className="bg-[#ff5c5c] font-bold text-[#f8edcf]">
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
                                             Product Name
                                         </th>
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                                            CM1 Profit
+                                            CM1 Profit {' '}({currencySymbol})
                                         </th>
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
                                             Profit Mix (%)
@@ -1236,7 +1352,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                             Sales Mix (%)
                                         </th>
                                         <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                                            CM1 Profit per Unit
+                                            CM1 Profit per Unit {' '}({currencySymbol})
                                         </th>
                                     </tr>
                                 </thead>

@@ -1393,6 +1393,71 @@ def check_file_upload_status():
         return jsonify({'error': 'Server error'}), 500
 
 
+# @upload_bp.route('/upload_history', methods=['GET'])
+# def upload_history():
+#     auth_header = request.headers.get('Authorization')
+#     if not auth_header or not auth_header.startswith('Bearer '):
+#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+#     token = auth_header.split(' ')[1]
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+#         user_id = payload['user_id']
+#     except jwt.ExpiredSignatureError:
+#         return jsonify({'error': 'Token has expired'}), 401
+#     except jwt.InvalidTokenError:
+#         return jsonify({'error': 'Invalid token'}), 401
+
+#     uploads = UploadHistory.query.filter_by(user_id=user_id).all()
+#     response = []
+    
+#     # Month number to name mapping
+#     month_names = {
+#         1: 'january', 2: 'february', 3: 'march', 4: 'april',
+#         5: 'may', 6: 'june', 7: 'july', 8: 'august',
+#         9: 'september', 10: 'october', 11: 'november', 12: 'december'
+#     }
+
+#     for upload in uploads:
+#         # Convert numeric month to month name for display
+#         month_name = month_names.get(upload.month, str(upload.month))
+        
+#         table_name = f"user_{upload.country}_{month_name}{upload.year}_data"
+#         response.append({
+#                 'month': month_name,
+#                 'month_num': upload.month,
+#                 'year': upload.year,
+#                 'country': upload.country,
+#                 'file_name': table_name,
+#                 'total_sales': upload.total_sales,
+#                 'total_profit': upload.total_profit,
+#                 'total_expense': upload.total_expense,
+#                 'total_fba_fees': upload.total_fba_fees,
+#                 'platform_fee': upload.platform_fee,
+#                 'rembursement_fee': upload.rembursement_fee,
+#                 'expense_chart_img': upload.expense_chart_img,
+#                 'sales_chart_img': upload.sales_chart_img,
+#                 'qtd_pie_chart': upload.qtd_pie_chart,   # <-- corrected
+#                 'ytd_pie_chart': upload.ytd_pie_chart,
+#                 'total_cous': upload.total_cous,
+#                 'total_amazon_fee': upload.total_amazon_fee,
+#                 'profit_chart_img': upload.profit_chart_img,
+#                 'cm2_profit': upload.cm2_profit,          # <-- corrected
+#                 'cm2_margins': upload.cm2_margins,
+#                 'acos': upload.acos,
+#                 'rembursment_vs_cm2_margins': upload.rembursment_vs_cm2_margins,
+#                 'advertising_total': upload.advertising_total,
+#                 'reimbursement_vs_sales': upload.reimbursement_vs_sales,
+#                 'taxncredit' : upload.taxncredit,
+#                 'unit_sold': upload.unit_sold,
+#                 'otherwplatform': upload.platform_fee,
+#                 'taxncredit': upload.taxncredit,
+#             })
+#     return jsonify({'uploads': response})
+
+from flask import request, jsonify
+import jwt
+
 @upload_bp.route('/upload_history', methods=['GET'])
 def upload_history():
     auth_header = request.headers.get('Authorization')
@@ -1408,9 +1473,13 @@ def upload_history():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
+    # ✅ read optional params
+    # If you also pass country from FE, support it too (safe default = "")
+    country_param = (request.args.get('country') or "").strip().lower()
+    home_currency = (request.args.get('homeCurrency') or "").strip().lower()
+
     uploads = UploadHistory.query.filter_by(user_id=user_id).all()
-    response = []
-    
+
     # Month number to name mapping
     month_names = {
         1: 'january', 2: 'february', 3: 'march', 4: 'april',
@@ -1418,42 +1487,217 @@ def upload_history():
         9: 'september', 10: 'october', 11: 'november', 12: 'december'
     }
 
+    response = []
+
     for upload in uploads:
+        upload_country = (upload.country or "").strip().lower()
+
+        # ✅ IMPORTANT FIX:
+        # When requesting GLOBAL history:
+        # - if homeCurrency is provided => only return global_<currency>
+        # - else => only return base global
+        if country_param == "global":
+            if home_currency:
+                if upload_country != f"global_{home_currency}":
+                    continue
+            else:
+                if upload_country != "global":
+                    continue
+
+        # ✅ Optional: if FE passes specific country, filter by it
+        # (This avoids sending huge payloads)
+        elif country_param:
+            if upload_country != country_param:
+                continue
+
         # Convert numeric month to month name for display
         month_name = month_names.get(upload.month, str(upload.month))
-        
-        table_name = f"user_{upload.country}_{month_name}{upload.year}_data"
+
+        table_name = f"user_{upload_country}_{month_name}{upload.year}_data"
+
         response.append({
-                'month': month_name,
-                'month_num': upload.month,
-                'year': upload.year,
-                'country': upload.country,
-                'file_name': table_name,
-                'total_sales': upload.total_sales,
-                'total_profit': upload.total_profit,
-                'total_expense': upload.total_expense,
-                'total_fba_fees': upload.total_fba_fees,
-                'platform_fee': upload.platform_fee,
-                'rembursement_fee': upload.rembursement_fee,
-                'expense_chart_img': upload.expense_chart_img,
-                'sales_chart_img': upload.sales_chart_img,
-                'qtd_pie_chart': upload.qtd_pie_chart,   # <-- corrected
-                'ytd_pie_chart': upload.ytd_pie_chart,
-                'total_cous': upload.total_cous,
-                'total_amazon_fee': upload.total_amazon_fee,
-                'profit_chart_img': upload.profit_chart_img,
-                'cm2_profit': upload.cm2_profit,          # <-- corrected
-                'cm2_margins': upload.cm2_margins,
-                'acos': upload.acos,
-                'rembursment_vs_cm2_margins': upload.rembursment_vs_cm2_margins,
-                'advertising_total': upload.advertising_total,
-                'reimbursement_vs_sales': upload.reimbursement_vs_sales,
-                'taxncredit' : upload.taxncredit,
-                'unit_sold': upload.unit_sold,
-                'otherwplatform': upload.platform_fee,
-                'taxncredit': upload.taxncredit,
-            })
-    return jsonify({'uploads': response})
+            'month': month_name,
+            'month_num': upload.month,          # ✅ keep numeric month here
+            'year': upload.year,
+            'country': upload_country,
+            'file_name': table_name,
+
+            'total_sales': upload.total_sales,
+            'total_profit': upload.total_profit,
+            'total_expense': upload.total_expense,
+            'total_fba_fees': upload.total_fba_fees,
+
+            'platform_fee': upload.platform_fee,
+            'rembursement_fee': upload.rembursement_fee,
+
+            'expense_chart_img': upload.expense_chart_img,
+            'sales_chart_img': upload.sales_chart_img,
+            'qtd_pie_chart': upload.qtd_pie_chart,
+            'ytd_pie_chart': upload.ytd_pie_chart,
+
+            'total_cous': upload.total_cous,
+            'total_amazon_fee': upload.total_amazon_fee,
+            'profit_chart_img': upload.profit_chart_img,
+
+            'cm2_profit': upload.cm2_profit,
+            'cm2_margins': upload.cm2_margins,
+            'acos': upload.acos,
+
+            'rembursment_vs_cm2_margins': upload.rembursment_vs_cm2_margins,
+            'advertising_total': upload.advertising_total,
+            'reimbursement_vs_sales': upload.reimbursement_vs_sales,
+            'taxncredit': upload.taxncredit,
+            'unit_sold': upload.unit_sold,
+
+            'otherwplatform': upload.platform_fee,
+        })
+
+    return jsonify({'uploads': response}), 200
+
+
+def resolve_country(country, currency):
+    country = (country or "").lower()
+    currency = (currency or "").lower()
+
+    # 1. If country = global
+    if country == "global":
+        if currency == "usd":
+            return "global"
+        elif currency == "inr":
+            return "global_inr"
+        elif currency == "gbp":
+            return "global_gbp"
+        elif currency == "cad":
+            return "global_cad"
+        else:
+            return "global"  # default fallback
+
+    # 2. If country = uk
+    if country == "uk":
+        if currency == "usd":
+            return "uk_usd"
+        else:
+            return "uk"  # default for all other currencies
+
+    # 3. Default (no special logic)
+    return country
+
+# @upload_bp.route('/upload_history2', methods=['GET'])
+# def upload_history2():
+#     auth_header = request.headers.get('Authorization')
+#     if not auth_header or not auth_header.startswith('Bearer '):
+#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+#     token = auth_header.split(' ')[1]
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+#         user_id = payload['user_id']
+#     except jwt.ExpiredSignatureError:
+#         return jsonify({'error': 'Token has expired'}), 401
+#     except jwt.InvalidTokenError:
+#         return jsonify({'error': 'Invalid token'}), 401
+
+#     range_type = request.args.get('range')
+#     month = request.args.get('month')
+#     year = request.args.get('year')
+#     quarter = request.args.get('quarter')
+#     # country = request.args.get('country', '').lower()
+#     country_param = (request.args.get('country', '') or '').lower()
+
+#     # ✅ only use homeCurrency for GLOBAL
+#     if country_param == "global":
+#         currency_param = (request.args.get('homeCurrency') or 'USD').lower()
+#     else:
+#         currency_param = None  # or ""
+
+#     country = resolve_country(country_param, currency_param)
+
+#     print("Resolved Home Currency Country:", currency_param)
+    
+#     # Try to infer range_type if not provided
+#     if not range_type:
+#         if month and year:
+#             range_type = 'monthly'
+#         elif quarter and year:
+#             range_type = 'quarterly'
+#         elif year:
+#             range_type = 'yearly'
+#         else:
+#             return jsonify({'error': 'Invalid range parameters. Must specify range type or provide appropriate parameters to infer range.'}), 400
+
+#     try:
+#         year_num = int(year)
+#     except (TypeError, ValueError):
+#         return jsonify({'error': 'Year must be a valid number.'}), 400
+
+#     def summarize_uploads(uploads):
+#         total_sales = sum(upload.total_sales or 0 for upload in uploads)
+#         total_profit = sum(upload.total_profit or 0 for upload in uploads)
+#         total_expense = sum(upload.total_expense or 0 for upload in uploads)
+#         advertising_total = sum(upload.advertising_total or 0 for upload in uploads)
+#         cm2_profit = sum(upload.cm2_profit or 0 for upload in uploads)
+#         total_amazon_fee = sum(upload.total_amazon_fee or 0 for upload in uploads)
+#         total_cous = sum(upload.total_cous or 0 for upload in uploads)
+#         otherwplatform = sum(upload.platform_fee or 0 for upload in uploads)
+#         taxncredit = sum(upload.taxncredit or 0 for upload in uploads)
+#         unit_sold = sum(upload.unit_sold or 0 for upload in uploads)
+
+        
+#         return {
+#             'total_sales': total_sales,
+#             'total_profit': total_profit,
+#             'total_expense': total_expense,
+#             'advertising_total': advertising_total,
+#             'cm2_profit': cm2_profit,
+#             'total_amazon_fee': total_amazon_fee,
+#             'total_cous': total_cous,
+#             'otherwplatform': otherwplatform,
+#             'taxncredit': taxncredit,
+#             'unit_sold': unit_sold,
+#         }
+
+
+#     if range_type == 'monthly' and month and year:
+#         uploads = UploadHistory.query.filter_by(
+#             user_id=user_id,
+#             year=year_num,
+#             month=month.lower(),
+#             country=country
+#         ).all()
+    
+        
+#         return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+#     elif range_type == 'quarterly' and quarter and year:
+#         # quarter = quarter.lower()
+#         quarter_months = {
+#             'Q1': ['january', 'february', 'march'],
+#             'Q2': ['april', 'may', 'june'],
+#             'Q3': ['july', 'august', 'september'],
+#             'Q4': ['october', 'november', 'december']
+#         }
+#         if quarter not in quarter_months:
+#             return jsonify({'error': 'Quarter must be one of: Q1, Q2, Q3, Q4'}), 400
+
+#         uploads = UploadHistory.query.filter(
+#             UploadHistory.user_id == user_id,
+#             UploadHistory.year == year_num,
+#             UploadHistory.month.in_(quarter_months[quarter]),
+#             UploadHistory.country == country
+#         ).all()
+#         return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+#     elif range_type == 'yearly' and year:
+#         uploads = UploadHistory.query.filter_by(
+#             user_id=user_id,
+#             year=year_num,
+#             country=country
+#         ).all()
+#         return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+#     else:
+#         return jsonify({'error': 'Invalid range parameters'}), 400
+
 
 @upload_bp.route('/upload_history2', methods=['GET'])
 def upload_history2():
@@ -1474,9 +1718,17 @@ def upload_history2():
     month = request.args.get('month')
     year = request.args.get('year')
     quarter = request.args.get('quarter')
-    country = request.args.get('country', '').lower()
 
-    
+    country_param = (request.args.get('country', '') or '').lower()
+
+    # ✅ only use homeCurrency for GLOBAL
+    if country_param == "global":
+        currency_param = (request.args.get('homeCurrency') or 'USD').lower()
+    else:
+        currency_param = None
+
+    country = resolve_country(country_param, currency_param)
+
     # Try to infer range_type if not provided
     if not range_type:
         if month and year:
@@ -1486,7 +1738,9 @@ def upload_history2():
         elif year:
             range_type = 'yearly'
         else:
-            return jsonify({'error': 'Invalid range parameters. Must specify range type or provide appropriate parameters to infer range.'}), 400
+            return jsonify({
+                'error': 'Invalid range parameters. Must specify range type or provide appropriate parameters to infer range.'
+            }), 400
 
     try:
         year_num = int(year)
@@ -1505,7 +1759,6 @@ def upload_history2():
         taxncredit = sum(upload.taxncredit or 0 for upload in uploads)
         unit_sold = sum(upload.unit_sold or 0 for upload in uploads)
 
-        
         return {
             'total_sales': total_sales,
             'total_profit': total_profit,
@@ -1519,26 +1772,116 @@ def upload_history2():
             'unit_sold': unit_sold,
         }
 
+    # ---------------- comparison helpers ----------------
+
+    month_order = [
+        'january', 'february', 'march',
+        'april', 'may', 'june',
+        'july', 'august', 'september',
+        'october', 'november', 'december'
+    ]
+
+    quarter_months = {
+        'Q1': ['january', 'february', 'march'],
+        'Q2': ['april', 'may', 'june'],
+        'Q3': ['july', 'august', 'september'],
+        'Q4': ['october', 'november', 'december']
+    }
+
+    def get_previous_month(m: str, y: int):
+        m = (m or '').lower()
+        if m not in month_order:
+            return None, None
+        idx = month_order.index(m)
+        if idx == 0:
+            return month_order[-1], y - 1
+        return month_order[idx - 1], y
+
+    def get_quarter_from_month(m: str):
+        m = (m or '').lower()
+        for q, months in quarter_months.items():
+            if m in months:
+                return q
+        return None
+
+    def get_previous_quarter(q: str, y: int):
+        order = ['Q1', 'Q2', 'Q3', 'Q4']
+        if q not in order:
+            return None, None
+        idx = order.index(q)
+        if idx == 0:
+            return 'Q4', y - 1
+        return order[idx - 1], y
+
+    def fetch_monthly_summary(m: str, y: int):
+        if not m or y is None:
+            return None
+        ups = UploadHistory.query.filter_by(
+            user_id=user_id,
+            year=y,
+            month=m.lower(),
+            country=country
+        ).all()
+        return summarize_uploads(ups) if ups else None
+
+    def fetch_quarterly_summary(q: str, y: int):
+        if not q or y is None or q not in quarter_months:
+            return None
+        ups = UploadHistory.query.filter(
+            UploadHistory.user_id == user_id,
+            UploadHistory.year == y,
+            UploadHistory.month.in_(quarter_months[q]),
+            UploadHistory.country == country
+        ).all()
+        return summarize_uploads(ups) if ups else None
+
+    def fetch_yearly_summary(y: int):
+        if y is None:
+            return None
+        ups = UploadHistory.query.filter_by(
+            user_id=user_id,
+            year=y,
+            country=country
+        ).all()
+        return summarize_uploads(ups) if ups else None
+
+    # ---------------- main logic ----------------
 
     if range_type == 'monthly' and month and year:
+        month_l = month.lower()
+
         uploads = UploadHistory.query.filter_by(
             user_id=user_id,
             year=year_num,
-            month=month.lower(),
+            month=month_l,
             country=country
         ).all()
-    
-        
-        return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+        current_summary = summarize_uploads(uploads)
+
+        # last month (prev month)
+        prev_m, prev_y = get_previous_month(month_l, year_num)
+        last_month_summary = fetch_monthly_summary(prev_m, prev_y) if prev_m else None
+
+        # last quarter (previous quarter from the month you are viewing)
+        current_q = get_quarter_from_month(month_l)
+        prev_q, prev_q_y = get_previous_quarter(current_q, year_num) if current_q else (None, None)
+        last_quarter_summary = fetch_quarterly_summary(prev_q, prev_q_y) if prev_q else None
+
+        # last year (same month previous year)
+        last_year_summary = fetch_monthly_summary(month_l, year_num - 1)
+
+        return jsonify({
+            'uploads': [u.id for u in uploads],
+            'summary': current_summary,
+            'summaryComparisons': {
+                'lastMonth': last_month_summary,
+                'lastQuarter': last_quarter_summary,
+                'lastYear': last_year_summary
+            }
+        })
 
     elif range_type == 'quarterly' and quarter and year:
-        # quarter = quarter.lower()
-        quarter_months = {
-            'Q1': ['january', 'february', 'march'],
-            'Q2': ['april', 'may', 'june'],
-            'Q3': ['july', 'august', 'september'],
-            'Q4': ['october', 'november', 'december']
-        }
         if quarter not in quarter_months:
             return jsonify({'error': 'Quarter must be one of: Q1, Q2, Q3, Q4'}), 400
 
@@ -1548,7 +1891,25 @@ def upload_history2():
             UploadHistory.month.in_(quarter_months[quarter]),
             UploadHistory.country == country
         ).all()
-        return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+        current_summary = summarize_uploads(uploads)
+
+        # last quarter (previous quarter)
+        prev_q, prev_q_y = get_previous_quarter(quarter, year_num)
+        last_quarter_summary = fetch_quarterly_summary(prev_q, prev_q_y) if prev_q else None
+
+        # last year (same quarter last year)
+        last_year_summary = fetch_quarterly_summary(quarter, year_num - 1)
+
+        return jsonify({
+            'uploads': [u.id for u in uploads],
+            'summary': current_summary,
+            'summaryComparisons': {
+                'lastMonth': None,
+                'lastQuarter': last_quarter_summary,
+                'lastYear': last_year_summary
+            }
+        })
 
     elif range_type == 'yearly' and year:
         uploads = UploadHistory.query.filter_by(
@@ -1556,7 +1917,21 @@ def upload_history2():
             year=year_num,
             country=country
         ).all()
-        return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+        current_summary = summarize_uploads(uploads)
+
+        # last year
+        last_year_summary = fetch_yearly_summary(year_num - 1)
+
+        return jsonify({
+            'uploads': [u.id for u in uploads],
+            'summary': current_summary,
+            'summaryComparisons': {
+                'lastMonth': None,
+                'lastQuarter': None,
+                'lastYear': last_year_summary
+            }
+        })
 
     else:
         return jsonify({'error': 'Invalid range parameters'}), 400

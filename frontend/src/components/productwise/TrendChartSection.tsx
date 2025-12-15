@@ -1254,6 +1254,7 @@ import {
   CountryKey,
   formatCountryLabel,
   getCountryColor,
+  normalizeCountryKey,
 } from "./productwiseHelpers";
 
 import ExcelJS from "exceljs";
@@ -1279,6 +1280,9 @@ interface TrendChartSectionProps {
   // for search dropdown
   authToken: string | null;
   onProductSelect: (productName: string) => void;
+
+  // 🆕 new optional handler
+  onViewBusinessInsights?: () => void;
 }
 
 const TrendChartSection: React.FC<TrendChartSectionProps> = ({
@@ -1291,6 +1295,7 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
   onToggleCountry,
   authToken,
   onProductSelect,
+  onViewBusinessInsights,
 }) => {
   const [activeTab, setActiveTab] = useState<TrendTab>("sales_cm1");
 
@@ -1494,10 +1499,13 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
 
           <div className="my-4 flex flex-wrap items-center gap-3">
             {["global", ...nonEmptyCountriesFromApi].map((country) => {
-              const color = getCountryColor(country as CountryKey);
+              // backend key: "uk_usd", "global_gbp", etc.
+              const normalized = normalizeCountryKey(country);        // -> "uk", "global", ...
+
+              const color = getCountryColor(normalized);
               const isChecked =
-                selectedCountries[country as CountryKey] ?? true;
-              const label = formatCountryLabel(country as CountryKey);
+                selectedCountries[country as CountryKey] ?? true;     // keep backend key for toggling
+              const label = formatCountryLabel(normalized);           // 👈 will now show "UK"
 
               return (
                 <label
@@ -1564,6 +1572,16 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
               { value: "units", label: "Units" },
             ]}
           />
+
+          {onViewBusinessInsights && (
+            <button
+              type="button"
+              onClick={onViewBusinessInsights}
+              className="inline-flex items-center rounded-md bg-slate-800 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-100 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400"
+            >
+              View Business Insights
+            </button>
+          )}
         </div>
       </div>
 
@@ -1584,7 +1602,32 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
       </div>
 
       {/* BOTTOM: centered legend + download button */}
-      <div className="mt-4 flex items-center">
+      {/* <div className="mt-4 flex items-center">
+        <div className="flex-1 flex justify-center">
+          {activeTab === "sales_cm1" ? (
+            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-gray-700">
+              <div className="flex items-center gap-2">
+                <span className="h-[2px] w-10 bg-gray-800" />
+                <span>Net Sales</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-10 border-t border-dashed border-gray-800" />
+                <span>CM1 Profit</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+              <span className="h-[2px] w-10 bg-gray-800" />
+              <span>Units</span>
+            </div>
+          )}
+        </div>
+
+        <DownloadIconButton onClick={handleDownload} />
+      </div> */}
+
+      {/* BOTTOM: centered legend + View Business Insights + download button */}
+      <div className="mt-4 flex items-center justify-between gap-3">
         {/* Centered legend */}
         <div className="flex-1 flex justify-center">
           {activeTab === "sales_cm1" ? (
@@ -1606,9 +1649,22 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
           )}
         </div>
 
-        {/* Download icon bottom-right */}
-        <DownloadIconButton onClick={handleDownload} />
+        {/* Actions on the right */}
+        <div className="flex items-center gap-2">
+          {/* {onViewBusinessInsights && (
+            <button
+              type="button"
+              onClick={onViewBusinessInsights}
+              className="inline-flex items-center rounded-md bg-slate-800 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-100 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400"
+            >
+              View Business Insights
+            </button>
+          )} */}
+
+          <DownloadIconButton onClick={handleDownload} />
+        </div>
       </div>
+
     </div>
   );
 };

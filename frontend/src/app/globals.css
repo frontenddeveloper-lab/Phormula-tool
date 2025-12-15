@@ -776,3 +776,59 @@ select option:hover {
   background: #5EA68E !important;
   color: #F8EDCE  !important; 
 } */
+
+
+@keyframes caretPulse {
+  0%, 100% {
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    transform: translateY(-50%) scale(1.3);
+  }
+}
+
+.caret-pulse {
+  animation: caretPulse 0.9s ease-in-out infinite;
+}
+
+
+.info-icon-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.info-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: 130%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 240px;
+  background-color: #333;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.3;
+  z-index: 999;
+  transition: opacity 0.2s ease;
+  white-space: normal;
+}
+
+.info-icon-wrapper:hover .info-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.info-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: #333 transparent transparent transparent;
+}

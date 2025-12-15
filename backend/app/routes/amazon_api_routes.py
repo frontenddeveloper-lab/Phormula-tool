@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, io, os,time, calendar, gzip, csv, json, logging, inspect, random
+import base64, io, os,time, calendar, json, logging, inspect
 import urllib.parse
 import pandas as pd
 from datetime import datetime, timedelta
@@ -16,50 +16,20 @@ UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 from dotenv import find_dotenv, load_dotenv
 from flask import Blueprint, Response, jsonify, make_response, request
 from sqlalchemy.dialects.postgresql import JSONB, insert
-from sqlalchemy import asc, desc
 from app import db
 from app.models.user_models import UploadHistory, amazon_user
-from app.utils.data_utils import generate_pnl_report 
 from app.utils.us_process_utils  import process_skuwise_us_data , process_us_yearly_skuwise_data, process_us_quarterly_skuwise_data
 from app.utils.uk_process_utils import process_skuwise_data , process_quarterly_skuwise_data, process_yearly_skuwise_data 
-from app.utils.plotting_utils import (
-    get_referral_fees , apply_modifications_fatch 
+from app.utils.plotting_utils import ( apply_modifications_fatch 
 )
 from app.utils.currency_utils import (  process_global_yearly_skuwise_data ,
     process_global_quarterly_skuwise_data , 
     process_global_monthly_skuwise_data
 )
-from app.routes.upload_routes import (
-    upload_history,
-    upload_history2,
-    upload_historyforacos,
-)
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Blueprint, request, session, jsonify, redirect 
-from app.utils.token_utils import (
-    decode_token, generate_reset_token, confirm_verification_token,
-    generate_token, generate_verification_token
-)
-import os  
-import pandas as pd
-from sqlalchemy import and_, or_
-import numpy as np 
-from app.utils.data_utils import  create_user_session
-from app.utils.email_utils import send_welcome_and_verification_emails , send_reset_email
-from app import db
-from app.models.user_models import User, CountryProfile, Category 
-import jwt
-import secrets
-import string
-from config import Config
-SECRET_KEY = Config.SECRET_KEY
-from werkzeug.utils import secure_filename
-from sqlalchemy import create_engine
-from sqlalchemy import MetaData, Table, Column, Integer, String, Float, text
-from app.models.user_models import db, Order, Fee, Inventory, Product, SettlementTransaction, Fee
+from app.models.user_models import db, Product
 
 from dotenv import load_dotenv
-from sqlalchemy import MetaData
+
 # App config / auth
 from config import Config
 SECRET_KEY = Config.SECRET_KEY
@@ -84,7 +54,6 @@ amazon_api_bp = Blueprint("amazon_api", __name__)
 
 
 # ------------------------------------------------- Amazon Client -------------------------------------------------
-
 
 
 class AmazonSPAPIClient:
@@ -509,7 +478,6 @@ class AmazonSPAPIClient:
 
 
 amazon_client = AmazonSPAPIClient()
-
 
 
 COLUMN_MAPPING = {
@@ -1527,19 +1495,6 @@ def amazon_oauth_callback():
     """ % refresh
 
 
-# @amazon_api_bp.route("/amazon_api/status", methods=["GET"])
-# def amazon_status():
-#     _apply_region_and_marketplace_from_request()
-#     if amazon_client.marketplace_id not in amazon_client.ALLOWED_MARKETPLACES:
-#         return jsonify({"success": False, "error": "Unsupported marketplace"}), 400
-#     if not amazon_client.refresh_token:
-#         return jsonify({"success": False, "error": "No refresh token. Complete OAuth."}), 400
-
-#     res = amazon_client.make_api_call("/sellers/v1/marketplaceParticipations", "GET")
-#     if res and "error" not in res:
-#         return jsonify({"success": True, "payload": res.get("payload") or []})
-#     return jsonify({"success": False, "error": res}), 502
-
 
 @amazon_api_bp.route("/amazon_api/status", methods=["GET"])
 def amazon_status():
@@ -1808,11 +1763,6 @@ def amazon_account():
 
 
 
-
-
-
-# in your amazon_api_bp blueprint
-
 @amazon_api_bp.route("/amazon_api/connections", methods=["GET"])
 def list_amazon_connections():
     # -------- auth --------
@@ -1845,191 +1795,910 @@ def list_amazon_connections():
     })
 
 
-from flask import send_file
-import io
-import gzip
-import calendar
+# from datetime import datetime, timezone
+
+# def _month_date_range_utc(year: int, month: int) -> tuple[str, str]:
+#     """
+#     Returns (postedAfter, postedBefore) ISO8601 (UTC) for given month.
+#     postedAfter is inclusive, postedBefore is exclusive.
+#     """
+#     start = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+#     if month == 12:
+#         end = datetime(year + 1, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+#     else:
+#         end = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+#     def iso_z(dt: datetime) -> str:
+#         return dt.isoformat().replace("+00:00", "Z")
+
+#     return iso_z(start), iso_z(end)
+
+
+# def _extract_order_id_from_related_identifiers(related_identifiers: list[dict] | None) -> Optional[str]:
+#     if not related_identifiers:
+#         return None
+#     for rid in related_identifiers:
+#         name = (rid or {}).get("relatedIdentifierName")
+#         val = (rid or {}).get("relatedIdentifierValue")
+#         if name == "ORDER_ID" and val:
+#             return str(val)
+#     return None
+
+
+# def _extract_sku_and_qty_from_contexts(contexts: list[dict] | None) -> tuple[Optional[str], Optional[float]]:
+#     """
+#     ProductContext usually has sku, asin, quantityShipped, etc.
+#     We'll just take the first one.
+#     """
+#     if not contexts:
+#         return None, None
+#     for ctx in contexts:
+#         if (ctx or {}).get("contextType") == "ProductContext":
+#             sku = ctx.get("sku")
+#             qty = ctx.get("quantityShipped")
+#             try:
+#                 qty_f = float(qty) if qty is not None else None
+#             except (TypeError, ValueError):
+#                 qty_f = None
+#             return sku, qty_f
+#     return None, None
+
+
+# def _sum_breakdowns_by_keyword(breakdowns: list[dict] | None, keyword: str) -> float:
+#     """
+#     Traverse breakdown tree and sum `breakdownAmount.currencyAmount`
+#     where breakdownType contains keyword (case-insensitive).
+#     """
+#     if not breakdowns:
+#         return 0.0
+
+#     total = 0.0
+
+#     def walk(nodes: list[dict]):
+#         nonlocal total
+#         for b in nodes or []:
+#             btype = str(b.get("breakdownType", "")).lower()
+#             if keyword in btype:
+#                 amount = (((b.get("breakdownAmount") or {}).get("currencyAmount")) or 0)  # may be None
+#                 try:
+#                     total_amount = float(amount)
+#                 except (TypeError, ValueError):
+#                     total_amount = 0.0
+#                 total += total_amount
+
+#             nested = b.get("breakdowns")
+#             if isinstance(nested, list):
+#                 walk(nested)
+
+#     walk(breakdowns)
+#     return total
+
+
+# def _flatten_transaction_to_row(tx: dict) -> dict:
+#     """
+#     Map a Finances v2024-06-19 Transaction object to your internal row schema.
+
+#     Returns a dict using *normalized* column names (values of COLUMN_MAPPING),
+#     e.g. 'date_time', 'order_id', 'sku', 'product_sales', 'selling_fees', etc.
+#     """
+#     posted_date = tx.get("postedDate")  # ISO8601 string
+#     ttype = tx.get("transactionType")
+#     tstatus = tx.get("transactionStatus")
+#     desc = tx.get("description")
+#     total_amount = (tx.get("totalAmount") or {}).get("currencyAmount")
+#     marketplace_details = tx.get("marketplaceDetails") or {}
+#     breakdowns = tx.get("breakdowns") or []
+
+#     related_identifiers = tx.get("relatedIdentifiers") or []
+#     order_id = _extract_order_id_from_related_identifiers(related_identifiers)
+
+#     # Try to get SKU + quantity from first item.contexts
+#     sku = None
+#     quantity = None
+#     items = tx.get("items") or []
+#     if items:
+#         item0 = items[0] or {}
+#         ctxs = item0.get("contexts") or []
+#         sku, quantity = _extract_sku_and_qty_from_contexts(ctxs)
+
+#     # Marketplace name / id
+#     marketplace_name = marketplace_details.get("marketplaceName")
+#     marketplace_id = marketplace_details.get("marketplaceId")
+#     marketplace = marketplace_name or marketplace_id
+
+#     # Basic numeric amounts (best effort from transaction-level breakdowns)
+#     product_sales = _sum_breakdowns_by_keyword(breakdowns, "sales")
+#     # If for some transaction there are no "sales" breakdowns, fall back to totalAmount
+#     if product_sales == 0.0:
+#         try:
+#             product_sales = float(total_amount)
+#         except (TypeError, ValueError):
+#             product_sales = 0.0
+
+#     selling_fees = _sum_breakdowns_by_keyword(breakdowns, "fee")
+#     fba_fees = _sum_breakdowns_by_keyword(breakdowns, "fba")
+#     promo = _sum_breakdowns_by_keyword(breakdowns, "promotion")
+#     tax = _sum_breakdowns_by_keyword(breakdowns, "tax")
+#     shipping_credits = _sum_breakdowns_by_keyword(breakdowns, "shipping")
+
+#     # Map into your normalized columns (same names you use in DB)
+#     row = {
+#         "date_time": posted_date,
+#         "settlement_id": None,  # not present in Finances API; comes from legacy settlement reports
+#         "type": ttype,
+#         "order_id": order_id,
+#         "sku": sku,
+#         "description": desc,
+#         "quantity": quantity,
+#         "marketplace": marketplace,
+#         "fulfilment": None,     # can be inferred from contexts if needed
+#         "fulfillment": None,
+#         "order_city": None,
+#         "order_state": None,
+#         "order_postal": None,
+#         "tax_collection_model": None,
+#         "product_sales": product_sales,
+#         "product_sales_tax": tax,
+#         "postage_credits": 0.0,
+#         "shipping_credits": shipping_credits,
+#         "shipping_credits_tax": 0.0,
+#         "gift_wrap_credits": 0.0,
+#         "giftwrap_credits_tax": 0.0,
+#         "promotional_rebates": promo,
+#         "promotional_rebates_tax": 0.0,
+#         "sales_tax_collected": tax,
+#         "marketplace_withheld_tax": 0.0,
+#         "marketplace_facilitator_tax": 0.0,
+#         "selling_fees": selling_fees,
+#         "fba_fees": fba_fees,
+#         "other_transaction_fees": 0.0,
+#         "other": 0.0,
+#         "total": product_sales - selling_fees - fba_fees,  # naive; tweak as you like
+#         "account_type": None,
+#         "regulatory_fee": 0.0,
+#         "tax_on_regulatory_fee": 0.0,
+#         "bucket": tstatus,  # just an example – up to you
+#     }
+
+#     return row
+
+# from flask import Blueprint, Response, jsonify, make_response, request, send_file
+
+
+# @amazon_api_bp.route("/amazon_api/finances/monthly_transactions", methods=["GET"])
+# def finances_monthly_transactions():
+#     """
+#     Fetch Finances API v2024-06-19 transactions for a given month,
+#     flatten them into COLUMN_MAPPING-style columns, and return JSON or Excel.
+
+#     Query params:
+#       - year (int, default: current UTC year)
+#       - month (int, default: 6 for June)
+#       - transaction_status (optional: RELEASED, DEFERRED, DEFERRED_RELEASED)
+#       - marketplace_id (optional)
+#       - format (optional: 'json' (default) or 'excel')
+#     """
+#     # -------- auth --------
+#     auth_header = request.headers.get('Authorization')
+#     if not auth_header or not auth_header.startswith('Bearer '):
+#         return jsonify({'success': False, 'error': 'Authorization token is missing or invalid'}), 401
+
+#     token = auth_header.split(' ')[1]
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+#         user_id = payload['user_id']
+#     except jwt.ExpiredSignatureError:
+#         return jsonify({'success': False, 'error': 'Token has expired'}), 401
+#     except jwt.InvalidTokenError:
+#         return jsonify({'success': False, 'error': 'Invalid token'}), 401
+
+#     # -------- params --------
+#     now_utc = datetime.now(timezone.utc)
+#     try:
+#         year = int(request.args.get("year", now_utc.year))
+#         month = int(request.args.get("month", 6))  # default = June
+#         if month < 1 or month > 12:
+#             raise ValueError("month must be 1-12")
+#     except ValueError:
+#         return jsonify({"success": False, "error": "Invalid year or month"}), 400
+
+#     # default to RELEASED if client doesn’t pass anything
+#     transaction_status = request.args.get("transaction_status", "RELEASED")
+
+#     marketplace_id = request.args.get("marketplace_id")
+
+#     # ✅ NEW: choose response format
+#     response_format = (request.args.get("format") or "json").lower()
+
+#     # -------- region + marketplace from request (optional overrides) --------
+#     _apply_region_and_marketplace_from_request()
+
+#     # -------- load refresh token for this user + region --------
+#     au = amazon_user.query.filter_by(
+#         user_id=user_id,
+#         region=amazon_client.region
+#     ).first()
+
+#     if not au or not au.refresh_token:
+#         return jsonify({
+#             "success": False,
+#             "error": "Amazon account not connected for this region",
+#             "status": "no_refresh_token"
+#         }), 400
+
+#     amazon_client.refresh_token = au.refresh_token
+
+#     # -------- build date range for requested month (e.g. June) --------
+#     posted_after, posted_before = _month_date_range_utc(year, month)
+
+#     # -------- call Finances API listTransactions (with pagination) --------
+#     params = {
+#         "postedAfter": posted_after,
+#         "postedBefore": posted_before,
+#         "marketplaceId": marketplace_id or amazon_client.marketplace_id,
+#     }
+#     if transaction_status:
+#         params["transactionStatus"] = transaction_status
+
+#     all_rows: list[dict] = []
+
+#     while True:
+#         res = amazon_client.make_api_call(
+#             "/finances/2024-06-19/transactions",
+#             method="GET",
+#             params=params,
+#         )
+
+#         if not res or "error" in res:
+#             # Bubble up SP-API error details so you can debug
+#             return jsonify({
+#                 "success": False,
+#                 "error": res or {"error": "Unknown SP-API error"},
+#             }), 502
+
+#         payload = res.get("payload") or res
+#         transactions = payload.get("transactions") or []
+
+#         for tx in transactions:
+#             tstatus = (tx or {}).get("transactionStatus")
+#             # hard filter in code too
+#             if tstatus != "RELEASED":
+#                 continue
+
+#             row = _flatten_transaction_to_row(tx or {})
+#             all_rows.append(row)
+
+
+#         next_token = payload.get("nextToken")
+#         if not next_token:
+#             break
+
+#         # Next page only needs nextToken
+#         params = {"nextToken": next_token}
+
+#     # ✅ If Excel requested, return file instead of JSON
+#     if response_format == "excel":
+#         if not all_rows:
+#             # still return an empty sheet, but you could also return 204 if you prefer
+#             df = pd.DataFrame()
+#         else:
+#             df = pd.DataFrame(all_rows)
+
+#         output = io.BytesIO()
+#         # xlsxwriter or openpyxl, both are fine if installed
+#         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+#             df.to_excel(writer, index=False, sheet_name="Transactions")
+
+#         output.seek(0)
+#         filename = f"finances_transactions_{year}_{month:02d}.xlsx"
+
+#         return send_file(
+#             output,
+#             as_attachment=True,
+#             download_name=filename,
+#             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+#         )
+
+#     # 🔁 default JSON response (same as you already have)
+#     return jsonify({
+#         "success": True,
+#         "year": year,
+#         "month": month,
+#         "count": len(all_rows),
+#         "transactions": all_rows,
+#     }), 200
+
+from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime, timezone
+import io
+import pandas as pd
+from flask import jsonify, request, send_file
 
-def _parse_iso(dt_str: str) -> datetime:
-    # SP-API always uses Z or offset; normalize Z to +00:00
-    if dt_str.endswith("Z"):
-        dt_str = dt_str[:-1] + "+00:00"
-    return datetime.fromisoformat(dt_str)
+# =========================================================
+# OUTPUT COLUMNS (MATCH YOUR MTD FILE)
+# =========================================================
+MTD_COLUMNS = [
+    "date_time", "settlement_id", "type", "order_id", "sku", "description", "quantity",
+    "marketplace", "fulfilment", "order_city", "order_state", "order_postal",
+    "tax_collection_model",
+    "product_sales", "product_sales_tax", "postage_credits", "shipping_credits",
+    "shipping_credits_tax", "gift_wrap_credits", "giftwrap_credits_tax",
+    "promotional_rebates", "promotional_rebates_tax",
+    "sales_tax_collected", "marketplace_withheld_tax", "marketplace_facilitator_tax",
+    "selling_fees", "fba_fees", "other_transaction_fees", "other", "total",
+    "account_type", "regulatory_fee", "tax_on_regulatory_fee", "bucket",
+]
 
-@amazon_api_bp.route("/amazon_api/payments/mtd", methods=["GET"])
-def get_payments_mtd():
-    # If your blueprint is mounted as app.register_blueprint(amazon_api_bp, url_prefix="/amazon_api")
-    # then route URL will be: /amazon_api/payments/mtd
-    _apply_region_and_marketplace_from_request()
 
-    now_utc = datetime.now(timezone.utc)
-
-    # ---------- resolve month & year ----------
-    month_param = (request.args.get("month") or "").strip().lower()
-    year_param = (request.args.get("year") or "").strip()
-
-    if not year_param:
-        year = now_utc.year
+# =========================================================
+# DATE RANGE
+# =========================================================
+def _month_date_range_utc(year: int, month: int) -> Tuple[str, str]:
+    start = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
+    if month == 12:
+        end = datetime(year + 1, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     else:
-        year = int(year_param)
+        end = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
-    if not month_param:
-        month_num = now_utc.month
-    else:
-        if month_param.isdigit():
-            month_num = int(month_param)
-        else:
-            if month_param not in MONTHS_MAP:
-                return jsonify({"error": f"Invalid month: {month_param}"}), 400
-            month_num = MONTHS_MAP[month_param]
+    def iso_z(dt: datetime) -> str:
+        return dt.isoformat().replace("+00:00", "Z")
 
-    # full month window on "Amazon side"
-    month_start = datetime(year, month_num, 1, 0, 0, 0, tzinfo=timezone.utc)
-    last_day = calendar.monthrange(year, month_num)[1]
-    month_end = datetime(year, month_num, last_day, 23, 59, 59, tzinfo=timezone.utc)
+    return iso_z(start), iso_z(end)
 
-    # ---------- report type ----------
-    # default to Deferred Transaction Report (like the UI screenshot)
-    report_type = request.args.get(
-        "reportType",
-        "GET_DATE_RANGE_FINANCIAL_HOLDS_DATA",
+
+# =========================================================
+# BASIC HELPERS
+# =========================================================
+def _extract_order_id_from_related_identifiers(
+    related_identifiers: Optional[List[Dict[str, Any]]]
+) -> Optional[str]:
+    if not related_identifiers:
+        return None
+    for rid in related_identifiers:
+        name = (rid or {}).get("relatedIdentifierName")
+        val = (rid or {}).get("relatedIdentifierValue")
+        if name == "ORDER_ID" and val:
+            return str(val)
+    return None
+
+
+def _extract_sku_and_qty_from_contexts(
+    contexts: Optional[List[Dict[str, Any]]]
+) -> Tuple[Optional[str], Optional[float]]:
+    if not contexts:
+        return None, None
+    for ctx in contexts:
+        if (ctx or {}).get("contextType") == "ProductContext":
+            sku = ctx.get("sku")
+            qty = ctx.get("quantityShipped")
+            try:
+                qty_f = float(qty) if qty is not None else None
+            except (TypeError, ValueError):
+                qty_f = None
+            return sku, qty_f
+    return None, None
+
+
+# =========================================================
+# BREAKDOWN WALK + CLASSIFIERS
+# =========================================================
+def _walk_leaf_breakdowns(breakdowns: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """
+    Return ONLY leaf breakdown nodes (no children) from a breakdown tree.
+    Using leaf nodes avoids double counting when Amazon nests totals.
+    """
+    leaves: List[Dict[str, Any]] = []
+
+    def walk(nodes: List[Dict[str, Any]]):
+        for b in nodes or []:
+            children = b.get("breakdowns")
+            has_children = isinstance(children, list) and len(children) > 0
+            if not has_children:
+                leaves.append(b)
+            else:
+                walk(children)
+
+    walk(breakdowns or [])
+    return leaves
+
+
+def _walk_all_breakdowns_with_path(
+    breakdowns: Optional[List[Dict[str, Any]]]
+) -> List[Tuple[Dict[str, Any], str, List[str]]]:
+    """
+    Walk all breakdown nodes (including parents) and return:
+      (node, normalized_node_type, path_types_including_node)
+    The path is a list of normalized breakdownType strings from root->node.
+    """
+    out: List[Tuple[Dict[str, Any], str, List[str]]] = []
+
+    def walk(nodes: List[Dict[str, Any]], path: List[str]):
+        for b in nodes or []:
+            t = _btype(b)
+            new_path = path + [t]
+            out.append((b, t, new_path))
+            children = b.get("breakdowns")
+            if isinstance(children, list) and children:
+                walk(children, new_path)
+
+    walk(breakdowns or [], [])
+    return out
+
+
+def _amt(b: Dict[str, Any]) -> float:
+    v = ((b.get("breakdownAmount") or {}).get("currencyAmount")) or 0
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _btype(b: Dict[str, Any]) -> str:
+    return str(b.get("breakdownType", "")).lower().replace(" ", "")
+
+
+def _contains_any(s: str, needles: List[str]) -> bool:
+    return any(n in s for n in needles)
+
+
+# Selling fees keywords (EU often uses "referralfee", "variableclosingfee", etc.)
+SELLING_FEE_KEYS = [
+    "referral", "commission", "sellingfee",
+    "variableclosing", "closingfee", "fixedclosing",
+    "peritem", "subscription", "platformfee"
+]
+
+# FBA fee keywords (catch the ones that were leaking into other_transaction_fees)
+FBA_FEE_KEYS = [
+    "fba", "fulfillment", "fulfilment", "pickpack", "pick_pack",
+    "outbound", "inbound", "transport", "transportation",
+    "storage", "longtermstorage", "ltstorage",
+    "removal", "disposal", "returnsprocessing", "returnprocessing",
+    "prep", "label", "repack", "warehouse", "handling"
+]
+
+# ✅ ServiceFee / storage billing keywords that should NOT be counted as FBA fees
+SERVICE_FEE_EXCLUDE_KEYS = [
+    "storagebilling", "fbastoragebilling", "storagefee", "inventorystorage",
+    "agedinventory", "longtermstorage", "ltstorage", "storage"
+]
+
+# Withheld/facilitator tax keywords (marketplace withheld)
+WITHHELD_TAX_KEYS = [
+    "withheld", "marketplacewithheld", "withheldtax", "taxwithheld"
+]
+
+FACILITATOR_TAX_KEYS = [
+    "facilitator", "marketplacefacilitator"
+]
+
+# Promo keys
+PROMO_KEYS = ["promotion", "discount", "rebate", "coupon"]
+
+
+def _sum_where(
+    leaves: List[Dict[str, Any]],
+    pred,
+) -> float:
+    total = 0.0
+    for b in leaves:
+        t = _btype(b)
+        if pred(t):
+            total += _amt(b)
+    return total
+
+
+# =========================================================
+# FLATTEN TRANSACTION (FULL MTD SCHEMA)
+# =========================================================
+def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
+    posted_date = tx.get("postedDate")
+    ttype = tx.get("transactionType")
+    tstatus = tx.get("transactionStatus")
+    desc = tx.get("description")
+    total_amount = (tx.get("totalAmount") or {}).get("currencyAmount")
+
+    marketplace_details = tx.get("marketplaceDetails") or {}
+    marketplace = marketplace_details.get("marketplaceName") or marketplace_details.get("marketplaceId")
+
+    order_id = _extract_order_id_from_related_identifiers(tx.get("relatedIdentifiers") or [])
+
+    # Item-level (sku/qty + item breakdowns)
+    sku = None
+    quantity = None
+    item_breakdowns: List[Dict[str, Any]] = []
+    items = tx.get("items") or []
+    if items:
+        item0 = items[0] or {}
+        sku, quantity = _extract_sku_and_qty_from_contexts(item0.get("contexts") or [])
+        if isinstance(item0.get("breakdowns"), list):
+            item_breakdowns = item0["breakdowns"]
+
+    tx_breakdowns: List[Dict[str, Any]] = tx.get("breakdowns") or []
+
+    # Leaf nodes
+    item_leaves = _walk_leaf_breakdowns(item_breakdowns)
+    tx_leaves = _walk_leaf_breakdowns(tx_breakdowns)
+
+    # ------------------- PRODUCT SALES (VAT-INCLUSIVE AS YOU WANT) -------------------
+    product_sales_net = _sum_where(
+        item_leaves,
+        lambda t: (_contains_any(t, ["principal", "itemprice"]) and ("tax" not in t))
     )
 
-    # ---------- 1) LIST existing reports (no POST) ----------
-    all_reports = []
-    params = {
-        "reportTypes": report_type,
-        "processingStatuses": "DONE",
-        "pageSize": 100,
+    # If principal missing, fall back to totalAmount
+    if abs(product_sales_net) < 1e-9:
+        try:
+            product_sales_net = float(total_amount or 0.0)
+        except (TypeError, ValueError):
+            product_sales_net = 0.0
+
+    product_sales_tax = _sum_where(
+        item_leaves,
+        lambda t: ("tax" in t) and ("shipping" not in t) and (not _contains_any(t, PROMO_KEYS))
+    )
+
+    # VAT-inclusive product sales
+    product_sales = product_sales_net + product_sales_tax
+
+    # ------------------- SHIPPING / POSTAGE -------------------
+    shipping_credits = _sum_where(
+        item_leaves,
+        lambda t: (("shipping" in t or "shipcharge" in t or "shippingcharges" in t) and ("tax" not in t))
+    )
+    shipping_credits_tax = _sum_where(
+        item_leaves,
+        lambda t: ("shipping" in t and "tax" in t)
+    )
+    postage_credits = shipping_credits  # your UK behavior
+
+    # ------------------- PROMOTIONS (SPLIT: rebates vs rebates_tax) -------------------
+    promotional_rebates = _sum_where(
+        item_leaves,
+        lambda t: _contains_any(t, PROMO_KEYS) and ("tax" not in t)
+    )
+    promotional_rebates_tax = _sum_where(
+        item_leaves,
+        lambda t: _contains_any(t, PROMO_KEYS) and ("tax" in t)
+    )
+
+    # =========================================================
+    # ✅ FEES + WITHHELD TAX (NO 2x) + DIVIDE BY 2 FOR FEES
+    # =========================================================
+    selling_fees = 0.0
+    fba_fees = 0.0
+    other_transaction_fees = 0.0
+    marketplace_withheld_tax = 0.0
+    marketplace_facilitator_tax = 0.0
+
+    def _node_has_children(n: Dict[str, Any]) -> bool:
+        ch = n.get("breakdowns")
+        return isinstance(ch, list) and len(ch) > 0
+
+    def _has_non_tax_fee_descendant(children: Optional[List[Dict[str, Any]]], fee_keys: List[str]) -> bool:
+        """
+        True if any descendant has a NON-TAX amount and matches fee_keys.
+        If true, parent is a total -> skip parent to avoid 2x.
+        """
+        for c in children or []:
+            ct = _btype(c)
+            camt = _amt(c)
+            is_tax = ("tax" in ct)
+            is_fee = _contains_any(ct, fee_keys)
+            if (not is_tax) and is_fee and abs(camt) > 1e-12:
+                return True
+
+            gch = c.get("breakdowns")
+            if isinstance(gch, list) and gch:
+                if _has_non_tax_fee_descendant(gch, fee_keys):
+                    return True
+        return False
+
+    # Walk ALL nodes (for net fees + withheld/facilitator)
+    for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
+        amt = _amt(node)
+        if abs(amt) < 1e-12:
+            continue
+
+        path_str = "".join(path)
+        is_tax = ("tax" in t) or ("tax" in path_str)
+
+        is_withheld = _contains_any(path_str, WITHHELD_TAX_KEYS)
+        is_facilitator = _contains_any(path_str, FACILITATOR_TAX_KEYS)
+
+        is_selling_fee = _contains_any(path_str, SELLING_FEE_KEYS)
+        is_fba_fee = _contains_any(path_str, FBA_FEE_KEYS)
+
+        # ✅ exclude ServiceFee / storage billing from fba_fees
+        is_service_fee_like = (
+            (ttype or "").lower().replace(" ", "") == "servicefee"
+            or _contains_any(path_str, SERVICE_FEE_EXCLUDE_KEYS)
+        )
+
+        # --- Withheld / facilitator tax
+        if is_withheld:
+            marketplace_withheld_tax += amt
+            continue
+        if is_facilitator:
+            marketplace_facilitator_tax += amt
+            continue
+
+        # --- NET Selling fee (avoid 2x by skipping parent totals)
+        if is_selling_fee and (not is_tax) and (not is_fba_fee):
+            children = node.get("breakdowns") if _node_has_children(node) else None
+            if _has_non_tax_fee_descendant(children, SELLING_FEE_KEYS):
+                continue
+            selling_fees += amt
+            continue
+
+        # --- NET FBA fee (avoid 2x by skipping parent totals) + ✅ exclude ServiceFee storage rows
+        if is_fba_fee and (not is_tax) and (not is_service_fee_like):
+            children = node.get("breakdowns") if _node_has_children(node) else None
+            if _has_non_tax_fee_descendant(children, FBA_FEE_KEYS):
+                continue
+            fba_fees += amt
+            continue
+
+    # --- OTHER TRANSACTION FEES: take only LEAF tax nodes to avoid 2x totals
+    for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
+        if _node_has_children(node):
+            continue  # ✅ only leaf nodes
+
+        amt = _amt(node)
+        if abs(amt) < 1e-12:
+            continue
+
+        path_str = "".join(path)
+
+        # skip withheld/facilitator tax from other_transaction_fees
+        if _contains_any(path_str, WITHHELD_TAX_KEYS) or _contains_any(path_str, FACILITATOR_TAX_KEYS):
+            continue
+
+        is_tax = ("tax" in t) or ("tax" in path_str)
+        is_fee_related = (
+            _contains_any(path_str, SELLING_FEE_KEYS)
+            or _contains_any(path_str, FBA_FEE_KEYS)
+            or ("fee" in path_str)
+        )
+
+        if is_tax and is_fee_related and (not _contains_any(path_str, PROMO_KEYS)):
+            other_transaction_fees += amt
+            continue
+
+        if _contains_any(path_str, ["chargeback", "holdback"]):
+            other_transaction_fees += amt
+            continue
+
+    # Keep your sign normalization behavior
+    if selling_fees > 0:
+        selling_fees = -abs(selling_fees)
+    # =========================================================
+    # ✅ MERGE OTHER TRANSACTION FEES INTO FBA FEES
+    # =========================================================
+
+    # Move all other_transaction_fees into fba_fees
+    if abs(other_transaction_fees) > 1e-12:
+        fba_fees += other_transaction_fees
+        other_transaction_fees = 0.0
+
+    # Keep FBA fees negative
+    if fba_fees > 0:
+        fba_fees = -abs(fba_fees)
+
+    if other_transaction_fees > 0:
+        other_transaction_fees = -abs(other_transaction_fees)
+
+    
+
+    if marketplace_withheld_tax > 0:
+        marketplace_withheld_tax = -abs(marketplace_withheld_tax)
+    if marketplace_facilitator_tax > 0:
+        marketplace_facilitator_tax = -abs(marketplace_facilitator_tax)
+
+    # ✅ Your requirement: selling_fees and fba_fees should be 1x -> divide by 2
+    # (do NOT affect other columns)
+    selling_fees = selling_fees / 2.0 if abs(selling_fees) > 1e-12 else selling_fees
+    fba_fees = fba_fees / 2.0 if abs(fba_fees) > 1e-12 else fba_fees
+
+    # ------------------- SALES TAX COLLECTED (YOU WANT IT = WITHHELD TAX) -------------------
+    sales_tax_collected = marketplace_withheld_tax
+    if abs(sales_tax_collected) < 1e-9:
+        # fallback if withheld not present
+        sales_tax_collected = product_sales_tax + shipping_credits_tax
+        if sales_tax_collected > 0:
+            sales_tax_collected = -abs(sales_tax_collected)
+
+    # ------------------- TOTAL (KEEP YOUR NET STYLE) -------------------
+    total_calc = (
+        product_sales
+        + shipping_credits
+        + postage_credits
+        - promotional_rebates
+        - promotional_rebates_tax
+        + selling_fees
+        + fba_fees
+        + other_transaction_fees
+        + marketplace_withheld_tax
+        + marketplace_facilitator_tax
+        - sales_tax_collected  # if you want settlement-style net; adjust if needed
+    )
+
+    # Build full MTD schema row
+    row: Dict[str, Any] = {
+        "date_time": posted_date,
+        "settlement_id": None,
+        "type": ttype,
+        "order_id": order_id,
+        "sku": sku,
+        "description": desc,
+        "quantity": quantity,
+        "marketplace": marketplace,
+
+        "fulfilment": None,
+        "order_city": None,
+        "order_state": None,
+        "order_postal": None,
+        "tax_collection_model": None,
+
+        "product_sales": product_sales,
+        "product_sales_tax": product_sales_tax,
+        "postage_credits": postage_credits,
+        "shipping_credits": shipping_credits,
+        "shipping_credits_tax": shipping_credits_tax,
+        "gift_wrap_credits": 0.0,
+        "giftwrap_credits_tax": 0.0,
+
+        "promotional_rebates": promotional_rebates,          # ✅ excludes promo tax
+        "promotional_rebates_tax": promotional_rebates_tax,  # ✅ promo tax separate
+
+        "marketplace_withheld_tax": marketplace_withheld_tax,
+        "marketplace_facilitator_tax": marketplace_facilitator_tax,
+
+        "selling_fees": selling_fees,
+        "fba_fees": fba_fees,
+        "other_transaction_fees": other_transaction_fees,
+        "other": 0.0,
+
+        "sales_tax_collected": sales_tax_collected,          # ✅ equals withheld tax
+        "regulatory_fee": 0.0,
+        "tax_on_regulatory_fee": 0.0,
+        "account_type": None,
+
+        "total": total_calc,
+        "bucket": tstatus,
     }
+
+    return row
+
+
+# =========================================================
+# ROUTE
+# =========================================================
+@amazon_api_bp.route("/amazon_api/finances/monthly_transactions", methods=["GET"])
+def finances_monthly_transactions():
+    """
+    Query params:
+      - year (int, default: current UTC year)
+      - month (int, default: 6)
+      - transaction_status (optional, default RELEASED)
+      - marketplace_id (optional)
+      - transaction_type (optional, e.g. Shipment)
+      - format (json | excel)
+    """
+    # -------- auth --------
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"success": False, "error": "Authorization token is missing or invalid"}), 401
+
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_id = payload["user_id"]
+    except jwt.ExpiredSignatureError:
+        return jsonify({"success": False, "error": "Token has expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"success": False, "error": "Invalid token"}), 401
+
+    # -------- params --------
+    now_utc = datetime.now(timezone.utc)
+    try:
+        year = int(request.args.get("year", now_utc.year))
+        month = int(request.args.get("month", 6))
+        if month < 1 or month > 12:
+            raise ValueError("month must be 1-12")
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid year or month"}), 400
+
+    transaction_status = request.args.get("transaction_status", "RELEASED")
+    marketplace_id = request.args.get("marketplace_id")
+    transaction_type_filter = request.args.get("transaction_type")
+    response_format = (request.args.get("format") or "json").lower()
+
+    # -------- region + marketplace override --------
+    _apply_region_and_marketplace_from_request()
+
+    # -------- load refresh token for this user + region --------
+    au = amazon_user.query.filter_by(user_id=user_id, region=amazon_client.region).first()
+    if not au or not au.refresh_token:
+        return jsonify({
+            "success": False,
+            "error": "Amazon account not connected for this region",
+            "status": "no_refresh_token",
+        }), 400
+
+    amazon_client.refresh_token = au.refresh_token
+
+    # -------- date range --------
+    posted_after, posted_before = _month_date_range_utc(year, month)
+
+    # -------- call Finances API (pagination) --------
+    params: Dict[str, Any] = {
+        "postedAfter": posted_after,
+        "postedBefore": posted_before,
+        "marketplaceId": marketplace_id or amazon_client.marketplace_id,
+    }
+    if transaction_status:
+        params["transactionStatus"] = transaction_status
+
+    all_rows: List[Dict[str, Any]] = []
 
     while True:
         res = amazon_client.make_api_call(
-            "/reports/2021-06-30/reports",
+            "/finances/2024-06-19/transactions",
             method="GET",
             params=params,
         )
 
-        if "error" in res:
-            return jsonify({
-                "error": "Failed to list reports",
-                "details": res,
-            }), 500
+        if not res or "error" in res:
+            return jsonify({"success": False, "error": res or {"error": "Unknown SP-API error"}}), 502
 
-        reports = res.get("reports", [])
-        all_reports.extend(reports)
+        payload = res.get("payload") or res
+        transactions = payload.get("transactions") or []
 
-        next_token = res.get("nextToken")
+        for tx in transactions:
+            tstatus = (tx or {}).get("transactionStatus")
+            ttype = (tx or {}).get("transactionType")
+
+            # hard filter
+            if tstatus != "RELEASED":
+                continue
+
+            # optional type filter
+            if transaction_type_filter and ttype != transaction_type_filter:
+                continue
+
+            all_rows.append(_flatten_transaction_to_row(tx or {}))
+
+        next_token = payload.get("nextToken")
         if not next_token:
             break
-        # for next page only nextToken is allowed, no other filters
         params = {"nextToken": next_token}
 
-    # ---------- 2) Filter for month we want ----------
-    candidates = []
-    for r in all_reports:
-        ds = r.get("dataStartTime")
-        de = r.get("dataEndTime")
-        if not ds or not de:
-            continue
-        sdt = _parse_iso(ds)
-        edt = _parse_iso(de)
+    # -------- excel --------
+    if response_format == "excel":
+        df = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
+        # ✅ force full MTD schema (and ensure missing cols appear)
+        df = df.reindex(columns=MTD_COLUMNS, fill_value=0.0)
 
-        # require report to be fully inside that month window
-        if sdt >= month_start and edt <= month_end:
-            candidates.append(r)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="Transactions")
+        output.seek(0)
 
-    if not candidates:
-        return jsonify({
-            "error": "No completed report found for this month",
-            "hint": (
-                "Go to Seller Central → Payments → Reports Repository → "
-                "Payment Reports → Deferred Transaction Report, request the "
-                f"report for {month_num:02d}/{year}, then call this endpoint again."
-            ),
-            "requested_month": month_num,
-            "requested_year": year,
-            "reportType": report_type,
-        }), 404
+        filename = f"finances_transactions_{year}_{month:02d}.xlsx"
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
-    # pick the most recently created one
-    candidates.sort(
-        key=lambda r: r.get("createdTime", ""),
-        reverse=True,
-    )
-    chosen = candidates[0]
-    report_doc_id = chosen.get("reportDocumentId")
-
-    if not report_doc_id:
-        return jsonify({
-            "error": "Selected report has no document id",
-            "report": chosen,
-        }), 500
-
-    # ---------- 3) Get document metadata ----------
-    doc_res = amazon_client.make_api_call(
-        f"/reports/2021-06-30/documents/{report_doc_id}",
-        method="GET",
-    )
-
-    if "error" in doc_res or "url" not in doc_res:
-        return jsonify({
-            "error": "Failed to fetch report document",
-            "details": doc_res,
-        }), 500
-
-    download_url = doc_res["url"]
-    compression = doc_res.get("compressionAlgorithm")
-
-    # ---------- 4) Download file from pre-signed URL ----------
-    raw_resp = requests.get(download_url, timeout=120)
-    if raw_resp.status_code != 200:
-        return jsonify({
-            "error": "Failed to download report file",
-            "status_code": raw_resp.status_code,
-            "text": raw_resp.text[:500],
-        }), 500
-
-    content_bytes = raw_resp.content
-    if compression == "GZIP":
-        content_bytes = gzip.decompress(content_bytes)
-
-    # Payment / deferred transaction reports are comma-separated flat files
-    csv_text = content_bytes.decode("utf-8-sig")
-    df = pd.read_csv(io.StringIO(csv_text))
-
-    # ---------- 5) Optional: normalize columns ----------
-    df.columns = [c.strip().lower() for c in df.columns]
-    rename_map = {col: COLUMN_MAPPING[col] for col in df.columns if col in COLUMN_MAPPING}
-    if rename_map:
-        df = df.rename(columns=rename_map)
-
-    # ---------- 6) Excel or JSON ----------
-    out_format = (request.args.get("format") or "excel").lower()
-
-    if out_format == "json":
-        return jsonify({
-            "meta": {
-                "reportType": report_type,
-                "month": month_num,
-                "year": year,
-                "row_count": int(df.shape[0]),
-            },
-            "data": df.to_dict(orient="records"),
-        })
-
-    # default: Excel
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="MTD")
-
-    output.seek(0)
-    file_name = f"amazon_{report_type}_mtd_{month_num:02d}_{year}.xlsx"
-
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name=file_name,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    # -------- json --------
+    return jsonify({
+        "success": True,
+        "year": year,
+        "month": month,
+        "count": len(all_rows),
+        "transactions": all_rows,
+    }), 200
