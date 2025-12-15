@@ -1642,19 +1642,20 @@ const AppSidebar: React.FC = () => {
   return (
     <>
       <aside
-        className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-4 left-0 bg-white text-gray-900 h-screen overflow-y-auto transition-all duration-300 ease-in-out z-[1100] 
-    ${
-      isMobileOpen
-        ? "w-full"
-        : isExpanded || isHovered
-        ? "w-[290px]"
-        : "w-[90px]"
-    }
-    ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
-    lg:translate-x-0 font-lato`}
-        onMouseEnter={() => !isExpanded && setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
+  className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-4 left-0 bg-white text-gray-900 h-screen overflow-y-auto transition-all duration-300 ease-in-out z-[1100]
+  ${
+    isMobileOpen
+      ? "w-full"
+      : isExpanded || isHovered
+      ? "w-[90px] md:w-[240px] lg:w-[260px] xl:w-[290px]"
+      : "w-[90px]"
+  }
+  ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
+  lg:translate-x-0 font-lato`}
+  onMouseEnter={() => !isExpanded && setIsHovered(true)}
+  onMouseLeave={() => setIsHovered(false)}
+>
+
         {/* Logo + toggle */}
         <div
           className={`py-8 flex gap-2 items-center border-0 ${

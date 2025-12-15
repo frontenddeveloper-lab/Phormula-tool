@@ -4329,11 +4329,12 @@ const plItems = useMemo(() => {
           extension: "png",
         });
 
+        // cast anchor to `any` to satisfy ExcelJS Anchor typing
         sheet.addImage(imageId, {
-          tl: { col: 0, row: 9 },
-          br: { col: 8, row: 28 },
+          tl: { col: 0, row: 9 } as any,
+          br: { col: 8, row: 28 } as any,
           editAs: "oneCell",
-        });
+        } as any);
       }
 
       const buffer = await workbook.xlsx.writeBuffer();
