@@ -1276,13 +1276,10 @@ interface TrendChartSectionProps {
   nonEmptyCountriesFromApi: CountryKey[];
   selectedCountries: Record<CountryKey, boolean>;
   onToggleCountry: (country: CountryKey) => void;
-
-  // for search dropdown
   authToken: string | null;
   onProductSelect: (productName: string) => void;
-
-  // 🆕 new optional handler
   onViewBusinessInsights?: () => void;
+  insightsLoading?: boolean;
 }
 
 const TrendChartSection: React.FC<TrendChartSectionProps> = ({
@@ -1296,6 +1293,7 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
   authToken,
   onProductSelect,
   onViewBusinessInsights,
+  insightsLoading,
 }) => {
   const [activeTab, setActiveTab] = useState<TrendTab>("sales_cm1");
 
@@ -1573,7 +1571,7 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
             ]}
           />
 
-          {onViewBusinessInsights && (
+          {/* {onViewBusinessInsights && (
             <button
               type="button"
               onClick={onViewBusinessInsights}
@@ -1581,7 +1579,51 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
             >
               View Business Insights
             </button>
+          )} */}
+          {onViewBusinessInsights && (
+            <button
+              type="button"
+              onClick={onViewBusinessInsights}
+              disabled={insightsLoading}
+              className={[
+                "inline-flex items-center gap-2 rounded-md px-3 py-1.5",
+                "text-xs sm:text-sm font-semibold",
+                "transition",
+                insightsLoading
+                  ? "bg-slate-500 cursor-not-allowed"
+                  : "bg-slate-800 hover:bg-slate-700",
+                "text-amber-100 focus:outline-none focus:ring-2 focus:ring-slate-400",
+              ].join(" ")}
+            >
+              {insightsLoading ? (
+                <>
+                  <svg
+                    className="h-4 w-4 animate-spin text-amber-100"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                    />
+                  </svg>
+                  Loading insights…
+                </>
+              ) : (
+                "View Business Insights"
+              )}
+            </button>
           )}
+
         </div>
       </div>
 

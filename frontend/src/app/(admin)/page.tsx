@@ -4878,9 +4878,9 @@ const plItems = useMemo(() => {
               </div>
 
               {/* Inventory section only makes sense for Amazon, so keep this guard */}
-              {amazonIntegrated && (
+              {/* {amazonIntegrated && (
                 <CurrentInventorySection region={graphRegion as RegionKey} />
-              )}
+              )} */}
 
               {/* <AgeingInventorySection /> */}
             </>
