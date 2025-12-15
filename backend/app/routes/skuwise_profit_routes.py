@@ -587,7 +587,7 @@ def productwise_growth_ai():
         prompt = f"""
 You are a senior business analyst. Based on the following 2-month comparison data of the product, generate insights in this format:
 
-Details for '{product_name}'
+
 
 Observations:
 - List the 2–3 most important changes using ONLY the given metrics:

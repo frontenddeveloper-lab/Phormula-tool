@@ -1744,8 +1744,7 @@ const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
         acc.nsOld += num(pickOld(r, 'net_sales_month1', 'net_sales_month2'));
         acc.nsNew += num(pickNew(r, 'net_sales_month1', 'net_sales_month2'));
 
-        acc.mixOld += num(pickOld(r, 'sales_mix_month1', 'sales_mix_month2'));
-        acc.mixNew += num(pickNew(r, 'sales_mix_month1', 'sales_mix_month2') ?? r?.['Sales Mix (Month2)']);
+        // ✅ FIX: do NOT sum Sales Mix % values
 
         acc.cm1Old += num(pickOld(r, 'profit_month1', 'profit_month2'));
         acc.cm1New += num(pickNew(r, 'profit_month1', 'profit_month2'));
@@ -3215,58 +3214,106 @@ exportToExcel(allRows, file);
       <strong>Total</strong>
     </td>
 
-    {/* Sales Mix total */}
+    {/* Sales Mix */}
     <td className="border border-[#414042] px-2 py-2.5 text-center font-bold">
       {(() => {
         const rows = (categorizedGrowth[activeTab] || []) as any[];
-        const sum = rows.reduce((s, r) => s + Number(r?.['Sales Mix (Month2)'] ?? 0), 0);
-        return `${sum.toFixed(2)}%`;
+        const sum = rows.reduce(
+          (s, r) => s + Number(r?.['Sales Mix (Month2)'] ?? 0),
+          0
+        );
+        const rounded = Number(sum.toFixed(2));
+        const fixed = Math.abs(rounded - 100) < 0.05 ? 100 : rounded;
+        return `${fixed.toFixed(2)}%`;
       })()}
     </td>
 
-    {/* Growth totals computed from month1/month2 totals */}
     {(() => {
-      const fullRows = (categorizedGrowth[activeTab] || []) as any[];
+      const rows = (categorizedGrowth[activeTab] || []) as any[];
 
-      const sum = (key: string) =>
-        rows.reduce((s, r) => s + Number(r?.[key] ?? 0), 0);
+      const sum = (k: string) =>
+        rows.reduce((s, r) => s + Number(r?.[k] ?? 0), 0);
 
       const pct = (m1: number, m2: number) => {
-        if (!Number.isFinite(m1) || !Number.isFinite(m2)) return null;
-        if (m1 === 0) return 0; // same rule as backend
+        if (m1 === 0) return 0;
         return ((m2 - m1) / m1) * 100;
       };
 
-      const totalQty = pct(sum('quantity_month1'), sum('quantity_month2'));
-      const totalAsp = pct(sum('asp_month1'), sum('asp_month2'));
-      const totalSales = pct(sum('net_sales_month1'), sum('net_sales_month2'));
-
-      // Sales mix change: use summed sales_mix_month1/month2 if present, else blank
-      const mix1 = sum('sales_mix_month1');
-      const mix2 = sum('sales_mix_month2');
-      const totalMixChange =
-        mix1 || mix2 ? pct(mix1, mix2) : null;
-
-      const totalUnitProfit = pct(
-        sum('unit_wise_profitability_month1'),
-        sum('unit_wise_profitability_month2')
-      );
-      const totalProfit = pct(sum('profit_month1'), sum('profit_month2'));
-
       const cells = [
-        totalQty,
-        totalAsp,
-        totalSales,
-        ...(activeTab !== 'new_or_reviving_skus' ? [totalMixChange] : []),
-        totalUnitProfit,
-        totalProfit,
+        ...(activeTab !== 'new_or_reviving_skus'
+          ? [0]
+          : []),
+        pct(sum('quantity_month1'), sum('quantity_month2')),
+        pct(sum('asp_month1'), sum('asp_month2')),
+        pct(sum('net_sales_month1'), sum('net_sales_month2')),
+        pct(sum('unit_wise_profitability_month1'), sum('unit_wise_profitability_month2')),
+        pct(sum('profit_month1'), sum('profit_month2')),
       ];
 
-      return cells.map((v, i) => (
-        <td key={i} className="border border-[#414042] px-2 py-2.5 text-center font-bold">
-          {v == null ? '' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`}
-        </td>
-      ));
+      return cells.map((v, i) => {
+        const val = Number(v);
+        const sign = val >= 0 ? '+' : '';
+        const text = `${sign}${val.toFixed(2)}%`;
+
+        // ✅ Total row classification:
+        // High Growth: val >= 5
+        // Negative Growth: val < 0
+        // Low Growth: 0 <= val < 5 (or any other neutral)
+        if (val >= 5) {
+          return (
+            <td
+              key={i}
+              className="border border-[#414042] px-2 py-2.5 text-center font-bold"
+              style={{ fontWeight: 600 }}
+            >
+              <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#5EA68E]">
+                <span className="w-4 flex justify-center">
+                  <FaArrowUp size={12} />
+                </span>
+                <span className="tabular-nums inline-block w-[10px] text-right">
+                  {text}
+                </span>
+              </span>
+            </td>
+          );
+        }
+
+        if (val < 0) {
+          return (
+            <td
+              key={i}
+              className="border border-[#414042] px-2 py-2.5 text-center font-bold"
+              style={{ fontWeight: 600 }}
+            >
+              <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#FF5C5C]">
+                <span className="w-4 flex justify-center">
+                  <FaArrowDown size={12} />
+                </span>
+                <span className="tabular-nums inline-block w-[10px] text-right">
+                  {text}
+                </span>
+              </span>
+            </td>
+          );
+        }
+
+        return (
+          <td
+            key={i}
+            className="border border-[#414042] px-2 py-2.5 text-center font-bold"
+            style={{ fontWeight: 600, color: '#414042' }}
+          >
+            <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#414042]">
+              <span className="w-4 flex justify-center">
+                {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
+              </span>
+              <span className="tabular-nums inline-block w-[10px] text-right">
+                {text}
+              </span>
+            </span>
+          </td>
+        );
+      });
     })()}
 
     {Object.keys(skuInsights).length > 0 && (
@@ -3274,8 +3321,6 @@ exportToExcel(allRows, file);
     )}
   </tr>
 </tfoot>
-
-
 
 </table>
             < div className='flex justify-center mt-2'>

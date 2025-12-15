@@ -2880,9 +2880,10 @@ import {
 } from "@/lib/dashboard/format";
 
 import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
+import { useGetUserDataQuery } from "@/lib/api/profileApi";
 
 
-type HomeCurrency = "USD" | "GBP";
+type HomeCurrency = "USD" | "GBP" | "INR" | "CAD";
 
 /* ===================== ENV & ENDPOINTS ===================== */
 const baseURL =
@@ -2905,6 +2906,11 @@ const GBP_TO_USD_ENV = Number(
 const INR_TO_USD_ENV = Number(
   process.env.NEXT_PUBLIC_INR_TO_USD || "0.01128"
 );
+
+const CAD_TO_USD_ENV = Number(
+  process.env.NEXT_PUBLIC_CAD_TO_USD || "0.74"
+);
+
 
 const USE_MANUAL_LAST_MONTH =
   (process.env.NEXT_PUBLIC_USE_MANUAL_LAST_MONTH || "false").toLowerCase() ===
@@ -2964,8 +2970,13 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<any>(null);
 
-  const [homeCurrency, setHomeCurrency] =
-    useState<HomeCurrency>("USD");
+  const { data: userData } = useGetUserDataQuery();
+
+  // Normalized home currency from profile (e.g. "usd", "inr")
+  const profileHomeCurrency = (userData?.homeCurrency || "USD")
+    .toUpperCase() as HomeCurrency;
+
+  const homeCurrency = profileHomeCurrency;
 
   // Amazon connections (real integration status)
   const { connections: amazonConnections } = useAmazonConnections();
@@ -2995,69 +3006,137 @@ export default function DashboardPage() {
   // FX rates: GBP→USD (Amazon UK) and INR→USD (Shopify India)
   const [gbpToUsd, setGbpToUsd] = useState(GBP_TO_USD_ENV);
   const [inrToUsd, setInrToUsd] = useState(INR_TO_USD_ENV);
+  const [cadToUsd, setCadToUsd] = useState(CAD_TO_USD_ENV);
+
   const [fxLoading, setFxLoading] = useState(false);
 
-  // 👇 add these helpers here
+const logFx = (
+  amount: number,
+  from: string,
+  to: string,
+  details: Record<string, number>
+) => {
+  if (process.env.NODE_ENV !== "development") return;
+
+  const parts = Object.entries(details)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(" | ");
+
+  console.log(
+    `%c[FX] ${amount} ${from} → ${to} | ${parts}`,
+    "color:#2CA9E0;font-weight:600"
+  );
+};
+
+
+  // const convertToHomeCurrency = useCallback(
+  //   (
+  //     value: number | null | undefined,
+  //     from: "USD" | "GBP" | "INR" | "CAD"
+  //   ) => {
+  //     const n = toNumberSafe(value ?? 0);
+  //     if (!n) return 0;
+
+  //     // ---- from → USD ----
+  //     let usd = n;
+  //     if (from === "GBP") usd = n * gbpToUsd;
+  //     if (from === "INR") usd = n * inrToUsd;
+  //     if (from === "CAD") usd = n * cadToUsd;
+
+  //     // ---- USD → home ----
+  //     if (homeCurrency === "USD") return usd;
+  //     if (homeCurrency === "GBP") return gbpToUsd ? usd / gbpToUsd : usd;
+  //     if (homeCurrency === "INR") return inrToUsd ? usd / inrToUsd : usd;
+  //     if (homeCurrency === "CAD") return cadToUsd ? usd / cadToUsd : usd;
+
+  //     return usd;
+  //   },
+  //   [homeCurrency, gbpToUsd, inrToUsd, cadToUsd]
+  // );
 
   const convertToHomeCurrency = useCallback(
-    (value: number | null | undefined, from: "USD" | "GBP" | "INR") => {
-      const n = toNumberSafe(value ?? 0);
+  (
+    value: number | null | undefined,
+    from: "USD" | "GBP" | "INR" | "CAD"
+  ) => {
+    const n = toNumberSafe(value ?? 0);
+    if (!n) return 0;
 
-      if (!n) return 0;
+    let usd = n;
+    const details: Record<string, number> = {};
 
-      // Home currency = USD
-      if (homeCurrency === "USD") {
-        switch (from) {
-          case "USD":
-            return n;
-          case "GBP":
-            // GBP → USD
-            return n * gbpToUsd;
-          case "INR":
-            // INR → USD
-            return n * inrToUsd;
-          default:
-            return n;
-        }
-      }
+    // ---- FROM → USD ----
+    if (from === "GBP") {
+      usd = n * gbpToUsd;
+      details["GBP→USD"] = gbpToUsd;
+    }
 
-      // Home currency = GBP
-      if (homeCurrency === "GBP") {
-        switch (from) {
-          case "GBP":
-            return n;
-          case "USD":
-            // USD → GBP (inverse of GBP→USD)
-            return gbpToUsd ? n / gbpToUsd : n;
-          case "INR": {
-            // INR → USD → GBP
-            const usd = n * inrToUsd;
-            return gbpToUsd ? usd / gbpToUsd : usd;
-          }
-          default:
-            return n;
-        }
-      }
+    if (from === "INR") {
+      usd = n * inrToUsd;
+      details["INR→USD"] = inrToUsd;
+    }
 
-      return n;
-    },
-    [homeCurrency, gbpToUsd, inrToUsd]
-  );
+    if (from === "CAD") {
+      usd = n * cadToUsd;
+      details["CAD→USD"] = cadToUsd;
+    }
+
+    // ---- USD → HOME ----
+    let final = usd;
+
+    if (homeCurrency === "GBP") {
+      final = gbpToUsd ? usd / gbpToUsd : usd;
+      details["USD→GBP"] = gbpToUsd ? 1 / gbpToUsd : 1;
+    }
+
+    if (homeCurrency === "INR") {
+      final = inrToUsd ? usd / inrToUsd : usd;
+      details["USD→INR"] = inrToUsd ? 1 / inrToUsd : 1;
+    }
+
+    if (homeCurrency === "CAD") {
+      final = cadToUsd ? usd / cadToUsd : usd;
+      details["USD→CAD"] = cadToUsd ? 1 / cadToUsd : 1;
+    }
+
+    // ---- LOG ----
+    logFx(n, from, homeCurrency, {
+      ...details,
+      Final: Number(final.toFixed(2)),
+    });
+
+    return final;
+  },
+  [homeCurrency, gbpToUsd, inrToUsd, cadToUsd]
+);
+
 
   const formatHomeAmount = useCallback(
     (value: number | null | undefined) => {
       const n = toNumberSafe(value ?? 0);
+
       switch (homeCurrency) {
         case "USD":
           return fmtUSD(n);
         case "GBP":
           return fmtGBP(n);
+        case "CAD":
+          return new Intl.NumberFormat("en-CA", {
+            style: "currency",
+            currency: "CAD",
+          }).format(n);
+        case "INR":
+          return new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: "INR",
+          }).format(n);
         default:
           return fmtNum(n);
       }
     },
     [homeCurrency]
   );
+
 
   const inventoryCountry = useMemo(() => {
     const v = (graphRegion || "").toString().trim().toLowerCase();
@@ -3093,7 +3172,7 @@ export default function DashboardPage() {
         fetch_if_missing: true,
       };
 
-      const [ukRes, inrRes] = await Promise.all([
+      const [ukRes, inrRes, cadRes] = await Promise.all([
         fetch(FX_ENDPOINT, {
           method: "POST",
           headers,
@@ -3114,6 +3193,16 @@ export default function DashboardPage() {
             selected_currency: "USD",
           }),
         }),
+        fetch(FX_ENDPOINT, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            ...commonBody,
+            user_currency: "CAD",
+            country: "ca",
+            selected_currency: "USD",
+          }),
+        }),
       ]);
 
       if (ukRes.ok) {
@@ -3125,6 +3214,14 @@ export default function DashboardPage() {
       } else {
         console.warn("UK FX fetch failed:", ukRes.status);
       }
+      if (cadRes.ok) {
+        const json = await cadRes.json();
+        const rate = json?.record?.conversion_rate;
+        if (json?.success && rate != null) {
+          setCadToUsd(Number(rate));
+        }
+      }
+
 
       if (inrRes.ok) {
         const json = await inrRes.json();
@@ -3562,7 +3659,7 @@ export default function DashboardPage() {
   const hasAnyGraphData = amazonIntegrated || shopifyIntegrated;
 
   const onlyAmazon = amazonIntegrated && !shopifyIntegrated;
-const onlyShopify = shopifyIntegrated && !amazonIntegrated;
+  const onlyShopify = shopifyIntegrated && !amazonIntegrated;
 
 
 
@@ -3916,212 +4013,212 @@ const onlyShopify = shopifyIntegrated && !amazonIntegrated;
   //   formatHomeAmount,
   // ]);
 
-const plItems = useMemo(() => {
-  // ---------- GLOBAL VIEW ----------
-  if (graphRegion === "Global") {
-    // Case 1: BOTH Amazon + Shopify connected → show aggregate
-    if (amazonIntegrated && shopifyIntegrated) {
-      const salesHome = convertToHomeCurrency(combinedUSD, "USD");
+  const plItems = useMemo(() => {
+    // ---------- GLOBAL VIEW ----------
+    if (graphRegion === "Global") {
+      // Case 1: BOTH Amazon + Shopify connected → show aggregate
+      if (amazonIntegrated && shopifyIntegrated) {
+        const salesHome = convertToHomeCurrency(combinedUSD, "USD");
 
+        return [
+          {
+            label: "Sales",
+            raw: salesHome,
+            display: formatHomeAmount(salesHome),
+          },
+          {
+            label: "Amazon Fees",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+          {
+            label: "COGS",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+          {
+            label: "Advertisements",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+          {
+            label: "Other Charges",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+          {
+            label: "Profit",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+        ];
+      }
+
+      // Case 2: ONLY Amazon connected → Global should look exactly like UK
+      if (onlyAmazon) {
+        const salesHome = convertToHomeCurrency(uk.netSalesGBP ?? 0, "GBP");
+        const amazonFeesHome = convertToHomeCurrency(
+          uk.amazonFeesGBP ?? 0,
+          "GBP"
+        );
+        const cogsHome = convertToHomeCurrency(uk.cogsGBP ?? 0, "GBP");
+        const advHome = convertToHomeCurrency(uk.advertisingGBP ?? 0, "GBP");
+        const platformHome = convertToHomeCurrency(
+          uk.platformFeeGBP ?? 0,
+          "GBP"
+        );
+        const profitHome = convertToHomeCurrency(uk.profitGBP ?? 0, "GBP");
+
+        return [
+          {
+            label: "Sales",
+            raw: salesHome,
+            display: formatHomeAmount(salesHome),
+          },
+          {
+            label: "Amazon Fees",
+            raw: amazonFeesHome,
+            display: formatHomeAmount(amazonFeesHome),
+          },
+          {
+            label: "COGS",
+            raw: cogsHome,
+            display: formatHomeAmount(cogsHome),
+          },
+          {
+            label: "Advertisements",
+            raw: advHome,
+            display: formatHomeAmount(advHome),
+          },
+          {
+            label: "Platform Fees",
+            raw: platformHome,
+            display: formatHomeAmount(platformHome),
+          },
+          {
+            label: "Profit",
+            raw: profitHome,
+            display: formatHomeAmount(profitHome),
+          },
+        ];
+      }
+
+      // Case 3: ONLY Shopify connected → Global = Shopify-only aggregate
+      if (onlyShopify) {
+        const salesHome = convertToHomeCurrency(
+          shopifyDeriv?.netSales ?? 0,
+          "INR"
+        );
+
+        return [
+          {
+            label: "Sales",
+            raw: salesHome,
+            display: formatHomeAmount(salesHome),
+          },
+          {
+            label: "Amazon Fees",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+          {
+            label: "COGS",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+          {
+            label: "Advertisements",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+          {
+            label: "Other Charges",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+          {
+            label: "Profit",
+            raw: 0,
+            display: formatHomeAmount(0),
+          },
+        ];
+      }
+
+      // Fallback if somehow no integrations → all zeros
+      const zeroDisplay = formatHomeAmount(0);
       return [
-        {
-          label: "Sales",
-          raw: salesHome,
-          display: formatHomeAmount(salesHome),
-        },
-        {
-          label: "Amazon Fees",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-        {
-          label: "COGS",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-        {
-          label: "Advertisements",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-        {
-          label: "Other Charges",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-        {
-          label: "Profit",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
+        { label: "Sales", raw: 0, display: zeroDisplay },
+        { label: "Amazon Fees", raw: 0, display: zeroDisplay },
+        { label: "COGS", raw: 0, display: zeroDisplay },
+        { label: "Advertisements", raw: 0, display: zeroDisplay },
+        { label: "Other Charges", raw: 0, display: zeroDisplay },
+        { label: "Profit", raw: 0, display: zeroDisplay },
       ];
     }
 
-    // Case 2: ONLY Amazon connected → Global should look exactly like UK
-    if (onlyAmazon) {
-      const salesHome = convertToHomeCurrency(uk.netSalesGBP ?? 0, "GBP");
-      const amazonFeesHome = convertToHomeCurrency(
-        uk.amazonFeesGBP ?? 0,
-        "GBP"
-      );
-      const cogsHome = convertToHomeCurrency(uk.cogsGBP ?? 0, "GBP");
-      const advHome = convertToHomeCurrency(uk.advertisingGBP ?? 0, "GBP");
-      const platformHome = convertToHomeCurrency(
-        uk.platformFeeGBP ?? 0,
-        "GBP"
-      );
-      const profitHome = convertToHomeCurrency(uk.profitGBP ?? 0, "GBP");
+    // ---------- REGION-LEVEL (currently UK only has data) ----------
+    const salesHome = convertToHomeCurrency(uk.netSalesGBP ?? 0, "GBP");
+    const amazonFeesHome = convertToHomeCurrency(
+      uk.amazonFeesGBP ?? 0,
+      "GBP"
+    );
+    const cogsHome = convertToHomeCurrency(uk.cogsGBP ?? 0, "GBP");
+    const advHome = convertToHomeCurrency(uk.advertisingGBP ?? 0, "GBP");
+    const platformHome = convertToHomeCurrency(
+      uk.platformFeeGBP ?? 0,
+      "GBP"
+    );
+    const profitHome = convertToHomeCurrency(uk.profitGBP ?? 0, "GBP");
 
-      return [
-        {
-          label: "Sales",
-          raw: salesHome,
-          display: formatHomeAmount(salesHome),
-        },
-        {
-          label: "Amazon Fees",
-          raw: amazonFeesHome,
-          display: formatHomeAmount(amazonFeesHome),
-        },
-        {
-          label: "COGS",
-          raw: cogsHome,
-          display: formatHomeAmount(cogsHome),
-        },
-        {
-          label: "Advertisements",
-          raw: advHome,
-          display: formatHomeAmount(advHome),
-        },
-        {
-          label: "Platform Fees",
-          raw: platformHome,
-          display: formatHomeAmount(platformHome),
-        },
-        {
-          label: "Profit",
-          raw: profitHome,
-          display: formatHomeAmount(profitHome),
-        },
-      ];
-    }
-
-    // Case 3: ONLY Shopify connected → Global = Shopify-only aggregate
-    if (onlyShopify) {
-      const salesHome = convertToHomeCurrency(
-        shopifyDeriv?.netSales ?? 0,
-        "INR"
-      );
-
-      return [
-        {
-          label: "Sales",
-          raw: salesHome,
-          display: formatHomeAmount(salesHome),
-        },
-        {
-          label: "Amazon Fees",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-        {
-          label: "COGS",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-        {
-          label: "Advertisements",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-        {
-          label: "Other Charges",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-        {
-          label: "Profit",
-          raw: 0,
-          display: formatHomeAmount(0),
-        },
-      ];
-    }
-
-    // Fallback if somehow no integrations → all zeros
-    const zeroDisplay = formatHomeAmount(0);
     return [
-      { label: "Sales", raw: 0, display: zeroDisplay },
-      { label: "Amazon Fees", raw: 0, display: zeroDisplay },
-      { label: "COGS", raw: 0, display: zeroDisplay },
-      { label: "Advertisements", raw: 0, display: zeroDisplay },
-      { label: "Other Charges", raw: 0, display: zeroDisplay },
-      { label: "Profit", raw: 0, display: zeroDisplay },
+      {
+        label: "Sales",
+        raw: salesHome,
+        display: formatHomeAmount(salesHome),
+      },
+      {
+        label: "Amazon Fees",
+        raw: amazonFeesHome,
+        display: formatHomeAmount(amazonFeesHome),
+      },
+      {
+        label: "COGS",
+        raw: cogsHome,
+        display: formatHomeAmount(cogsHome),
+      },
+      {
+        label: "Advertisements",
+        raw: advHome,
+        display: formatHomeAmount(advHome),
+      },
+      {
+        label: "Platform Fees",
+        raw: platformHome,
+        display: formatHomeAmount(platformHome),
+      },
+      {
+        label: "Profit",
+        raw: profitHome,
+        display: formatHomeAmount(profitHome),
+      },
     ];
-  }
-
-  // ---------- REGION-LEVEL (currently UK only has data) ----------
-  const salesHome = convertToHomeCurrency(uk.netSalesGBP ?? 0, "GBP");
-  const amazonFeesHome = convertToHomeCurrency(
-    uk.amazonFeesGBP ?? 0,
-    "GBP"
-  );
-  const cogsHome = convertToHomeCurrency(uk.cogsGBP ?? 0, "GBP");
-  const advHome = convertToHomeCurrency(uk.advertisingGBP ?? 0, "GBP");
-  const platformHome = convertToHomeCurrency(
-    uk.platformFeeGBP ?? 0,
-    "GBP"
-  );
-  const profitHome = convertToHomeCurrency(uk.profitGBP ?? 0, "GBP");
-
-  return [
-    {
-      label: "Sales",
-      raw: salesHome,
-      display: formatHomeAmount(salesHome),
-    },
-    {
-      label: "Amazon Fees",
-      raw: amazonFeesHome,
-      display: formatHomeAmount(amazonFeesHome),
-    },
-    {
-      label: "COGS",
-      raw: cogsHome,
-      display: formatHomeAmount(cogsHome),
-    },
-    {
-      label: "Advertisements",
-      raw: advHome,
-      display: formatHomeAmount(advHome),
-    },
-    {
-      label: "Platform Fees",
-      raw: platformHome,
-      display: formatHomeAmount(platformHome),
-    },
-    {
-      label: "Profit",
-      raw: profitHome,
-      display: formatHomeAmount(profitHome),
-    },
-  ];
-}, [
-  graphRegion,
-  amazonIntegrated,
-  shopifyIntegrated,
-  onlyAmazon,
-  onlyShopify,
-  combinedUSD,
-  uk.netSalesGBP,
-  uk.amazonFeesGBP,
-  uk.cogsGBP,
-  uk.advertisingGBP,
-  uk.platformFeeGBP,
-  uk.profitGBP,
-  shopifyDeriv?.netSales,
-  convertToHomeCurrency,
-  formatHomeAmount,
-]);
+  }, [
+    graphRegion,
+    amazonIntegrated,
+    shopifyIntegrated,
+    onlyAmazon,
+    onlyShopify,
+    combinedUSD,
+    uk.netSalesGBP,
+    uk.amazonFeesGBP,
+    uk.cogsGBP,
+    uk.advertisingGBP,
+    uk.platformFeeGBP,
+    uk.profitGBP,
+    shopifyDeriv?.netSales,
+    convertToHomeCurrency,
+    formatHomeAmount,
+  ]);
 
 
   const hasGlobalCard = !noIntegrations;
@@ -4134,25 +4231,18 @@ const plItems = useMemo(() => {
 
   /* ---------- Chart & Excel export wiring ---------- */
 
-  // const countryNameForGraph =
-  //   graphRegion === "Global"
-  //     ? "global"
-  //     : graphRegion.toLowerCase();
-
-  // const currencySymbol = getCurrencySymbol(countryNameForGraph);
-
   const countryNameForGraph =
     graphRegion === "Global"
       ? "global"
       : graphRegion.toLowerCase();
 
-  // Symbol should reflect home currency, not region
   const currencySymbol =
-    homeCurrency === "USD"
-      ? "$"
-      : homeCurrency === "GBP"
-        ? "£"
-        : getCurrencySymbol(countryNameForGraph);
+    homeCurrency === "USD" ? "$" :
+      homeCurrency === "GBP" ? "£" :
+        homeCurrency === "CAD" ? "CA$" :
+          homeCurrency === "INR" ? "₹" :
+            "¤";
+
 
 
   const { monthName: currMonthName, year: currYear } =
@@ -4329,11 +4419,12 @@ const plItems = useMemo(() => {
           extension: "png",
         });
 
+        // cast anchor to `any` to satisfy ExcelJS Anchor typing
         sheet.addImage(imageId, {
-          tl: { col: 0, row: 9 },
-          br: { col: 8, row: 28 },
+          tl: { col: 0, row: 9 } as any,
+          br: { col: 8, row: 28 } as any,
           editAs: "oneCell",
-        });
+        } as any);
       }
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -4772,63 +4863,6 @@ const plItems = useMemo(() => {
 
           </div>
 
-          {/* AMAZON P&L GRAPH */}
-          {/* {amazonIntegrated && (
-            <>
-              <div className="mt-8 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="text-sm text-gray-500">
-                    <PageBreadcrumb
-                      pageTitle="Amazon"
-                      align="left"
-                      textSize="2xl"
-                      variant="page"
-                    />
-                    <p className="text-charcoal-500">
-                      Real-time data from Amazon{" "}
-                      {graphRegion === "Global"
-                        ? "Global"
-                        : graphRegion}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <SegmentedToggle<RegionKey>
-                      value={graphRegion}
-                      options={graphRegions.map((r) => ({
-                        value: r,
-                      }))}
-                      onChange={setGraphRegion}
-                    />
-                    <DownloadIconButton
-                      onClick={handleDownload}
-                    />
-                  </div>
-                </div>
-
-                <div ref={chartRef}>
-                  <DashboardBargraphCard
-                    countryName={countryNameForGraph}
-                    formattedMonthYear={formattedMonthYear}
-                    currencySymbol={currencySymbol}
-                    labels={labels}
-                    values={values}
-                    colors={colors}
-                    loading={loading}
-                    allValuesZero={allValuesZero}
-                  />
-                </div>
-              </div>
-
-
-              <CurrentInventorySection region={graphRegion as RegionKey} />
-
-            
-            </>
-          )} */}
-
-
-          {/* P&L GRAPH (Global + Amazon/Shopify) */}
           {hasAnyGraphData && (
             <>
               <div className="mt-8 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
@@ -4877,12 +4911,9 @@ const plItems = useMemo(() => {
                 </div>
               </div>
 
-              {/* Inventory section only makes sense for Amazon, so keep this guard */}
               {amazonIntegrated && (
                 <CurrentInventorySection region={graphRegion as RegionKey} />
               )}
-
-              {/* <AgeingInventorySection /> */}
             </>
           )}
 

@@ -1107,12 +1107,12 @@ type InventoryUiRow = {
   // sku?: React.ReactNode;
   productName?: React.ReactNode;
   currentInventory?: React.ReactNode;
-  ageCombined?: React.ReactNode;
-  age0to90?: React.ReactNode;
-  age91to180?: React.ReactNode;
-  age181to270?: React.ReactNode;
-  age271to365?: React.ReactNode;
-  age365plus?: React.ReactNode;
+  // ageCombined?: React.ReactNode;
+  // age0to90?: React.ReactNode;
+  // age91to180?: React.ReactNode;
+  // age181to270?: React.ReactNode;
+  // age271to365?: React.ReactNode;
+  // age365plus?: React.ReactNode;
   salesRank?: React.ReactNode;
   estStorage?: React.ReactNode;
   mtdSales?: React.ReactNode;
@@ -1200,22 +1200,22 @@ export default function CurrentInventorySection({
     []
   );
 
-  const ageHeader = (
-    <div className="relative flex items-center justify-center px-4 py-1">
-      {/* Left Icon */}
-      <span className="absolute left-0 top-1/2 -translate-y-1/2">
-        {ageExpanded ? <FaCaretRight /> : <FaCaretLeft />}
-      </span>
+  // const ageHeader = (
+  //   <div className="relative flex items-center justify-center px-4 py-1">
+  //     {/* Left Icon */}
+  //     <span className="absolute left-0 top-1/2 -translate-y-1/2">
+  //       {ageExpanded ? <FaCaretRight /> : <FaCaretLeft />}
+  //     </span>
 
-      {/* Center Text */}
-      <span>Inventory Age</span>
+  //     {/* Center Text */}
+  //     <span>Inventory Age</span>
 
-      {/* Right Icon */}
-      <span className="absolute right-0 top-1/2 -translate-y-1/2">
-        {ageExpanded ? <FaCaretLeft /> : <FaCaretRight />}
-      </span>
-    </div>
-  );
+  //     {/* Right Icon */}
+  //     <span className="absolute right-0 top-1/2 -translate-y-1/2">
+  //       {ageExpanded ? <FaCaretLeft /> : <FaCaretRight />}
+  //     </span>
+  //   </div>
+  // );
 
 
   // ✅ Match previous logic: follow graphRegion, but send lowercase/“global” to backend
@@ -1386,11 +1386,11 @@ export default function CurrentInventorySection({
       currentInventory: number;
       mtdSales: number;
       sales30: number;
-      age0to90: number;
-      age91to180: number;
-      age181to270: number;
-      age271to365: number;
-      age365plus: number;
+      // age0to90: number;
+      // age91to180: number;
+      // age181to270: number;
+      // age271to365: number;
+      // age365plus: number;
       coverage: number;
       salesRank: number;
       estStorage: number;
@@ -1407,11 +1407,11 @@ export default function CurrentInventorySection({
       const mtdSales = toNumberSafe(mtdKey ? r[mtdKey] : 0);
       const sales30 = toNumberSafe(sales30Key ? r[sales30Key] : 0);
 
-      const age0to90 = toNumberSafe(r["inv-age-0-to-90-days"]);
-      const age91to180 = toNumberSafe(r["inv-age-91-to-180-days"]);
-      const age181to270 = toNumberSafe(r["inv-age-181-to-270-days"]);
-      const age271to365 = toNumberSafe(r["inv-age-271-to-365-days"]);
-      const age365plus = toNumberSafe(r["inv-age-365-plus-days"]);
+      // const age0to90 = toNumberSafe(r["inv-age-0-to-90-days"]);
+      // const age91to180 = toNumberSafe(r["inv-age-91-to-180-days"]);
+      // const age181to270 = toNumberSafe(r["inv-age-181-to-270-days"]);
+      // const age271to365 = toNumberSafe(r["inv-age-271-to-365-days"]);
+      // const age365plus = toNumberSafe(r["inv-age-365-plus-days"]);
 
       const denom = mtdSales + sales30;
       const coverage = denom > 0 ? currentInventory / denom : 0;
@@ -1427,11 +1427,11 @@ export default function CurrentInventorySection({
         currentInventory,
         mtdSales,
         sales30,
-        age0to90,
-        age91to180,
-        age181to270,
-        age271to365,
-        age365plus,
+        // age0to90,
+        // age91to180,
+        // age181to270,
+        // age271to365,
+        // age365plus,
         coverage,
         salesRank,
         estStorage,
@@ -1457,22 +1457,22 @@ export default function CurrentInventorySection({
         currentInventory,
         mtdSales,
         sales30,
-        age0to90,
-        age91to180,
-        age181to270,
-        age271to365,
-        age365plus,
+        // age0to90,
+        // age91to180,
+        // age181to270,
+        // age271to365,
+        // age365plus,
         coverage,
         salesRank,
         estStorage,
       } = c;
 
-      const ageTotal =
-        age0to90 +
-        age91to180 +
-        age181to270 +
-        age271to365 +
-        age365plus;
+      // const ageTotal =
+      //   age0to90 +
+      //   age91to180 +
+      //   age181to270 +
+      //   age271to365 +
+      //   age365plus;
 
       return {
         rowType: "normal",
@@ -1481,12 +1481,12 @@ export default function CurrentInventorySection({
         sku: "",
         productName: row["Product Name"] || "",
         currentInventory: formatInt(currentInventory),
-        ageCombined: formatInt(ageTotal),
-        age0to90: formatInt(age0to90),
-        age91to180: formatInt(age91to180),
-        age181to270: formatInt(age181to270),
-        age271to365: formatInt(age271to365),
-        age365plus: formatInt(age365plus),
+        // ageCombined: formatInt(ageTotal),
+        // age0to90: formatInt(age0to90),
+        // age91to180: formatInt(age91to180),
+        // age181to270: formatInt(age181to270),
+        // age271to365: formatInt(age271to365),
+        // age365plus: formatInt(age365plus),
         salesRank: salesRank ? formatInt(salesRank) : "—",
         estStorage: estStorage ? formatInt(estStorage) : "—",
         mtdSales: formatInt(mtdSales),
@@ -1510,11 +1510,11 @@ export default function CurrentInventorySection({
           acc.currentInventory += r.currentInventory;
           acc.mtdSales += r.mtdSales;
           acc.sales30 += r.sales30;
-          acc.age0to90 += r.age0to90;
-          acc.age91to180 += r.age91to180;
-          acc.age181to270 += r.age181to270;
-          acc.age271to365 += r.age271to365;
-          acc.age365plus += r.age365plus;
+          // acc.age0to90 += r.age0to90;
+          // acc.age91to180 += r.age91to180;
+          // acc.age181to270 += r.age181to270;
+          // acc.age271to365 += r.age271to365;
+          // acc.age365plus += r.age365plus;
           acc.salesRank += r.salesRank;
           acc.estStorage += r.estStorage;
           return acc;
@@ -1741,21 +1741,20 @@ export default function CurrentInventorySection({
     const ageHeader = (
       <div className="relative flex items-center justify-center px-4 py-1">
         {/* Left Icon */}
-        <span className="absolute left-0 top-1/2 -translate-y-1/2">
+        {/* <span className="absolute left-0 top-1/2 -translate-y-1/2">
           {ageExpanded ? <FaCaretRight /> : <FaCaretLeft />}
-        </span>
+        </span> */}
 
         {/* Center Text */}
         <span>Inventory Age</span>
 
         {/* Right Icon */}
-        <span className="absolute right-0 top-1/2 -translate-y-1/2">
+        {/* <span className="absolute right-0 top-1/2 -translate-y-1/2">
           {ageExpanded ? <FaCaretLeft /> : <FaCaretRight />}
-        </span>
+        </span> */}
       </div>
     );
 
-    // 👈 this column stays always: shows TOTAL age
     cols.push({
       key: "ageCombined",
       header: ageHeader,
@@ -1764,35 +1763,35 @@ export default function CurrentInventorySection({
     });
 
     // 🔹 When expanded: show extra bucket columns AFTER Inventory Age
-    if (ageExpanded) {
-      cols.push(
-        {
-          key: "age0to90",
-          header: "0-90 Days Inventory",
-          cellClassName: "text-center",
-        },
-        {
-          key: "age91to180",
-          header: "91-180 Days Inventory",
-          cellClassName: "text-center",
-        },
-        {
-          key: "age181to270",
-          header: "181-270 Days Inventory",
-          cellClassName: "text-center",
-        },
-        {
-          key: "age271to365",
-          header: "271-365 Days Inventory",
-          cellClassName: "text-center",
-        },
-        {
-          key: "age365plus",
-          header: "365+ Days Inventory",
-          cellClassName: "text-center",
-        }
-      );
-    }
+    // if (ageExpanded) {
+    //   cols.push(
+    //     {
+    //       key: "age0to90",
+    //       header: "0-90 Days Inventory",
+    //       cellClassName: "text-center",
+    //     },
+    //     {
+    //       key: "age91to180",
+    //       header: "91-180 Days Inventory",
+    //       cellClassName: "text-center",
+    //     },
+    //     {
+    //       key: "age181to270",
+    //       header: "181-270 Days Inventory",
+    //       cellClassName: "text-center",
+    //     },
+    //     {
+    //       key: "age271to365",
+    //       header: "271-365 Days Inventory",
+    //       cellClassName: "text-center",
+    //     },
+    //     {
+    //       key: "age365plus",
+    //       header: "365+ Days Inventory",
+    //       cellClassName: "text-center",
+    //     }
+    //   );
+    // }
 
     // rest of your columns…
     cols.push(
@@ -1829,7 +1828,7 @@ export default function CurrentInventorySection({
     );
 
     return cols;
-  }, [inventoryCountry, ageExpanded, toggleAgeExpanded]);
+  }, [inventoryCountry]);
 
 return (
   <div
