@@ -4964,9 +4964,12 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Inventory section only makes sense for Amazon, so keep this guard */}
               {amazonIntegrated && (
                 <CurrentInventorySection region={graphRegion as RegionKey} />
               )}
+
+              {/* <AgeingInventorySection /> */}
             </>
           )}
 
