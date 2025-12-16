@@ -1193,12 +1193,12 @@ export default function CurrentInventorySection({
   const [invError, setInvError] = useState<string>("");
   const [invRows, setInvRows] = useState<InventoryRow[]>([]);
 
-  // 🧩 Toggle: combined age vs expanded buckets
-  // const [ageExpanded, setAgeExpanded] = useState(false);
-  // const toggleAgeExpanded = React.useCallback(
-  //   () => setAgeExpanded((v) => !v),
-  //   []
-  // );
+
+  const [ageExpanded, setAgeExpanded] = useState(false);
+  const toggleAgeExpanded = React.useCallback(
+    () => setAgeExpanded((v) => !v),
+    []
+  );
 
   // const ageHeader = (
   //   <div className="relative flex items-center justify-center px-4 py-1">

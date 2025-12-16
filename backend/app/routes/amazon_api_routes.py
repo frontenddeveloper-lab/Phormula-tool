@@ -679,6 +679,580 @@ def _extract_addr_field(addr: dict | None, *keys: str) -> Optional[str]:
 
 MONTH_NAME = {i: calendar.month_name[i].lower() for i in range(1, 13)}
 
+# def run_upload_pipeline_from_df(
+#     df_raw: pd.DataFrame,
+#     *,
+#     user_id: int,
+#     country: str,
+#     month_num: str,
+#     year: str,
+#     db_url: str | None = None,
+#     db_url_aux: str | None = None,
+#     profile_id: str | None = None,
+# ) -> dict:
+#     # Fallbacks if caller passes None
+#     if not db_url:
+#         db_url = os.getenv('DATABASE_URL')
+#     if not db_url_aux:
+#         db_url_aux = os.getenv('DATABASE_ADMIN_URL') or db_url
+
+#     if not db_url:
+#         return {"success": False, "message": "DATABASE_URL not configured"}
+
+#     from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, text
+#     country = country.lower()
+#     # first convert month_num to string name
+#     month = MONTH_NAME[int(month_num)] 
+#     engine  = create_engine(db_url)
+#     engine1 = create_engine(db_url_aux)
+#     meta = MetaData()
+
+#     table_name = f"user_{user_id}_{country}_{month}{year}_data".lower()
+#     country_table_name = f"sku_{user_id}_data_table"
+#     consolidated_table_name = f"user_{user_id}_{country}_merge_data_of_all_months".lower()
+#     global_table_name = f"user_{user_id}_total_country_global_data".lower()
+#     countris_table_name = f"user_{user_id}_{country}_table"
+
+#     # ---- define tables (exactly as your upload route) ----
+#     with engine.connect() as connection:
+#         connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+#         connection.commit()
+        
+#     user_monthly_data = Table(
+#         table_name, meta,
+#         Column('id', Integer, primary_key=True),
+#         Column('date_time', String),
+#         Column('settlement_id', String),
+#         Column('type', String),
+#         Column('order_id', String),
+#         Column('sku', String),
+#         Column('description', String),
+#         Column('quantity', Float),
+#         Column('price_in_gbp', Float),
+#         Column('cost_of_unit_sold', Float),
+#         Column('marketplace', String),
+#         Column('account_type', String),
+#         Column('fulfilment', String),
+#         Column('fulfillment', String),
+#         Column('order_city', String),
+#         Column('order_state', String),
+#         Column('order_postal', String),
+#         Column('tax_collection_model', String),
+#         Column('regulatory_fee', Float),
+#         Column('tax_on_regulatory_fee', Float),
+#         Column('bucket', String),
+#         Column('product_sales', Float),
+#         Column('product_sales_tax', Float),
+#         Column('postage_credits', Float),
+#         Column('shipping_credits', Float),
+#         Column('shipping_credits_tax', Float),
+#         Column('gift_wrap_credits', Float),
+#         Column('giftwrap_credits_tax', Float),
+#         Column('promotional_rebates', Float),
+#         Column('promotional_rebates_tax', Float),
+#         Column('sales_tax_collected', Float),
+#         Column('marketplace_withheld_tax', Float),
+#         Column('marketplace_facilitator_tax', Float),
+#         Column('selling_fees', Float),
+#         Column('percentage1', Float),
+#         Column('fba_fees', Float),
+#         Column('percentage2', Float),
+#         Column('other_transaction_fees', Float),
+#         Column('other', Float),
+#         Column('total', Float),
+#         Column('product_name', String),
+#         Column('currency', String),
+#         Column('advertising_cost', Float),
+#         Column('net_reimbursement', Float),
+#         Column('platform_fees', Float),
+#         Column('product_group', String),
+
+#         # Column('referral_fee', Float),
+
+            
+#     )
+#     user_consolidated_data = Table(
+#         consolidated_table_name, meta,
+#         Column('id', Integer, primary_key=True),
+#         Column('date_time', String),
+#         Column('settlement_id', String),
+#         Column('type', String),
+#         Column('order_id', String),
+#         Column('sku', String),
+#         Column('description', String),
+#         Column('quantity', Float),
+#         Column('price_in_gbp', Float),
+#         Column('cost_of_unit_sold', Float),
+#         Column('marketplace', String),
+#         Column('account_type', String),
+#         Column('fulfilment', String),
+#         Column('fulfillment', String),
+#         Column('order_city', String),
+#         Column('order_state', String),
+#         Column('order_postal', String),
+#         Column('tax_collection_model', String),
+#         Column('regulatory_fee', Float),
+#         Column('tax_on_regulatory_fee', Float),
+#         Column('bucket', String),
+#         Column('product_sales', Float),
+#         Column('product_sales_tax', Float),
+#         Column('postage_credits', Float),
+#         Column('shipping_credits', Float),
+#         Column('shipping_credits_tax', Float),
+#         Column('gift_wrap_credits', Float),
+#         Column('giftwrap_credits_tax', Float),
+#         Column('promotional_rebates', Float),
+#         Column('promotional_rebates_tax', Float),
+#         Column('sales_tax_collected', Float),
+#         Column('marketplace_withheld_tax', Float),
+#         Column('marketplace_facilitator_tax', Float),
+#         Column('selling_fees', Float),
+#         Column('percentage1', Float),
+#         Column('fba_fees', Float),
+#         Column('percentage2', Float),
+#         Column('other_transaction_fees', Float),
+#         Column('other', Float),
+#         Column('total', Float),
+#         Column('month', String),
+#         Column('year', String),
+#         Column('product_name', String),
+#         Column('currency', String),
+#         Column('advertising_cost', Float),
+#         Column('net_reimbursement', Float),
+#         Column('platform_fees', Float),
+#         Column('product_group', String),
+
+#         # Column('referral_fee', Float),
+#     )
+#     user_global_table = Table(
+#         global_table_name, meta,
+#         Column('id', Integer, primary_key=True),
+#         Column('date_time', String),
+#         Column('settlement_id', String),
+#         Column('type', String),
+#         Column('order_id', String),
+#         Column('sku', String),
+#         Column('description', String),
+#         Column('quantity', Float),
+#         Column('price_in_gbp', Float),
+#         Column('cost_of_unit_sold', Float),
+#         Column('marketplace', String),
+#         Column('fulfilment', String),
+#         Column('fulfillment', String),
+#         Column('order_city', String),
+#         Column('order_state', String),
+#         Column('order_postal', String),
+#         Column('tax_collection_model', String),
+#         Column('product_sales', Float),
+#         Column('product_sales_tax', Float),
+#         Column('postage_credits', Float),
+#         Column('shipping_credits', Float),
+#         Column('shipping_credits_tax', Float),
+#         Column('gift_wrap_credits', Float),
+#         Column('giftwrap_credits_tax', Float),
+#         Column('promotional_rebates', Float),
+#         Column('promotional_rebates_tax', Float),
+#         Column('sales_tax_collected', Float),
+#         Column('marketplace_withheld_tax', Float),
+#         Column('marketplace_facilitator_tax', Float),
+#         Column('selling_fees', Float),
+#         Column('percentage1', Float),
+#         Column('fba_fees', Float),
+#         Column('percentage2', Float),
+#         Column('other_transaction_fees', Float),
+#         Column('other', Float),
+#         Column('total', Float),
+#         Column('month', String),
+#         Column('year', String),
+#         Column('product_name', String),
+#         Column('country', String),
+#         extend_existing=True
+#     )
+#     meta.create_all(engine)
+
+#     with engine.connect() as connection:
+#          # Delete previous records
+#         connection.execute(text(f"DELETE FROM {user_consolidated_data} WHERE month = '{month}' AND year = '{year}'"))
+#         connection.commit()
+
+#     with engine.connect() as connection:
+#         # Delete previous records from user_total_country_global_data
+#         connection.execute(
+#             text(f"DELETE FROM {global_table_name} WHERE month = :month AND year = :year AND country = :country"),
+#             {"month": month, "year": year, "country": country}
+#         )
+#         connection.commit()
+
+#     # ---- CLEAN/REMAP just like your upload route ----
+#     df = df_raw.copy()
+#     df.columns = [str(c).strip().lower() for c in df.columns]
+#     # settlement JSON keys already match your mapping names below; still keep:
+#     df.rename(columns=COLUMN_MAPPING, inplace=True)
+
+#     if 'marketplace_withheld_tax' not in df.columns:
+#         df['marketplace_withheld_tax'] = 0
+#     if 'marketplace_facilitator_tax' not in df.columns:
+#         df['marketplace_facilitator_tax'] = 0
+
+#     df['marketplace_withheld_tax'] = pd.to_numeric(df['marketplace_withheld_tax'], errors='coerce').fillna(0)
+#     df['marketplace_facilitator_tax'] = pd.to_numeric(df['marketplace_facilitator_tax'], errors='coerce')
+
+#     # If facilitator is missing/zero, copy withheld into it
+#     mask_fac_missing = df['marketplace_facilitator_tax'].isna() | (df['marketplace_facilitator_tax'] == 0)
+#     df.loc[mask_fac_missing, 'marketplace_facilitator_tax'] = df['marketplace_withheld_tax']
+
+#     # required numeric sanitation
+#     def clean_numeric_value(val):
+#         if isinstance(val, str):
+#             if ',' in val: val = val.replace(',', '')
+#             try: return float(val)
+#             except ValueError: return None
+#         return val
+
+#     numeric_columns = [
+#         'quantity','price_in_gbp','cost_of_unit_sold','product_sales','product_sales_tax',
+#         'postage_credits','shipping_credits_tax','gift_wrap_credits','giftwrap_credits_tax',
+#         'promotional_rebates','promotional_rebates_tax','sales_tax_collected',
+#         'marketplace_withheld_tax','marketplace_facilitator_tax','selling_fees',
+#         'percentage1','fba_fees','percentage2','other_transaction_fees','other','total','advertising_cost',
+#         'net_reimbursement',
+#         'platform_fees'
+#     ]
+#     numeric_columns = [c for c in numeric_columns if c in df.columns]
+#     for c in numeric_columns:
+#         df[c] = df[c].apply(clean_numeric_value)
+#         df[c] = pd.to_numeric(df[c], errors='coerce')
+
+#     # backfill missing mapped cols
+#     for col in COLUMN_MAPPING.values():
+#         if col not in df.columns:
+#             df[col] = 0.0 if col in numeric_columns else None
+
+#     # join SKU price/currency/product_name
+#     if country.upper() == 'UK':
+#         sku_column = 'sku_uk'
+#     elif country.upper() == 'US':
+#         sku_column = 'sku_us'
+#     else:
+#         raise ValueError("Unsupported country")
+
+            
+#     with engine.connect() as conn:
+#         country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
+
+#     df = df.merge(country_df, on='sku', how='left')
+
+#     with engine.connect() as conn:
+#         countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)
+
+#     df = df.merge(countries_df, on='sku', how='left')
+
+    
+#     # Rename the remaining 'currency' column to match the table
+#     if 'currency' not in df.columns and 'currency_x' in df.columns:
+#         df['currency'] = df.pop('currency_x')
+
+
+#     with engine1.connect() as conn:
+#         currency_query = text("""
+#             SELECT conversion_rate
+#             FROM currency_conversion 
+#             WHERE lower(user_currency) = :currency 
+#             AND lower(country) = :country 
+#             AND lower(month) = :month 
+#             AND year = :year
+#             LIMIT 1
+#         """)
+
+#         result = conn.execute(
+            
+
+#             currency_query,
+#             {
+#                 "currency": (
+#                     country_df.get("currency", pd.Series()).dropna().iloc[0].lower()
+#                     if not country_df.get("currency", pd.Series()).dropna().empty
+#                     else "usd"
+#                 ),
+#                 "country": country.lower(),
+#                 "month": month.lower(),
+#                 "year": year
+#             }
+
+#         ).fetchone()
+
+# # Step 3: Apply conversion rate to calculate price_in_gbp
+#     conversion_rate = result[0] if result else None
+
+#     if conversion_rate:
+#         df['price_in_gbp'] = df['price'] * conversion_rate
+#     else:
+#         df['price_in_gbp'] = None  # Or handle fallback logic if conversion rate not found
+
+    
+#     # Calculate cost_of_unit_sold where both values are not null
+#     df['cost_of_unit_sold'] = df.apply(lambda row: row['price_in_gbp'] * row['quantity'] 
+#                                       if pd.notnull(row['price_in_gbp']) and pd.notnull(row['quantity']) 
+#                                       else None, axis=1)
+
+#     df.drop(columns=['price'], inplace=True)
+
+#     # Clean the 'total' column specifically since it appears in the error message
+#     if 'total' in df.columns:
+#         df['total'] = df['total'].apply(clean_numeric_value)
+
+#     # Handle the case where any numeric column might still have commas or other formatting issues
+#     for col in [c for c in df.columns if c in numeric_columns]:
+#         if col in df.columns:
+#             # Convert to float with NaN for any unconvertible values
+#             df[col] = pd.to_numeric(df[col], errors='coerce')
+
+#     for col in df.columns:
+#                 if df[col].dtype == 'object':  # likely a string column
+#                     if df[col].str.contains(',').any():
+#                         print(f"Column {col} contains comma-formatted numbers!")
+#     for col in df.columns:
+#                 if df[col].dtype == 'object':  # likely to have commas or bad data
+#                     # Remove commas and convert to numeric
+#                     df[col] = df[col].str.replace(',', '', regex=True)
+
+#             # Now convert all possible numeric columns to float
+#     df = df.apply(lambda x: pd.to_numeric(x, errors='ignore') if x.dtype == 'object' else x)
+
+#     # consolidated
+#     df_cons = df.copy()
+#     df_cons['month'] = month
+#     df_cons['year']  = year
+
+#     # keep only columns that the consolidated table actually has (exclude autoincrement id)
+#     valid_cols = [c.name for c in user_consolidated_data.columns if c.name != 'id']
+#     df_cons = df_cons.reindex(columns=valid_cols)
+
+#     df_cons.to_sql(consolidated_table_name, con=engine, if_exists='append', index=False)
+
+#     bad_columns = ['currency_x', 'currency_y']
+#     df = df.drop(columns=[c for c in bad_columns if c in df.columns])
+
+
+#     df.to_sql(table_name, con=engine, if_exists='append', index=False)
+    
+#     df['month'] = month  # Assigning month from form data
+#     df['year'] = year 
+
+#     for col in df.columns:
+#                 if df[col].dtype == 'object':  # likely a string column
+#                     if df[col].str.contains(',').any():
+#                         print(f"Column {col} contains comma-formatted numbers!")
+#     for col in df.columns:
+#                 if df[col].dtype == 'object':  # likely to have commas or bad data
+#                     # Remove commas and convert to numeric
+#                     df[col] = df[col].str.replace(',', '', regex=True)
+
+#             # Now convert all possible numeric columns to float
+#     df = df.apply(lambda x: pd.to_numeric(x, errors='ignore') if x.dtype == 'object' else x)
+
+    
+#  # ------------------------------------------
+# # SAFE CURRENCY HANDLING (NEVER FAILS)
+# # ------------------------------------------
+
+# # Step 1: Set default currency for the country
+#     if country.lower() == 'uk':
+#         currency1 = 'gbp'
+#     elif country.lower() == 'us':
+#         currency1 = 'usd'
+#     elif country.lower() == 'canada':
+#         currency1 = 'cad'
+#     else:
+#         currency1 = 'usd'  # Always fallback safely
+
+#     # Step 2: Try to fetch conversion rate (NEVER FAIL)
+#     with engine1.connect() as conn:
+#         currency_query = text("""
+#             SELECT conversion_rate
+#             FROM currency_conversion 
+#             WHERE lower(user_currency) = :currency1
+#             AND lower(country) = 'us'
+#             AND lower(month) = :month 
+#             AND year = :year
+#             LIMIT 1
+#         """)
+        
+#         result = conn.execute(currency_query, {
+#             "currency1": currency1,
+#             "month": month.lower(),
+#             "year": year
+#         }).fetchone()
+
+#     # Step 3: SAFE fallback
+#     currency_rate = None
+#     if result and result[0] not in [None, 0, ""]:
+#         currency_rate = float(result[0])
+#     else:
+#         print(f"⚠️ Conversion rate NOT found for {currency1}, {country}, {month}-{year}. Proceeding without conversion.")
+#         currency_rate = None   # KEEP NONE (SAFE)
+
+#     # Step 4: Create USD df
+#     df_usd = df.copy()
+
+#     # Step 5: SAFE conversion — converts only if rate exists
+#     if currency_rate:
+#         monetary_columns = [
+#             'product_sales', 'product_sales_tax', 'postage_credits', 
+#             'shipping_credits_tax', 'gift_wrap_credits', 'giftwrap_credits_tax', 
+#             'promotional_rebates', 'promotional_rebates_tax', 'sales_tax_collected',
+#             'marketplace_facilitator_tax', 'selling_fees', 'fba_fees', 
+#             'other_transaction_fees', 'other', 'total', 'price_in_gbp', 
+#             'cost_of_unit_sold'
+#         ]
+
+#         for col in monetary_columns:
+#             if col in df_usd.columns:
+#                 df_usd[col] = pd.to_numeric(df_usd[col], errors='coerce') * currency_rate
+
+#     # Step 6: SAFE numeric cleanup
+#     for col in df_usd.columns:
+#         if df_usd[col].dtype == 'object' and col not in [
+#             'date_time','settlement_id','type','order_id','sku','description',
+#             'marketplace','fulfilment','order_city','order_state','order_postal',
+#             'tax_collection_model','month','year','country','product_name'
+#         ]:
+#             df_usd[col] = pd.to_numeric(df_usd[col], errors='coerce')
+
+#     df_usd = df_usd.fillna({c:0.0 for c in df_usd.select_dtypes(include=['float64']).columns})
+#     df_usd = df_usd.fillna({c:0 for c in df_usd.select_dtypes(include=['int64']).columns})
+#     df_usd = df_usd.fillna('')
+
+#     with engine.begin() as conn:
+#         conn.execute(user_global_table.insert(), df_usd.to_dict(orient='records'))
+
+    
+#     REQUIRED_COLUMNS = [
+#             "order_id", "sku", "description", "product_sales", "product_sales_tax", 
+#             "postage_credits", "shipping_credits_tax", "gift_wrap_credits", "giftwrap_credits_tax", 
+#             "promotional_rebates", "promotional_rebates_tax", "marketplace_facilitator_tax", 
+#             "selling_fees", "fba_fees", "other_transaction_fees", "errorstatus", "answer", 
+#             "difference", "fbaerrorstatus", "fbaanswer"  # Use original capitalization
+#     ]
+
+#     # referral fees + apply_modifications + charts (same as your /upload)
+#     # sku_list = df['sku'].dropna().tolist()
+#     # referral_fees = get_referral_fees(user_id, country, sku_list)
+#     # if referral_fees is None:
+#     #     return {"success": False, "message": "Referral fee not found for the SKUs in the fetched settlement file."}
+
+#     df_modified = apply_modifications_fatch(df_cons, country)
+#     # enforce numeric
+#     for col in numeric_columns:
+#         if col in df_modified.columns:
+#             df_modified[col] = pd.to_numeric(df_modified[col], errors='coerce')
+
+#     # overwrite monthly with modified data (your upload does replace)
+#     df_modified.to_sql(table_name, con=engine, if_exists='replace', index=False, method='multi')
+
+#     # make excel blob + PnL + charts exactly like upload
+#     excel_output = io.BytesIO()
+#     df_modified.to_excel(excel_output, index=False); excel_output.seek(0)
+
+#     table_name = f"user_{user_id}_{country}_{month}{year}_data"
+    
+#     with engine.connect() as conn:
+#         query = f"""
+#         SELECT * FROM {table_name} 
+#         WHERE errorstatus IN ('cases to be inquired', 'NoReferralFee')
+#         AND sku <> '0'
+#         AND sku IS NOT NULL
+#         AND TRIM(sku) <> ''
+#         """
+#         print(f"Executing query on table: {table_name}")  # Debugging
+#         error_df = pd.read_sql(query, conn)
+                
+#                 # Filter error_df to keep only the required columns
+#     error_df = error_df[[col for col in REQUIRED_COLUMNS if col in error_df.columns]]
+
+#                 # Save the error file if there are errors
+#     error_file_path = None
+#     error_file_base64 = None
+#     if not error_df.empty:
+#         error_filename = f"error_file_{user_id}{country}{month}_{year}.xlsx"
+#         error_file_path = os.path.join(UPLOAD_FOLDER, error_filename)                    
+#         error_df.to_excel(error_file_path, index=False)
+                    
+#                     # Encode error file to base64
+#         with open(error_file_path, "rb") as error_file:
+#             error_file_base64 = base64.b64encode(error_file.read()).decode()
+
+
+#     quarter_mapping = {
+#         'january': 'Q1','february':'Q1','march':'Q1','april':'Q2','may':'Q2','june':'Q2',
+#         'july':'Q3','august':'Q3','september':'Q3','october':'Q4','november':'Q4','december':'Q4'
+#     }
+#     quarter = quarter_mapping[month]
+#     # UK/US split like your code
+#     if country == 'uk':
+        
+        
+#         total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold  = process_skuwise_data(user_id, country, month, year)
+#         ytd_pie_chart = process_yearly_skuwise_data(user_id, country, year)
+#         qtd_pie_chart = process_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
+#     else:
+#         platform_fee, rembursement_fee, total_cous, total_amazon_fee, total_profit, total_expense, total_fba_fees, cm2_profit, cm2_margins, acos, rembursment_vs_cm2_margins, advertising_total, reimbursement_vs_sales, unit_sold, total_sales, otherwplatform, taxncredit = \
+#             process_skuwise_us_data(user_id, country, month, year)
+#         ytd_pie_chart = process_us_yearly_skuwise_data(user_id, country, year)
+#         qtd_pie_chart = process_us_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
+
+#     process_global_monthly_skuwise_data(user_id, country, year, month)
+#     process_global_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
+#     process_global_yearly_skuwise_data(user_id, country, year)
+
+#     # UploadHistory same as upload (file name N/A here)
+#     existing_entry = UploadHistory.query.filter_by(user_id=user_id, country=country, month=month, year=year).first()
+#     if existing_entry:
+#         db.session.delete(existing_entry); db.session.commit()
+#     new_upload = UploadHistory(
+#         user_id=user_id, year=year, month=month, country=country,
+#         file_name=f"amazon_settlement_{month}{year}.tsv",
+#         sales_chart_img=None, expense_chart_img=None,
+#         total_sales=float(total_sales), total_profit=float(total_profit),
+#         otherwplatform=platform_fee, taxncredit=float(taxncredit) if taxncredit is not None else 0.0,
+#         total_expense=float(total_expense), qtd_pie_chart=qtd_pie_chart, ytd_pie_chart=ytd_pie_chart,
+#         total_cous=float(total_cous), total_amazon_fee=float(total_amazon_fee),
+#         total_fba_fees=float(total_fba_fees), platform_fee=float(platform_fee),
+#         rembursement_fee=float(rembursement_fee), cm2_profit=float(cm2_profit),
+#         cm2_margins=float(cm2_margins), acos=float(acos),
+#         rembursment_vs_cm2_margins=float(rembursment_vs_cm2_margins),
+#         advertising_total=float(advertising_total), reimbursement_vs_sales=float(reimbursement_vs_sales),
+#         unit_sold=int(unit_sold)
+#     )
+#     db.session.add(new_upload); db.session.commit()
+
+#     # build response like /upload
+#     def replace_nan_with_null(v):
+#         if isinstance(v, dict):
+#             return {k: replace_nan_with_null(x) for k, x in v.items()}
+#         if isinstance(v, list):
+#             return [replace_nan_with_null(x) for x in v]
+#         try:
+#             import math
+#             return None if (isinstance(v, float) and math.isnan(v)) else v
+#         except Exception:
+#             return v
+
+#     response_data = {
+#         "success": True,
+#         # "sales_chart_img": sales_pie_chart,
+#         # "expense_chart_img": expense_pie_chart,
+#         "total_sales": total_sales,
+#         "total_profit": total_profit,
+#         "otherwplatform": platform_fee,
+#         "taxncredit": taxncredit,
+#         "total_expense": total_expense,
+#         "total_fba_fees": total_fba_fees,
+#         "excel_file": base64.b64encode(excel_output.getvalue()).decode(),
+#         "platform_fee": platform_fee,
+#     }
+#     return replace_nan_with_null(response_data)
+
 def run_upload_pipeline_from_df(
     df_raw: pd.DataFrame,
     *,
@@ -690,20 +1264,34 @@ def run_upload_pipeline_from_df(
     db_url_aux: str | None = None,
     profile_id: str | None = None,
 ) -> dict:
-    # Fallbacks if caller passes None
+    import os
+    import io
+    import base64
+    import pandas as pd
+    from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, text
+
+    # ---------------------------
+    # ENV DB URL FALLBACKS
+    # ---------------------------
     if not db_url:
-        db_url = os.getenv('DATABASE_URL')
+        db_url = os.getenv("DATABASE_URL")
     if not db_url_aux:
-        db_url_aux = os.getenv('DATABASE_ADMIN_URL') or db_url
+        db_url_aux = os.getenv("DATABASE_ADMIN_URL") or db_url
 
     if not db_url:
         return {"success": False, "message": "DATABASE_URL not configured"}
 
-    from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, text
-    country = country.lower()
-    # first convert month_num to string name
-    month = MONTH_NAME[int(month_num)] 
-    engine  = create_engine(db_url)
+    # ---------------------------
+    # NORMALIZE INPUTS
+    # ---------------------------
+    country = (country or "").strip().lower()
+    year = str(year).strip()          # ✅ avoid varchar=int issue
+    month_num = str(month_num).strip()
+
+    # month name
+    month = MONTH_NAME[int(month_num)]  # e.g. "october"
+
+    engine = create_engine(db_url)
     engine1 = create_engine(db_url_aux)
     meta = MetaData()
 
@@ -713,277 +1301,266 @@ def run_upload_pipeline_from_df(
     global_table_name = f"user_{user_id}_total_country_global_data".lower()
     countris_table_name = f"user_{user_id}_{country}_table"
 
-    # ---- define tables (exactly as your upload route) ----
+    # ---------------------------
+    # DROP MONTHLY TABLE
+    # ---------------------------
     with engine.connect() as connection:
         connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
         connection.commit()
-        
+
+    # ---------------------------
+    # DEFINE TABLES
+    # ---------------------------
     user_monthly_data = Table(
         table_name, meta,
-        Column('id', Integer, primary_key=True),
-        Column('date_time', String),
-        Column('settlement_id', String),
-        Column('type', String),
-        Column('order_id', String),
-        Column('sku', String),
-        Column('description', String),
-        Column('quantity', Float),
-        Column('price_in_gbp', Float),
-        Column('cost_of_unit_sold', Float),
-        Column('marketplace', String),
-        Column('account_type', String),
-        Column('fulfilment', String),
-        Column('fulfillment', String),
-        Column('order_city', String),
-        Column('order_state', String),
-        Column('order_postal', String),
-        Column('tax_collection_model', String),
-        Column('regulatory_fee', Float),
-        Column('tax_on_regulatory_fee', Float),
-        Column('bucket', String),
-        Column('product_sales', Float),
-        Column('product_sales_tax', Float),
-        Column('postage_credits', Float),
-        Column('shipping_credits', Float),
-        Column('shipping_credits_tax', Float),
-        Column('gift_wrap_credits', Float),
-        Column('giftwrap_credits_tax', Float),
-        Column('promotional_rebates', Float),
-        Column('promotional_rebates_tax', Float),
-        Column('sales_tax_collected', Float),
-        Column('marketplace_withheld_tax', Float),
-        Column('marketplace_facilitator_tax', Float),
-        Column('selling_fees', Float),
-        Column('percentage1', Float),
-        Column('fba_fees', Float),
-        Column('percentage2', Float),
-        Column('other_transaction_fees', Float),
-        Column('other', Float),
-        Column('total', Float),
-        Column('product_name', String),
-        Column('currency', String),
-        Column('advertising_cost', Float),
-        Column('net_reimbursement', Float),
-        Column('platform_fees', Float),
-        Column('product_group', String),
-
-        # Column('referral_fee', Float),
-
-            
+        Column("id", Integer, primary_key=True),
+        Column("date_time", String),
+        Column("settlement_id", String),
+        Column("type", String),
+        Column("order_id", String),
+        Column("sku", String),
+        Column("description", String),
+        Column("quantity", Float),
+        Column("price_in_gbp", Float),
+        Column("cost_of_unit_sold", Float),
+        Column("marketplace", String),
+        Column("account_type", String),
+        Column("fulfilment", String),
+        Column("fulfillment", String),
+        Column("order_city", String),
+        Column("order_state", String),
+        Column("order_postal", String),
+        Column("tax_collection_model", String),
+        Column("regulatory_fee", Float),
+        Column("tax_on_regulatory_fee", Float),
+        Column("bucket", String),
+        Column("product_sales", Float),
+        Column("product_sales_tax", Float),
+        Column("postage_credits", Float),
+        Column("shipping_credits", Float),
+        Column("shipping_credits_tax", Float),
+        Column("gift_wrap_credits", Float),
+        Column("giftwrap_credits_tax", Float),
+        Column("promotional_rebates", Float),
+        Column("promotional_rebates_tax", Float),
+        Column("sales_tax_collected", Float),
+        Column("marketplace_withheld_tax", Float),
+        Column("marketplace_facilitator_tax", Float),
+        Column("selling_fees", Float),
+        Column("percentage1", Float),
+        Column("fba_fees", Float),
+        Column("percentage2", Float),
+        Column("other_transaction_fees", Float),
+        Column("other", Float),
+        Column("total", Float),
+        Column("product_name", String),
+        Column("currency", String),
+        Column("advertising_cost", Float),
+        Column("net_reimbursement", Float),
+        Column("platform_fees", Float),
+        Column("product_group", String),
     )
+
     user_consolidated_data = Table(
         consolidated_table_name, meta,
-        Column('id', Integer, primary_key=True),
-        Column('date_time', String),
-        Column('settlement_id', String),
-        Column('type', String),
-        Column('order_id', String),
-        Column('sku', String),
-        Column('description', String),
-        Column('quantity', Float),
-        Column('price_in_gbp', Float),
-        Column('cost_of_unit_sold', Float),
-        Column('marketplace', String),
-        Column('account_type', String),
-        Column('fulfilment', String),
-        Column('fulfillment', String),
-        Column('order_city', String),
-        Column('order_state', String),
-        Column('order_postal', String),
-        Column('tax_collection_model', String),
-        Column('regulatory_fee', Float),
-        Column('tax_on_regulatory_fee', Float),
-        Column('bucket', String),
-        Column('product_sales', Float),
-        Column('product_sales_tax', Float),
-        Column('postage_credits', Float),
-        Column('shipping_credits', Float),
-        Column('shipping_credits_tax', Float),
-        Column('gift_wrap_credits', Float),
-        Column('giftwrap_credits_tax', Float),
-        Column('promotional_rebates', Float),
-        Column('promotional_rebates_tax', Float),
-        Column('sales_tax_collected', Float),
-        Column('marketplace_withheld_tax', Float),
-        Column('marketplace_facilitator_tax', Float),
-        Column('selling_fees', Float),
-        Column('percentage1', Float),
-        Column('fba_fees', Float),
-        Column('percentage2', Float),
-        Column('other_transaction_fees', Float),
-        Column('other', Float),
-        Column('total', Float),
-        Column('month', String),
-        Column('year', String),
-        Column('product_name', String),
-        Column('currency', String),
-        Column('advertising_cost', Float),
-        Column('net_reimbursement', Float),
-        Column('platform_fees', Float),
-        Column('product_group', String),
-
-        # Column('referral_fee', Float),
+        Column("id", Integer, primary_key=True),
+        Column("date_time", String),
+        Column("settlement_id", String),
+        Column("type", String),
+        Column("order_id", String),
+        Column("sku", String),
+        Column("description", String),
+        Column("quantity", Float),
+        Column("price_in_gbp", Float),
+        Column("cost_of_unit_sold", Float),
+        Column("marketplace", String),
+        Column("account_type", String),
+        Column("fulfilment", String),
+        Column("fulfillment", String),
+        Column("order_city", String),
+        Column("order_state", String),
+        Column("order_postal", String),
+        Column("tax_collection_model", String),
+        Column("regulatory_fee", Float),
+        Column("tax_on_regulatory_fee", Float),
+        Column("bucket", String),
+        Column("product_sales", Float),
+        Column("product_sales_tax", Float),
+        Column("postage_credits", Float),
+        Column("shipping_credits", Float),
+        Column("shipping_credits_tax", Float),
+        Column("gift_wrap_credits", Float),
+        Column("giftwrap_credits_tax", Float),
+        Column("promotional_rebates", Float),
+        Column("promotional_rebates_tax", Float),
+        Column("sales_tax_collected", Float),
+        Column("marketplace_withheld_tax", Float),
+        Column("marketplace_facilitator_tax", Float),
+        Column("selling_fees", Float),
+        Column("percentage1", Float),
+        Column("fba_fees", Float),
+        Column("percentage2", Float),
+        Column("other_transaction_fees", Float),
+        Column("other", Float),
+        Column("total", Float),
+        Column("month", String),
+        Column("year", String),
+        Column("product_name", String),
+        Column("currency", String),
+        Column("advertising_cost", Float),
+        Column("net_reimbursement", Float),
+        Column("platform_fees", Float),
+        Column("product_group", String),
     )
+
     user_global_table = Table(
         global_table_name, meta,
-        Column('id', Integer, primary_key=True),
-        Column('date_time', String),
-        Column('settlement_id', String),
-        Column('type', String),
-        Column('order_id', String),
-        Column('sku', String),
-        Column('description', String),
-        Column('quantity', Float),
-        Column('price_in_gbp', Float),
-        Column('cost_of_unit_sold', Float),
-        Column('marketplace', String),
-        Column('fulfilment', String),
-        Column('fulfillment', String),
-        Column('order_city', String),
-        Column('order_state', String),
-        Column('order_postal', String),
-        Column('tax_collection_model', String),
-        Column('product_sales', Float),
-        Column('product_sales_tax', Float),
-        Column('postage_credits', Float),
-        Column('shipping_credits', Float),
-        Column('shipping_credits_tax', Float),
-        Column('gift_wrap_credits', Float),
-        Column('giftwrap_credits_tax', Float),
-        Column('promotional_rebates', Float),
-        Column('promotional_rebates_tax', Float),
-        Column('sales_tax_collected', Float),
-        Column('marketplace_withheld_tax', Float),
-        Column('marketplace_facilitator_tax', Float),
-        Column('selling_fees', Float),
-        Column('percentage1', Float),
-        Column('fba_fees', Float),
-        Column('percentage2', Float),
-        Column('other_transaction_fees', Float),
-        Column('other', Float),
-        Column('total', Float),
-        Column('month', String),
-        Column('year', String),
-        Column('product_name', String),
-        Column('country', String),
+        Column("id", Integer, primary_key=True),
+        Column("date_time", String),
+        Column("settlement_id", String),
+        Column("type", String),
+        Column("order_id", String),
+        Column("sku", String),
+        Column("description", String),
+        Column("quantity", Float),
+        Column("price_in_gbp", Float),
+        Column("cost_of_unit_sold", Float),
+        Column("marketplace", String),
+        Column("fulfilment", String),
+        Column("fulfillment", String),
+        Column("order_city", String),
+        Column("order_state", String),
+        Column("order_postal", String),
+        Column("tax_collection_model", String),
+        Column("product_sales", Float),
+        Column("product_sales_tax", Float),
+        Column("postage_credits", Float),
+        Column("shipping_credits", Float),
+        Column("shipping_credits_tax", Float),
+        Column("gift_wrap_credits", Float),
+        Column("giftwrap_credits_tax", Float),
+        Column("promotional_rebates", Float),
+        Column("promotional_rebates_tax", Float),
+        Column("sales_tax_collected", Float),
+        Column("marketplace_withheld_tax", Float),
+        Column("marketplace_facilitator_tax", Float),
+        Column("selling_fees", Float),
+        Column("percentage1", Float),
+        Column("fba_fees", Float),
+        Column("percentage2", Float),
+        Column("other_transaction_fees", Float),
+        Column("other", Float),
+        Column("total", Float),
+        Column("month", String),
+        Column("year", String),
+        Column("product_name", String),
+        Column("country", String),
         extend_existing=True
     )
+
     meta.create_all(engine)
 
+    # ---------------------------
+    # ✅ FIXED DELETES (Table object -> table name)
+    # ---------------------------
     with engine.connect() as connection:
-         # Delete previous records
-        connection.execute(text(f"DELETE FROM {user_consolidated_data} WHERE month = '{month}' AND year = '{year}'"))
+        connection.execute(
+            text(f"DELETE FROM {consolidated_table_name} WHERE month = :month AND year = :year"),
+            {"month": month, "year": year}
+        )
         connection.commit()
 
     with engine.connect() as connection:
-        # Delete previous records from user_total_country_global_data
         connection.execute(
             text(f"DELETE FROM {global_table_name} WHERE month = :month AND year = :year AND country = :country"),
             {"month": month, "year": year, "country": country}
         )
         connection.commit()
 
-    # ---- CLEAN/REMAP just like your upload route ----
+    # ---------------------------
+    # CLEAN/REMAP
+    # ---------------------------
     df = df_raw.copy()
     df.columns = [str(c).strip().lower() for c in df.columns]
-    # settlement JSON keys already match your mapping names below; still keep:
     df.rename(columns=COLUMN_MAPPING, inplace=True)
 
-    if 'marketplace_withheld_tax' not in df.columns:
-        df['marketplace_withheld_tax'] = 0
-    if 'marketplace_facilitator_tax' not in df.columns:
-        df['marketplace_facilitator_tax'] = 0
+    if "marketplace_withheld_tax" not in df.columns:
+        df["marketplace_withheld_tax"] = 0
+    if "marketplace_facilitator_tax" not in df.columns:
+        df["marketplace_facilitator_tax"] = 0
 
-    df['marketplace_withheld_tax'] = pd.to_numeric(df['marketplace_withheld_tax'], errors='coerce').fillna(0)
-    df['marketplace_facilitator_tax'] = pd.to_numeric(df['marketplace_facilitator_tax'], errors='coerce')
+    df["marketplace_withheld_tax"] = pd.to_numeric(df["marketplace_withheld_tax"], errors="coerce").fillna(0)
+    df["marketplace_facilitator_tax"] = pd.to_numeric(df["marketplace_facilitator_tax"], errors="coerce")
 
-    # If facilitator is missing/zero, copy withheld into it
-    mask_fac_missing = df['marketplace_facilitator_tax'].isna() | (df['marketplace_facilitator_tax'] == 0)
-    df.loc[mask_fac_missing, 'marketplace_facilitator_tax'] = df['marketplace_withheld_tax']
+    mask_fac_missing = df["marketplace_facilitator_tax"].isna() | (df["marketplace_facilitator_tax"] == 0)
+    df.loc[mask_fac_missing, "marketplace_facilitator_tax"] = df["marketplace_withheld_tax"]
 
-    # required numeric sanitation
     def clean_numeric_value(val):
         if isinstance(val, str):
-            if ',' in val: val = val.replace(',', '')
-            try: return float(val)
-            except ValueError: return None
+            if "," in val:
+                val = val.replace(",", "")
+            try:
+                return float(val)
+            except ValueError:
+                return None
         return val
 
     numeric_columns = [
-        'quantity','price_in_gbp','cost_of_unit_sold','product_sales','product_sales_tax',
-        'postage_credits','shipping_credits_tax','gift_wrap_credits','giftwrap_credits_tax',
-        'promotional_rebates','promotional_rebates_tax','sales_tax_collected',
-        'marketplace_withheld_tax','marketplace_facilitator_tax','selling_fees',
-        'percentage1','fba_fees','percentage2','other_transaction_fees','other','total','advertising_cost',
-        'net_reimbursement',
-        'platform_fees'
+        "quantity", "price_in_gbp", "cost_of_unit_sold", "product_sales", "product_sales_tax",
+        "postage_credits", "shipping_credits_tax", "gift_wrap_credits", "giftwrap_credits_tax",
+        "promotional_rebates", "promotional_rebates_tax", "sales_tax_collected",
+        "marketplace_withheld_tax", "marketplace_facilitator_tax", "selling_fees",
+        "percentage1", "fba_fees", "percentage2", "other_transaction_fees", "other", "total",
+        "advertising_cost", "net_reimbursement", "platform_fees",
     ]
     numeric_columns = [c for c in numeric_columns if c in df.columns]
+
     for c in numeric_columns:
         df[c] = df[c].apply(clean_numeric_value)
-        df[c] = pd.to_numeric(df[c], errors='coerce')
+        df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    # backfill missing mapped cols
     for col in COLUMN_MAPPING.values():
         if col not in df.columns:
             df[col] = 0.0 if col in numeric_columns else None
 
-    # join SKU price/currency/product_name
-    if country.upper() == 'UK':
-        sku_column = 'sku_uk'
-    elif country.upper() == 'US':
-        sku_column = 'sku_us'
+    # ---------------------------
+    # ✅ FIXED SKU COLUMN LOGIC (use lowercase only)
+    # ---------------------------
+    if country == "uk":
+        sku_column = "sku_uk"
+    elif country == "us":
+        sku_column = "sku_us"
     else:
         raise ValueError("Unsupported country")
 
-            
+    # Join SKU data
     with engine.connect() as conn:
-        country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
+        country_df = pd.read_sql(
+            f"SELECT {sku_column} AS sku, price, currency, product_name FROM {country_table_name}",
+            conn
+        )
 
-    df = df.merge(country_df, on='sku', how='left')
+    df = df.merge(country_df, on="sku", how="left")
 
     with engine.connect() as conn:
         countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)
 
-    df = df.merge(countries_df, on='sku', how='left')
+    df = df.merge(countries_df, on="sku", how="left")
 
-    # if 'sku' in df.columns:
-    #     sku_list = df['sku'].dropna().unique().tolist()
+    if "currency" not in df.columns and "currency_x" in df.columns:
+        df["currency"] = df.pop("currency_x")
 
-    #     if sku_list:
-    #         with engine1.connect() as conn:   # engine1 = admin DB (jaha category hai)
-    #             placeholders = ','.join([f":sku_{i}" for i in range(len(sku_list))])
+    # ---------------------------
+    # ✅ SAFE CURRENCY VALUE (avoid iloc[0] crash)
+    # ---------------------------
+    currency_value = "usd"
+    try:
+        if "currency" in country_df.columns and not country_df["currency"].dropna().empty:
+            currency_value = str(country_df["currency"].dropna().iloc[0]).lower()
+    except Exception:
+        currency_value = "usd"
 
-    #             cat_query = text(f"""
-    #                 SELECT sku, referral_fee_percent_est
-    #                 FROM category
-    #                 WHERE sku IN ({placeholders})
-    #             """)
-
-    #             params = {f"sku_{i}": sku for i, sku in enumerate(sku_list)}
-
-    #             category_df = pd.read_sql(cat_query, conn, params=params)
-
-    #         # Join category info into df
-    #         df = df.merge(category_df, on='sku', how='left')
-
-    #         # 👇 Percent ko as-is referral_fee column me store karo
-    #         df.rename(columns={'referral_fee_percent_est': 'referral_fee'}, inplace=True)
-    #     else:
-    #         # koi asin hi nahi mila
-    #         df['referral_fee'] = None
-    # else:
-    #     # df me asin column hi nahi hai
-    #     df['referral_fee'] = None
-    # # Drop the temporary merge columns that pandas adds (_x, _y)
-    # bad_columns = [c for c in df.columns if c.endswith('_x') or c.endswith('_y')]
-    # df = df.drop(columns=bad_columns)
-
-    # Rename the remaining 'currency' column to match the table
-    if 'currency' not in df.columns and 'currency_x' in df.columns:
-        df['currency'] = df.pop('currency_x')
-
-
+    # conversion lookup
     with engine1.connect() as conn:
         currency_query = text("""
             SELECT conversion_rate
@@ -995,179 +1572,72 @@ def run_upload_pipeline_from_df(
             LIMIT 1
         """)
 
-        result = conn.execute(
-            # currency_query,
-            # {
-            #     "currency": country_df['currency'].dropna().iloc[0].lower(),  # Get any available currency from df
-            #     "country": country.lower(),
-            #     "month": month.lower(),
-            #     "year": year
-            # }
+        result = conn.execute(currency_query, {
+            "currency": currency_value,
+            "country": country.lower(),
+            "month": month.lower(),
+            "year": year
+        }).fetchone()
 
-            currency_query,
-            {
-                "currency": (
-                    country_df.get("currency", pd.Series()).dropna().iloc[0].lower()
-                    if not country_df.get("currency", pd.Series()).dropna().empty
-                    else "usd"
-                ),
-                "country": country.lower(),
-                "month": month.lower(),
-                "year": year
-            }
-
-        ).fetchone()
-
-# Step 3: Apply conversion rate to calculate price_in_gbp
     conversion_rate = result[0] if result else None
 
-    if conversion_rate:
-        df['price_in_gbp'] = df['price'] * conversion_rate
+    # ✅ SAFE: price may not exist
+    if conversion_rate and "price" in df.columns:
+        df["price_in_gbp"] = pd.to_numeric(df["price"], errors="coerce") * float(conversion_rate)
     else:
-        df['price_in_gbp'] = None  # Or handle fallback logic if conversion rate not found
+        if "price_in_gbp" not in df.columns:
+            df["price_in_gbp"] = None
 
-    
-    # Calculate cost_of_unit_sold where both values are not null
-    df['cost_of_unit_sold'] = df.apply(lambda row: row['price_in_gbp'] * row['quantity'] 
-                                      if pd.notnull(row['price_in_gbp']) and pd.notnull(row['quantity']) 
-                                      else None, axis=1)
+    df["quantity"] = pd.to_numeric(df.get("quantity"), errors="coerce")
 
-    df.drop(columns=['price'], inplace=True)
+    df["cost_of_unit_sold"] = df.apply(
+        lambda row: row["price_in_gbp"] * row["quantity"]
+        if pd.notnull(row.get("price_in_gbp")) and pd.notnull(row.get("quantity"))
+        else None,
+        axis=1
+    )
 
-    # Clean the 'total' column specifically since it appears in the error message
-    if 'total' in df.columns:
-        df['total'] = df['total'].apply(clean_numeric_value)
+    if "price" in df.columns:
+        df.drop(columns=["price"], inplace=True)
 
-    # Handle the case where any numeric column might still have commas or other formatting issues
-    for col in [c for c in df.columns if c in numeric_columns]:
-        if col in df.columns:
-            # Convert to float with NaN for any unconvertible values
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-
+    # Remove commas in object columns (safe)
     for col in df.columns:
-                if df[col].dtype == 'object':  # likely a string column
-                    if df[col].str.contains(',').any():
-                        print(f"Column {col} contains comma-formatted numbers!")
-    for col in df.columns:
-                if df[col].dtype == 'object':  # likely to have commas or bad data
-                    # Remove commas and convert to numeric
-                    df[col] = df[col].str.replace(',', '', regex=True)
+        if df[col].dtype == "object":
+            try:
+                df[col] = df[col].astype(str).str.replace(",", "", regex=False)
+            except Exception:
+                pass
 
-            # Now convert all possible numeric columns to float
-    df = df.apply(lambda x: pd.to_numeric(x, errors='ignore') if x.dtype == 'object' else x)
+    df = df.apply(lambda x: pd.to_numeric(x, errors="ignore") if x.dtype == "object" else x)
 
     # consolidated
     df_cons = df.copy()
-    df_cons['month'] = month
-    df_cons['year']  = year
+    df_cons["month"] = month
+    df_cons["year"] = year
 
-    # keep only columns that the consolidated table actually has (exclude autoincrement id)
-    valid_cols = [c.name for c in user_consolidated_data.columns if c.name != 'id']
+    valid_cols = [c.name for c in user_consolidated_data.columns if c.name != "id"]
     df_cons = df_cons.reindex(columns=valid_cols)
 
-    df_cons.to_sql(consolidated_table_name, con=engine, if_exists='append', index=False)
+    df_cons.to_sql(consolidated_table_name, con=engine, if_exists="append", index=False)
+    df.to_sql(table_name, con=engine, if_exists="append", index=False)
 
-    bad_columns = ['currency_x', 'currency_y']
-    df = df.drop(columns=[c for c in bad_columns if c in df.columns])
+    df["month"] = month
+    df["year"] = year
 
+    df = df.apply(lambda x: pd.to_numeric(x, errors="ignore") if x.dtype == "object" else x)
 
-    df.to_sql(table_name, con=engine, if_exists='append', index=False)
-    
-    df['month'] = month  # Assigning month from form data
-    df['year'] = year 
-
-    for col in df.columns:
-                if df[col].dtype == 'object':  # likely a string column
-                    if df[col].str.contains(',').any():
-                        print(f"Column {col} contains comma-formatted numbers!")
-    for col in df.columns:
-                if df[col].dtype == 'object':  # likely to have commas or bad data
-                    # Remove commas and convert to numeric
-                    df[col] = df[col].str.replace(',', '', regex=True)
-
-            # Now convert all possible numeric columns to float
-    df = df.apply(lambda x: pd.to_numeric(x, errors='ignore') if x.dtype == 'object' else x)
-
-    # df.to_sql(consolidated_table_name, con=engine, if_exists='append', index=False)
-
-
-    # ✅ Step 1: Currency Rates Dictionary
-    # if country.lower() == 'uk':
-    #     currency1 = 'gbp'
-    # elif country.lower() == 'us':
-    #     currency1 = 'usd'
-    # elif country.lower() == 'canada':
-    #     currency1 = 'cad'
-    # else:
-    #     currency1 = 'usd'  # fallback/default if unknown
-
-    # # Step 2: Fetch conversion rate from currency_conversion table
-    # with engine1.connect() as conn:
-    #     currency_query = text("""
-    #         SELECT conversion_rate
-    #         FROM currency_conversion 
-    #         WHERE lower(user_currency) = :currency1
-    #         AND lower(country) = 'us'
-    #         AND lower(month) = :month 
-    #         AND year = :year
-    #         LIMIT 1
-    #     """)
-        
-    #     result = conn.execute(currency_query, {
-    #         "currency1": currency1,
-    #         "country": "us",
-    #         "month": month.lower(),
-    #         "year": year
-    #     }).fetchone()
-
-    # # Step 3: Use the conversion rate
-    # currency_rate  = result[0] if result else None
-
-    # # Step 4: Create a USD-converted copy if conversion rate exists
-    # df_usd = df.copy()
-
-    # # ✅ Step 3: Convert monetary columns to USD if country found
-    # if currency_rate :
-    #     monetary_columns = [
-    #         'product_sales', 'product_sales_tax', 'postage_credits', 
-    #         'shipping_credits_tax', 'gift_wrap_credits', 'giftwrap_credits_tax', 
-    #         'promotional_rebates', 'promotional_rebates_tax', 'sales_tax_collected',
-    #         'marketplace_facilitator_tax', 'selling_fees', 'fba_fees', 
-    #         'other_transaction_fees', 'other', 'total', 'price_in_gbp', 
-    #         'cost_of_unit_sold'
-    #     ]
-
-    #     for col in monetary_columns:
-    #         if col in df_usd.columns:
-    #             df_usd[col] = pd.to_numeric(df_usd[col], errors='coerce') * currency_rate 
-    # else:
-    #     print("⚠️ No conversion rate found for:", currency1, country, month, year)
-
-    
-    # # fill NA like your code
-    # for col in df_usd.columns:
-    #     if df_usd[col].dtype == 'object' and col not in ['date_time','settlement_id','type','order_id','sku','description','marketplace','fulfilment','order_city','order_state','order_postal','tax_collection_model','month','year','country','product_name']:
-    #         df_usd[col] = pd.to_numeric(df_usd[col], errors='coerce')
-    # df_usd = df_usd.fillna({c:0.0 for c in df_usd.select_dtypes(include=['float64']).columns})
-    # df_usd = df_usd.fillna({c:0 for c in df_usd.select_dtypes(include=['int64']).columns})
-    # df_usd = df_usd.fillna('')
-    # insert global
-
-    # ------------------------------------------
-# SAFE CURRENCY HANDLING (NEVER FAILS)
-# ------------------------------------------
-
-# Step 1: Set default currency for the country
-    if country.lower() == 'uk':
-        currency1 = 'gbp'
-    elif country.lower() == 'us':
-        currency1 = 'usd'
-    elif country.lower() == 'canada':
-        currency1 = 'cad'
+    # ---------------------------
+    # SAFE CURRENCY HANDLING (your block kept)
+    # ---------------------------
+    if country.lower() == "uk":
+        currency1 = "gbp"
+    elif country.lower() == "us":
+        currency1 = "usd"
+    elif country.lower() == "canada":
+        currency1 = "cad"
     else:
-        currency1 = 'usd'  # Always fallback safely
+        currency1 = "usd"
 
-    # Step 2: Try to fetch conversion rate (NEVER FAIL)
     with engine1.connect() as conn:
         currency_query = text("""
             SELECT conversion_rate
@@ -1178,131 +1648,67 @@ def run_upload_pipeline_from_df(
             AND year = :year
             LIMIT 1
         """)
-        
         result = conn.execute(currency_query, {
             "currency1": currency1,
             "month": month.lower(),
             "year": year
         }).fetchone()
 
-    # Step 3: SAFE fallback
-    currency_rate = None
-    if result and result[0] not in [None, 0, ""]:
-        currency_rate = float(result[0])
-    else:
-        print(f"⚠️ Conversion rate NOT found for {currency1}, {country}, {month}-{year}. Proceeding without conversion.")
-        currency_rate = None   # KEEP NONE (SAFE)
+    currency_rate = float(result[0]) if result and result[0] not in [None, 0, ""] else None
 
-    # Step 4: Create USD df
     df_usd = df.copy()
 
-    # Step 5: SAFE conversion — converts only if rate exists
     if currency_rate:
         monetary_columns = [
-            'product_sales', 'product_sales_tax', 'postage_credits', 
-            'shipping_credits_tax', 'gift_wrap_credits', 'giftwrap_credits_tax', 
-            'promotional_rebates', 'promotional_rebates_tax', 'sales_tax_collected',
-            'marketplace_facilitator_tax', 'selling_fees', 'fba_fees', 
-            'other_transaction_fees', 'other', 'total', 'price_in_gbp', 
-            'cost_of_unit_sold'
+            "product_sales", "product_sales_tax", "postage_credits",
+            "shipping_credits_tax", "gift_wrap_credits", "giftwrap_credits_tax",
+            "promotional_rebates", "promotional_rebates_tax", "sales_tax_collected",
+            "marketplace_facilitator_tax", "selling_fees", "fba_fees",
+            "other_transaction_fees", "other", "total", "price_in_gbp",
+            "cost_of_unit_sold"
         ]
-
         for col in monetary_columns:
             if col in df_usd.columns:
-                df_usd[col] = pd.to_numeric(df_usd[col], errors='coerce') * currency_rate
+                df_usd[col] = pd.to_numeric(df_usd[col], errors="coerce") * currency_rate
 
-    # Step 6: SAFE numeric cleanup
     for col in df_usd.columns:
-        if df_usd[col].dtype == 'object' and col not in [
-            'date_time','settlement_id','type','order_id','sku','description',
-            'marketplace','fulfilment','order_city','order_state','order_postal',
-            'tax_collection_model','month','year','country','product_name'
+        if df_usd[col].dtype == "object" and col not in [
+            "date_time","settlement_id","type","order_id","sku","description",
+            "marketplace","fulfilment","order_city","order_state","order_postal",
+            "tax_collection_model","month","year","country","product_name"
         ]:
-            df_usd[col] = pd.to_numeric(df_usd[col], errors='coerce')
+            df_usd[col] = pd.to_numeric(df_usd[col], errors="coerce")
 
-    df_usd = df_usd.fillna({c:0.0 for c in df_usd.select_dtypes(include=['float64']).columns})
-    df_usd = df_usd.fillna({c:0 for c in df_usd.select_dtypes(include=['int64']).columns})
-    df_usd = df_usd.fillna('')
+    df_usd = df_usd.fillna({c: 0.0 for c in df_usd.select_dtypes(include=["float64"]).columns})
+    df_usd = df_usd.fillna({c: 0 for c in df_usd.select_dtypes(include=["int64"]).columns})
+    df_usd = df_usd.fillna("")
 
     with engine.begin() as conn:
-        conn.execute(user_global_table.insert(), df_usd.to_dict(orient='records'))
+        conn.execute(user_global_table.insert(), df_usd.to_dict(orient="records"))
 
-    
-    REQUIRED_COLUMNS = [
-            "order_id", "sku", "description", "product_sales", "product_sales_tax", 
-            "postage_credits", "shipping_credits_tax", "gift_wrap_credits", "giftwrap_credits_tax", 
-            "promotional_rebates", "promotional_rebates_tax", "marketplace_facilitator_tax", 
-            "selling_fees", "fba_fees", "other_transaction_fees", "errorstatus", "answer", 
-            "difference", "fbaerrorstatus", "fbaanswer"  # Use original capitalization
-    ]
-
-    # referral fees + apply_modifications + charts (same as your /upload)
-    # sku_list = df['sku'].dropna().tolist()
-    # referral_fees = get_referral_fees(user_id, country, sku_list)
-    # if referral_fees is None:
-    #     return {"success": False, "message": "Referral fee not found for the SKUs in the fetched settlement file."}
-
+    # apply modifications
     df_modified = apply_modifications_fatch(df_cons, country)
-    # enforce numeric
+
     for col in numeric_columns:
         if col in df_modified.columns:
-            df_modified[col] = pd.to_numeric(df_modified[col], errors='coerce')
+            df_modified[col] = pd.to_numeric(df_modified[col], errors="coerce")
 
-    # overwrite monthly with modified data (your upload does replace)
-    df_modified.to_sql(table_name, con=engine, if_exists='replace', index=False, method='multi')
+    df_modified.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi")
 
-    # make excel blob + PnL + charts exactly like upload
     excel_output = io.BytesIO()
-    df_modified.to_excel(excel_output, index=False); excel_output.seek(0)
+    df_modified.to_excel(excel_output, index=False)
+    excel_output.seek(0)
 
-    table_name = f"user_{user_id}_{country}_{month}{year}_data"
-    
-    with engine.connect() as conn:
-        query = f"""
-        SELECT * FROM {table_name} 
-        WHERE errorstatus IN ('cases to be inquired', 'NoReferralFee')
-        AND sku <> '0'
-        AND sku IS NOT NULL
-        AND TRIM(sku) <> ''
-        """
-        print(f"Executing query on table: {table_name}")  # Debugging
-        error_df = pd.read_sql(query, conn)
-                
-                # Filter error_df to keep only the required columns
-    error_df = error_df[[col for col in REQUIRED_COLUMNS if col in error_df.columns]]
-
-                # Save the error file if there are errors
-    error_file_path = None
-    error_file_base64 = None
-    if not error_df.empty:
-        error_filename = f"error_file_{user_id}{country}{month}_{year}.xlsx"
-        error_file_path = os.path.join(UPLOAD_FOLDER, error_filename)                    
-        error_df.to_excel(error_file_path, index=False)
-                    
-                    # Encode error file to base64
-        with open(error_file_path, "rb") as error_file:
-            error_file_base64 = base64.b64encode(error_file.read()).decode()
-
-
+    # -------- your analytics remain as-is ----------
     quarter_mapping = {
-        'january': 'Q1','february':'Q1','march':'Q1','april':'Q2','may':'Q2','june':'Q2',
-        'july':'Q3','august':'Q3','september':'Q3','october':'Q4','november':'Q4','december':'Q4'
+        "january": "Q1","february":"Q1","march":"Q1","april":"Q2","may":"Q2","june":"Q2",
+        "july":"Q3","august":"Q3","september":"Q3","october":"Q4","november":"Q4","december":"Q4"
     }
     quarter = quarter_mapping[month]
-    # UK/US split like your code
-    if country == 'uk':
-        
-        # result = process_skuwise_data(user_id, country, month, year)
-        # if result is None:
-        #     total_cous, total_amazon_fee, cm2_profit = 0.0, 0.0, 0.0
-        # else:
-        # total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees = process_skuwise_data(user_id, country, month, year)
-        # ytd_pie_chart = process_yearly_skuwise_data(user_id, country, year)
-        # qtd_pie_chart = process_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
-        # sales_pie_chart = create_sales_pie_chart(df_modified)
-        # expense_pie_chart, cm2_margins, acos, rembursment_vs_cm2_margins, advertising_total, reimbursement_vs_sales, unit_sold, total_sales, otherwplatform, taxncredit = create_expense_pie_chart(df_modified, country, month, year)
 
-        total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold  = process_skuwise_data(user_id, country, month, year)
+    if country == "uk":
+        total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold = \
+            process_skuwise_data(user_id, country, month, year)
         ytd_pie_chart = process_yearly_skuwise_data(user_id, country, year)
         qtd_pie_chart = process_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
     else:
@@ -1315,28 +1721,32 @@ def run_upload_pipeline_from_df(
     process_global_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
     process_global_yearly_skuwise_data(user_id, country, year)
 
-    # UploadHistory same as upload (file name N/A here)
     existing_entry = UploadHistory.query.filter_by(user_id=user_id, country=country, month=month, year=year).first()
     if existing_entry:
-        db.session.delete(existing_entry); db.session.commit()
+        db.session.delete(existing_entry)
+        db.session.commit()
+
     new_upload = UploadHistory(
         user_id=user_id, year=year, month=month, country=country,
         file_name=f"amazon_settlement_{month}{year}.tsv",
         sales_chart_img=None, expense_chart_img=None,
         total_sales=float(total_sales), total_profit=float(total_profit),
-        otherwplatform=platform_fee, taxncredit=float(taxncredit) if taxncredit is not None else 0.0,
-        total_expense=float(total_expense), qtd_pie_chart=qtd_pie_chart, ytd_pie_chart=ytd_pie_chart,
+        otherwplatform=platform_fee,
+        taxncredit=float(taxncredit) if taxncredit is not None else 0.0,
+        total_expense=float(total_expense),
+        qtd_pie_chart=qtd_pie_chart, ytd_pie_chart=ytd_pie_chart,
         total_cous=float(total_cous), total_amazon_fee=float(total_amazon_fee),
         total_fba_fees=float(total_fba_fees), platform_fee=float(platform_fee),
         rembursement_fee=float(rembursement_fee), cm2_profit=float(cm2_profit),
         cm2_margins=float(cm2_margins), acos=float(acos),
         rembursment_vs_cm2_margins=float(rembursment_vs_cm2_margins),
-        advertising_total=float(advertising_total), reimbursement_vs_sales=float(reimbursement_vs_sales),
+        advertising_total=float(advertising_total),
+        reimbursement_vs_sales=float(reimbursement_vs_sales),
         unit_sold=int(unit_sold)
     )
-    db.session.add(new_upload); db.session.commit()
+    db.session.add(new_upload)
+    db.session.commit()
 
-    # build response like /upload
     def replace_nan_with_null(v):
         if isinstance(v, dict):
             return {k: replace_nan_with_null(x) for k, x in v.items()}
@@ -1350,8 +1760,6 @@ def run_upload_pipeline_from_df(
 
     response_data = {
         "success": True,
-        # "sales_chart_img": sales_pie_chart,
-        # "expense_chart_img": expense_pie_chart,
         "total_sales": total_sales,
         "total_profit": total_profit,
         "otherwplatform": platform_fee,
@@ -1362,6 +1770,7 @@ def run_upload_pipeline_from_df(
         "platform_fee": platform_fee,
     }
     return replace_nan_with_null(response_data)
+
 
 # ------------------------------------------------- Routes -------------------------------------------------
 @amazon_api_bp.route("/amazon_api/login", methods=["GET"])
@@ -2292,286 +2701,17 @@ def _sum_where(
 # =========================================================
 # FLATTEN TRANSACTION (FULL MTD SCHEMA)
 # =========================================================
-# def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
-#     posted_date = tx.get("postedDate")
-#     ttype = tx.get("transactionType")
-#     tstatus = tx.get("transactionStatus")
-#     desc = tx.get("description")
-#     total_amount = (tx.get("totalAmount") or {}).get("currencyAmount")
-
-#     marketplace_details = tx.get("marketplaceDetails") or {}
-#     marketplace = marketplace_details.get("marketplaceName") or marketplace_details.get("marketplaceId")
-
-#     order_id = _extract_order_id_from_related_identifiers(tx.get("relatedIdentifiers") or [])
-
-#     # Item-level (sku/qty + item breakdowns)
-#     sku = None
-#     quantity = None
-#     item_breakdowns: List[Dict[str, Any]] = []
-#     items = tx.get("items") or []
-#     if items:
-#         item0 = items[0] or {}
-#         sku, quantity = _extract_sku_and_qty_from_contexts(item0.get("contexts") or [])
-#         if isinstance(item0.get("breakdowns"), list):
-#             item_breakdowns = item0["breakdowns"]
-
-#     tx_breakdowns: List[Dict[str, Any]] = tx.get("breakdowns") or []
-
-#     # Leaf nodes
-#     item_leaves = _walk_leaf_breakdowns(item_breakdowns)
-#     tx_leaves = _walk_leaf_breakdowns(tx_breakdowns)
-
-#     eps = 1e-9
-#     ttype_norm = (ttype or "").lower().replace(" ", "")
-
-#     # ------------------- PRODUCT SALES (VAT-INCLUSIVE) -------------------
-#     product_sales_net = _sum_where(
-#         item_leaves,
-#         lambda t: (_contains_any(t, ["principal", "itemprice"]) and ("tax" not in t))
-#     )
-
-#     product_sales_tax = _sum_where(
-#         item_leaves,
-#         lambda t: ("tax" in t) and ("shipping" not in t) and (not _contains_any(t, PROMO_KEYS))
-#     )
-
-#     # Fallback ONLY for sales-like transaction types (prevents ProductAdsPayment etc. in product_sales)
-#     sales_like_types = {"shipment", "refund", "chargebackrefund", "guaranteeclaim"}
-#     if abs(product_sales_net) < eps and ttype_norm in sales_like_types:
-#         try:
-#             product_sales_net = float(total_amount or 0.0)
-#         except (TypeError, ValueError):
-#             product_sales_net = 0.0
-
-#     product_sales = product_sales_net + product_sales_tax
-
-#     # ------------------- SHIPPING / POSTAGE -------------------
-#     # 1) Try item-level shipping first
-#     shipping_credits = _sum_where(
-#         item_leaves,
-#         lambda t: (("shipping" in t or "shipcharge" in t or "shippingcharges" in t) and ("tax" not in t))
-#     )
-#     shipping_credits_tax = _sum_where(
-#         item_leaves,
-#         lambda t: (("shipping" in t or "shipcharge" in t or "shippingcharges" in t) and ("tax" in t))
-#     )
-
-#     # 2) If item-level shipping is empty, fallback to tx-level shipping (THIS fixes missing postage_credits)
-#     if abs(shipping_credits) < eps:
-#         shipping_credits = _sum_where(
-#             tx_leaves,
-#             lambda t: (("shipping" in t or "shipcharge" in t or "shippingcharges" in t) and ("tax" not in t))
-#         )
-#     if abs(shipping_credits_tax) < eps:
-#         shipping_credits_tax = _sum_where(
-#             tx_leaves,
-#             lambda t: (("shipping" in t or "shipcharge" in t or "shippingcharges" in t) and ("tax" in t))
-#         )
-
-#     # ✅ You want postage_credits to include shipping tax
-#     postage_credits = shipping_credits + shipping_credits_tax
-
-#     # ✅ Remove shipping from product sales (so shipping never sits inside product_sales)
-#     product_sales = product_sales - shipping_credits - shipping_credits_tax
-
-#     # ------------------- PROMOTIONS (SPLIT) -------------------
-#     promotional_rebates = _sum_where(
-#         item_leaves,
-#         lambda t: _contains_any(t, PROMO_KEYS) and ("tax" not in t)
-#     )
-#     promotional_rebates_tax = _sum_where(
-#         item_leaves,
-#         lambda t: _contains_any(t, PROMO_KEYS) and ("tax" in t)
-#     )
-
-#     # =========================================================
-#     # FEES + WITHHELD TAX (NO 2x) + DIVIDE BY 2 FOR FEES
-#     # =========================================================
-#     selling_fees = 0.0
-#     fba_fees = 0.0
-#     other_transaction_fees = 0.0
-#     marketplace_withheld_tax = 0.0
-#     marketplace_facilitator_tax = 0.0
-
-#     def _node_has_children(n: Dict[str, Any]) -> bool:
-#         ch = n.get("breakdowns")
-#         return isinstance(ch, list) and len(ch) > 0
-
-#     def _has_non_tax_fee_descendant(children: Optional[List[Dict[str, Any]]], fee_keys: List[str]) -> bool:
-#         for c in children or []:
-#             ct = _btype(c)
-#             camt = _amt(c)
-#             is_tax = ("tax" in ct)
-#             is_fee = _contains_any(ct, fee_keys)
-#             if (not is_tax) and is_fee and abs(camt) > 1e-12:
-#                 return True
-#             gch = c.get("breakdowns")
-#             if isinstance(gch, list) and gch:
-#                 if _has_non_tax_fee_descendant(gch, fee_keys):
-#                     return True
-#         return False
-
-#     # Walk ALL nodes (for net fees + withheld/facilitator)
-#     for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
-#         amt = _amt(node)
-#         if abs(amt) < 1e-12:
-#             continue
-
-#         path_str = "".join(path)
-#         is_tax = ("tax" in t) or ("tax" in path_str)
-
-#         is_withheld = _contains_any(path_str, WITHHELD_TAX_KEYS)
-#         is_facilitator = _contains_any(path_str, FACILITATOR_TAX_KEYS)
-
-#         is_selling_fee = _contains_any(path_str, SELLING_FEE_KEYS)
-#         is_fba_fee = _contains_any(path_str, FBA_FEE_KEYS)
-
-#         is_service_fee_like = (
-#             (ttype_norm == "servicefee")
-#             or _contains_any(path_str, SERVICE_FEE_EXCLUDE_KEYS)
-#         )
-
-#         if is_withheld:
-#             marketplace_withheld_tax += amt
-#             continue
-#         if is_facilitator:
-#             marketplace_facilitator_tax += amt
-#             continue
-
-#         if is_selling_fee and (not is_tax) and (not is_fba_fee):
-#             children = node.get("breakdowns") if _node_has_children(node) else None
-#             if _has_non_tax_fee_descendant(children, SELLING_FEE_KEYS):
-#                 continue
-#             selling_fees += amt
-#             continue
-
-#         if is_fba_fee and (not is_tax) and (not is_service_fee_like):
-#             children = node.get("breakdowns") if _node_has_children(node) else None
-#             if _has_non_tax_fee_descendant(children, FBA_FEE_KEYS):
-#                 continue
-#             fba_fees += amt
-#             continue
-
-#     # OTHER TRANSACTION FEES: take only LEAF tax nodes to avoid 2x totals
-#     for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
-#         if _node_has_children(node):
-#             continue
-
-#         amt = _amt(node)
-#         if abs(amt) < 1e-12:
-#             continue
-
-#         path_str = "".join(path)
-
-#         if _contains_any(path_str, WITHHELD_TAX_KEYS) or _contains_any(path_str, FACILITATOR_TAX_KEYS):
-#             continue
-
-#         is_tax = ("tax" in t) or ("tax" in path_str)
-#         is_fee_related = (
-#             _contains_any(path_str, SELLING_FEE_KEYS)
-#             or _contains_any(path_str, FBA_FEE_KEYS)
-#             or ("fee" in path_str)
-#         )
-
-#         if is_tax and is_fee_related and (not _contains_any(path_str, PROMO_KEYS)):
-#             other_transaction_fees += amt
-#             continue
-
-#         if _contains_any(path_str, ["chargeback", "holdback"]):
-#             other_transaction_fees += amt
-#             continue
-
-#     if selling_fees > 0:
-#         selling_fees = -abs(selling_fees)
-
-#     if abs(other_transaction_fees) > 1e-12:
-#         fba_fees += other_transaction_fees
-#         other_transaction_fees = 0.0
-
-#     if fba_fees > 0:
-#         fba_fees = -abs(fba_fees)
-
-#     if marketplace_withheld_tax > 0:
-#         marketplace_withheld_tax = -abs(marketplace_withheld_tax)
-#     if marketplace_facilitator_tax > 0:
-#         marketplace_facilitator_tax = -abs(marketplace_facilitator_tax)
-
-#     selling_fees = selling_fees / 2.0 if abs(selling_fees) > 1e-12 else selling_fees
-#     fba_fees = fba_fees / 2.0 if abs(fba_fees) > 1e-12 else fba_fees
-
-#     sales_tax_collected = marketplace_withheld_tax
-#     if abs(sales_tax_collected) < eps:
-#         sales_tax_collected = product_sales_tax + shipping_credits_tax
-#         if sales_tax_collected > 0:
-#             sales_tax_collected = -abs(sales_tax_collected)
-
-#     # ✅ IMPORTANT: since postage_credits already includes shipping + shipping_tax,
-#     # don't add shipping_credits again (otherwise double counting)
-#     total_calc = (
-#         product_sales
-#         + postage_credits
-#         - promotional_rebates
-#         - promotional_rebates_tax
-#         + selling_fees
-#         + fba_fees
-#         + other_transaction_fees
-#         + marketplace_withheld_tax
-#         + marketplace_facilitator_tax
-#         - sales_tax_collected
-#     )
-
-#     row: Dict[str, Any] = {
-#         "date_time": posted_date,
-#         "settlement_id": None,
-#         "type": ttype,
-#         "order_id": order_id,
-#         "sku": sku,
-#         "description": desc,
-#         "quantity": quantity,
-#         "marketplace": marketplace,
-
-#         "fulfilment": None,
-#         "order_city": None,
-#         "order_state": None,
-#         "order_postal": None,
-#         "tax_collection_model": None,
-
-#         "product_sales": product_sales,
-#         "product_sales_tax": product_sales_tax,
-#         "postage_credits": postage_credits,
-#         "shipping_credits": shipping_credits,
-#         "shipping_credits_tax": shipping_credits_tax,
-#         "gift_wrap_credits": 0.0,
-#         "giftwrap_credits_tax": 0.0,
-
-#         "promotional_rebates": promotional_rebates,
-#         "promotional_rebates_tax": promotional_rebates_tax,
-
-#         "marketplace_withheld_tax": marketplace_withheld_tax,
-#         "marketplace_facilitator_tax": marketplace_facilitator_tax,
-
-#         "selling_fees": selling_fees,
-#         "fba_fees": fba_fees,
-#         "other_transaction_fees": other_transaction_fees,
-#         "other": 0.0,
-
-#         "sales_tax_collected": sales_tax_collected,
-#         "regulatory_fee": 0.0,
-#         "tax_on_regulatory_fee": 0.0,
-#         "account_type": None,
-
-#         "total": total_calc,
-#         "bucket": tstatus,
-#     }
-
-#     return row
-
 def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     posted_date = tx.get("postedDate")
     ttype = tx.get("transactionType")
     tstatus = tx.get("transactionStatus")
     desc = tx.get("description")
-    total_amount = (tx.get("totalAmount") or {}).get("currencyAmount")
+
+    total_amount_raw = (tx.get("totalAmount") or {}).get("currencyAmount")
+    try:
+        total_amount = float(total_amount_raw) if total_amount_raw is not None else 0.0
+    except (TypeError, ValueError):
+        total_amount = 0.0
 
     marketplace_details = tx.get("marketplaceDetails") or {}
     marketplace = marketplace_details.get("marketplaceName") or marketplace_details.get("marketplaceId")
@@ -2592,15 +2732,131 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     # ---------- tx level ----------
     tx_breakdowns: List[Dict[str, Any]] = tx.get("breakdowns") or []
 
+    # ---------- leaves ----------
     item_leaves = _walk_leaf_breakdowns(item_breakdowns)
     tx_leaves = _walk_leaf_breakdowns(tx_breakdowns)
 
     eps = 1e-9
     ttype_norm = (ttype or "").lower().replace(" ", "")
+    desc_norm = (desc or "").lower().replace(" ", "")
 
     # =========================================================
-    # PRODUCT SALES (VAT inclusive, but NO shipping inside)
+    # DEFAULT OUTPUTS
     # =========================================================
+    product_sales = 0.0
+    product_sales_tax = 0.0
+    postage_credits = 0.0
+    shipping_credits = 0.0
+    shipping_credits_tax = 0.0
+    promotional_rebates = 0.0
+    promotional_rebates_tax = 0.0
+    selling_fees = 0.0
+    fba_fees = 0.0
+    other_transaction_fees = 0.0
+    marketplace_withheld_tax = 0.0
+    marketplace_facilitator_tax = 0.0
+    sales_tax_collected = 0.0
+    other = 0.0
+
+    def _node_has_children(n: Dict[str, Any]) -> bool:
+        ch = n.get("breakdowns")
+        return isinstance(ch, list) and len(ch) > 0
+
+    has_any_breakdowns = bool(tx_breakdowns) or bool(item_breakdowns)
+
+    # =========================================================
+    # ✅ SPECIAL CASES (NO BREAKDOWN / NON-SALES TYPES)
+    # =========================================================
+
+    # ProductAdsPayment => fee
+    if ttype_norm == "productadspayment":
+        other_transaction_fees = -abs(total_amount) if abs(total_amount) > eps else 0.0
+        total_calc = other_transaction_fees
+        return {
+            "date_time": posted_date, "settlement_id": None, "type": ttype,
+            "order_id": order_id, "sku": sku, "description": desc, "quantity": quantity,
+            "marketplace": marketplace, "fulfilment": None, "order_city": None,
+            "order_state": None, "order_postal": None, "tax_collection_model": None,
+            "product_sales": 0.0, "product_sales_tax": 0.0, "postage_credits": 0.0,
+            "shipping_credits": 0.0, "shipping_credits_tax": 0.0,
+            "gift_wrap_credits": 0.0, "giftwrap_credits_tax": 0.0,
+            "promotional_rebates": 0.0, "promotional_rebates_tax": 0.0,
+            "sales_tax_collected": 0.0, "marketplace_withheld_tax": 0.0,
+            "marketplace_facilitator_tax": 0.0,
+            "selling_fees": 0.0, "fba_fees": 0.0,
+            "other_transaction_fees": other_transaction_fees, "other": 0.0,
+            "regulatory_fee": 0.0, "tax_on_regulatory_fee": 0.0, "account_type": None,
+            "total": total_calc, "bucket": tstatus,
+        }
+
+    # Transfer/Disbursement => payout
+    if ttype_norm == "transfer":
+        other = total_amount
+        total_calc = other
+        return {
+            "date_time": posted_date, "settlement_id": None, "type": ttype,
+            "order_id": order_id, "sku": sku, "description": desc, "quantity": quantity,
+            "marketplace": marketplace, "fulfilment": None, "order_city": None,
+            "order_state": None, "order_postal": None, "tax_collection_model": None,
+            "product_sales": 0.0, "product_sales_tax": 0.0, "postage_credits": 0.0,
+            "shipping_credits": 0.0, "shipping_credits_tax": 0.0,
+            "gift_wrap_credits": 0.0, "giftwrap_credits_tax": 0.0,
+            "promotional_rebates": 0.0, "promotional_rebates_tax": 0.0,
+            "sales_tax_collected": 0.0, "marketplace_withheld_tax": 0.0,
+            "marketplace_facilitator_tax": 0.0,
+            "selling_fees": 0.0, "fba_fees": 0.0,
+            "other_transaction_fees": 0.0, "other": other,
+            "regulatory_fee": 0.0, "tax_on_regulatory_fee": 0.0, "account_type": None,
+            "total": total_calc, "bucket": tstatus,
+        }
+
+    # ServiceFee => put total in fba_fees
+    if ttype_norm == "servicefee":
+        fba_fees = -abs(total_amount) if abs(total_amount) > eps else 0.0
+        total_calc = fba_fees
+        return {
+            "date_time": posted_date, "settlement_id": None, "type": ttype,
+            "order_id": order_id, "sku": sku, "description": desc, "quantity": quantity,
+            "marketplace": marketplace, "fulfilment": None, "order_city": None,
+            "order_state": None, "order_postal": None, "tax_collection_model": None,
+            "product_sales": 0.0, "product_sales_tax": 0.0, "postage_credits": 0.0,
+            "shipping_credits": 0.0, "shipping_credits_tax": 0.0,
+            "gift_wrap_credits": 0.0, "giftwrap_credits_tax": 0.0,
+            "promotional_rebates": 0.0, "promotional_rebates_tax": 0.0,
+            "sales_tax_collected": 0.0, "marketplace_withheld_tax": 0.0,
+            "marketplace_facilitator_tax": 0.0,
+            "selling_fees": 0.0, "fba_fees": fba_fees,
+            "other_transaction_fees": 0.0, "other": 0.0,
+            "regulatory_fee": 0.0, "tax_on_regulatory_fee": 0.0, "account_type": None,
+            "total": total_calc, "bucket": tstatus,
+        }
+
+    # SellerDealPayment => put in other
+    if ttype_norm == "sellerdealpayment":
+        other = total_amount
+        total_calc = other
+        return {
+            "date_time": posted_date, "settlement_id": None, "type": ttype,
+            "order_id": order_id, "sku": sku, "description": desc, "quantity": quantity,
+            "marketplace": marketplace, "fulfilment": None, "order_city": None,
+            "order_state": None, "order_postal": None, "tax_collection_model": None,
+            "product_sales": 0.0, "product_sales_tax": 0.0, "postage_credits": 0.0,
+            "shipping_credits": 0.0, "shipping_credits_tax": 0.0,
+            "gift_wrap_credits": 0.0, "giftwrap_credits_tax": 0.0,
+            "promotional_rebates": 0.0, "promotional_rebates_tax": 0.0,
+            "sales_tax_collected": 0.0, "marketplace_withheld_tax": 0.0,
+            "marketplace_facilitator_tax": 0.0,
+            "selling_fees": 0.0, "fba_fees": 0.0,
+            "other_transaction_fees": 0.0, "other": other,
+            "regulatory_fee": 0.0, "tax_on_regulatory_fee": 0.0, "account_type": None,
+            "total": total_calc, "bucket": tstatus,
+        }
+
+    # =========================================================
+    # NORMAL FLOW
+    # =========================================================
+
+    # ------------------- PRODUCT SALES (VAT-INCLUSIVE) -------------------
     product_sales_net = _sum_where(
         item_leaves,
         lambda t: (_contains_any(t, ["principal", "itemprice"]) and ("tax" not in t))
@@ -2614,16 +2870,11 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     # fallback only for sales-like types
     sales_like_types = {"shipment", "refund", "chargebackrefund", "guaranteeclaim"}
     if abs(product_sales_net) < eps and ttype_norm in sales_like_types:
-        try:
-            product_sales_net = float(total_amount or 0.0)
-        except (TypeError, ValueError):
-            product_sales_net = 0.0
+        product_sales_net = total_amount
 
     product_sales = product_sales_net + product_sales_tax
 
-    # =========================================================
-    # SHIPPING / POSTAGE
-    # =========================================================
+    # ------------------- ✅ SHIPPING / POSTAGE (WORKING LEAF LOGIC) -------------------
     # 1) item level first
     shipping_credits = _sum_where(
         item_leaves,
@@ -2634,7 +2885,7 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         lambda t: (("shipping" in t or "shipcharge" in t or "shippingcharges" in t) and ("tax" in t))
     )
 
-    # 2) fallback tx level (fix missing postage rows)
+    # 2) fallback tx level (THIS is what fixes the missing 4.16 rows)
     if abs(shipping_credits) < eps:
         shipping_credits = _sum_where(
             tx_leaves,
@@ -2646,34 +2897,22 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
             lambda t: (("shipping" in t or "shipcharge" in t or "shippingcharges" in t) and ("tax" in t))
         )
 
-    # ✅ postage credits must include shipping tax
     postage_credits = shipping_credits + shipping_credits_tax
 
-    # ✅ remove shipping from product sales
+    # remove shipping from product sales
     product_sales = product_sales - shipping_credits - shipping_credits_tax
 
-    # =========================================================
-    # PROMOTIONS
-    # =========================================================
-    promotional_rebates = _sum_where(
-        item_leaves,
-        lambda t: _contains_any(t, PROMO_KEYS) and ("tax" not in t)
-    )
-    promotional_rebates_tax = _sum_where(
-        item_leaves,
-        lambda t: _contains_any(t, PROMO_KEYS) and ("tax" in t)
-    )
+    # ------------------- PROMOTIONS -------------------
+    promotional_rebates = _sum_where(item_leaves, lambda t: _contains_any(t, PROMO_KEYS) and ("tax" not in t))
+    promotional_rebates_tax = _sum_where(item_leaves, lambda t: _contains_any(t, PROMO_KEYS) and ("tax" in t))
 
-    # =========================================================
-    # FEES + WITHHELD / FACILITATOR TAX  (ROBUST)
-    # =========================================================
+    # ------------------- FEES + WITHHELD / FACILITATOR TAX -------------------
+    marketplace_withheld_tax = 0.0
+    marketplace_facilitator_tax = 0.0
     selling_fees = 0.0
     fba_fees = 0.0
     other_transaction_fees = 0.0
-    marketplace_withheld_tax = 0.0
-    marketplace_facilitator_tax = 0.0
 
-    # stronger keyword sets (Amazon varies names a lot)
     WITHHELD_KEYS_STRONG = [
         "marketplacewithheld", "marketplacewithheldtax",
         "withheldtax", "taxwithheld", "withheld"
@@ -2682,10 +2921,6 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         "marketplacefacilitator", "marketplacefacilitatortax",
         "facilitatortax", "facilitator"
     ]
-
-    def _node_has_children(n: Dict[str, Any]) -> bool:
-        ch = n.get("breakdowns")
-        return isinstance(ch, list) and len(ch) > 0
 
     def _has_non_tax_fee_descendant(children: Optional[List[Dict[str, Any]]], fee_keys: List[str]) -> bool:
         for c in children or []:
@@ -2708,19 +2943,16 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
             if abs(amt) < 1e-12:
                 continue
             path_str = "".join(path)
-
             if _contains_any(path_str, WITHHELD_KEYS_STRONG):
                 marketplace_withheld_tax += amt
-                continue
-            if _contains_any(path_str, FACILITATOR_KEYS_STRONG):
+            elif _contains_any(path_str, FACILITATOR_KEYS_STRONG):
                 marketplace_facilitator_tax += amt
-                continue
 
-    # ✅ scan BOTH tx + item breakdowns for withheld/facilitator
+    # scan both tx + item trees
     _accumulate_withheld_and_facilitator(tx_breakdowns)
     _accumulate_withheld_and_facilitator(item_breakdowns)
 
-    # Walk ALL tx nodes for fee nets (keep your logic)
+    # fee nets from tx tree
     for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
         amt = _amt(node)
         if abs(amt) < 1e-12:
@@ -2729,17 +2961,12 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         path_str = "".join(path)
         is_tax = ("tax" in t) or ("tax" in path_str)
 
-        # skip tax nodes already handled above (withheld/facilitator)
         if _contains_any(path_str, WITHHELD_KEYS_STRONG) or _contains_any(path_str, FACILITATOR_KEYS_STRONG):
             continue
 
         is_selling_fee = _contains_any(path_str, SELLING_FEE_KEYS)
         is_fba_fee = _contains_any(path_str, FBA_FEE_KEYS)
-
-        is_service_fee_like = (
-            (ttype_norm == "servicefee")
-            or _contains_any(path_str, SERVICE_FEE_EXCLUDE_KEYS)
-        )
+        is_service_fee_like = (ttype_norm == "servicefee") or _contains_any(path_str, SERVICE_FEE_EXCLUDE_KEYS)
 
         if is_selling_fee and (not is_tax) and (not is_fba_fee):
             children = node.get("breakdowns") if _node_has_children(node) else None
@@ -2755,46 +2982,11 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
             fba_fees += amt
             continue
 
-    # other_transaction_fees (leaf tax fee nodes)
-    for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
-        if _node_has_children(node):
-            continue
-        amt = _amt(node)
-        if abs(amt) < 1e-12:
-            continue
-
-        path_str = "".join(path)
-
-        if _contains_any(path_str, WITHHELD_KEYS_STRONG) or _contains_any(path_str, FACILITATOR_KEYS_STRONG):
-            continue
-
-        is_tax = ("tax" in t) or ("tax" in path_str)
-        is_fee_related = (
-            _contains_any(path_str, SELLING_FEE_KEYS)
-            or _contains_any(path_str, FBA_FEE_KEYS)
-            or ("fee" in path_str)
-        )
-
-        if is_tax and is_fee_related and (not _contains_any(path_str, PROMO_KEYS)):
-            other_transaction_fees += amt
-            continue
-
-        if _contains_any(path_str, ["chargeback", "holdback"]):
-            other_transaction_fees += amt
-            continue
-
     # normalize signs
     if selling_fees > 0:
         selling_fees = -abs(selling_fees)
-
-    # merge other fees into fba fees (your requirement)
-    if abs(other_transaction_fees) > 1e-12:
-        fba_fees += other_transaction_fees
-        other_transaction_fees = 0.0
-
     if fba_fees > 0:
         fba_fees = -abs(fba_fees)
-
     if marketplace_withheld_tax > 0:
         marketplace_withheld_tax = -abs(marketplace_withheld_tax)
     if marketplace_facilitator_tax > 0:
@@ -2804,10 +2996,8 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     selling_fees = selling_fees / 2.0 if abs(selling_fees) > 1e-12 else selling_fees
     fba_fees = fba_fees / 2.0 if abs(fba_fees) > 1e-12 else fba_fees
 
-    # ✅ sales_tax_collected must match withheld tax (no fallback)
     sales_tax_collected = marketplace_withheld_tax
 
-    # total: postage_credits already includes shipping+tax
     total_calc = (
         product_sales
         + postage_credits
@@ -2820,6 +3010,10 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         + marketplace_facilitator_tax
         - sales_tax_collected
     )
+
+    if (not has_any_breakdowns) and abs(total_calc) < eps and abs(total_amount) > eps:
+        other = total_amount
+        total_calc = other
 
     return {
         "date_time": posted_date,
@@ -2855,7 +3049,7 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         "selling_fees": selling_fees,
         "fba_fees": fba_fees,
         "other_transaction_fees": other_transaction_fees,
-        "other": 0.0,
+        "other": other,
 
         "regulatory_fee": 0.0,
         "tax_on_regulatory_fee": 0.0,
@@ -2866,22 +3060,139 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-
 # =========================================================
 # ROUTE
 # =========================================================
+# @amazon_api_bp.route("/amazon_api/finances/monthly_transactions", methods=["GET"])
+# def finances_monthly_transactions():
+#     """
+#     Query params:
+#       - year (int, default: current UTC year)
+#       - month (int, default: 6)
+#       - transaction_status (optional, default RELEASED)
+#       - marketplace_id (optional)
+#       - transaction_type (optional, e.g. Shipment)
+#       - format (json | excel)
+#     """
+#     # -------- auth --------
+#     auth_header = request.headers.get("Authorization")
+#     if not auth_header or not auth_header.startswith("Bearer "):
+#         return jsonify({"success": False, "error": "Authorization token is missing or invalid"}), 401
+
+#     token = auth_header.split(" ")[1]
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+#         user_id = payload["user_id"]
+#     except jwt.ExpiredSignatureError:
+#         return jsonify({"success": False, "error": "Token has expired"}), 401
+#     except jwt.InvalidTokenError:
+#         return jsonify({"success": False, "error": "Invalid token"}), 401
+
+#     # -------- params --------
+#     now_utc = datetime.now(timezone.utc)
+#     try:
+#         year = int(request.args.get("year", now_utc.year))
+#         month = int(request.args.get("month", 6))
+#         if month < 1 or month > 12:
+#             raise ValueError("month must be 1-12")
+#     except ValueError:
+#         return jsonify({"success": False, "error": "Invalid year or month"}), 400
+
+#     transaction_status = request.args.get("transaction_status", "RELEASED")
+#     marketplace_id = request.args.get("marketplace_id")
+#     transaction_type_filter = request.args.get("transaction_type")
+#     response_format = (request.args.get("format") or "json").lower()
+
+#     # -------- region + marketplace override --------
+#     _apply_region_and_marketplace_from_request()
+
+#     # -------- load refresh token for this user + region --------
+#     au = amazon_user.query.filter_by(user_id=user_id, region=amazon_client.region).first()
+#     if not au or not au.refresh_token:
+#         return jsonify({
+#             "success": False,
+#             "error": "Amazon account not connected for this region",
+#             "status": "no_refresh_token",
+#         }), 400
+
+#     amazon_client.refresh_token = au.refresh_token
+
+#     # -------- date range --------
+#     posted_after, posted_before = _month_date_range_utc(year, month)
+
+#     # -------- call Finances API (pagination) --------
+#     params: Dict[str, Any] = {
+#         "postedAfter": posted_after,
+#         "postedBefore": posted_before,
+#         "marketplaceId": marketplace_id or amazon_client.marketplace_id,
+#     }
+#     if transaction_status:
+#         params["transactionStatus"] = transaction_status
+
+#     all_rows: List[Dict[str, Any]] = []
+
+#     while True:
+#         res = amazon_client.make_api_call(
+#             "/finances/2024-06-19/transactions",
+#             method="GET",
+#             params=params,
+#         )
+
+#         if not res or "error" in res:
+#             return jsonify({"success": False, "error": res or {"error": "Unknown SP-API error"}}), 502
+
+#         payload = res.get("payload") or res
+#         transactions = payload.get("transactions") or []
+
+#         for tx in transactions:
+#             tstatus = (tx or {}).get("transactionStatus")
+#             ttype = (tx or {}).get("transactionType")
+
+#             # hard filter
+#             if tstatus != "RELEASED":
+#                 continue
+
+#             # optional type filter
+#             if transaction_type_filter and ttype != transaction_type_filter:
+#                 continue
+
+#             all_rows.append(_flatten_transaction_to_row(tx or {}))
+
+#         next_token = payload.get("nextToken")
+#         if not next_token:
+#             break
+#         params = {"nextToken": next_token}
+
+#     # -------- excel --------
+#     if response_format == "excel":
+#         df = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
+#         # ✅ force full MTD schema (and ensure missing cols appear)
+#         df = df.reindex(columns=MTD_COLUMNS, fill_value=0.0)
+
+#         output = io.BytesIO()
+#         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+#             df.to_excel(writer, index=False, sheet_name="Transactions")
+#         output.seek(0)
+
+#         filename = f"finances_transactions_{year}_{month:02d}.xlsx"
+#         return send_file(
+#             output,
+#             as_attachment=True,
+#             download_name=filename,
+#             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+#         )
+
+#     # -------- json --------
+#     return jsonify({
+#         "success": True,
+#         "year": year,
+#         "month": month,
+#         "count": len(all_rows),
+#         "transactions": all_rows,
+#     }), 200
+
 @amazon_api_bp.route("/amazon_api/finances/monthly_transactions", methods=["GET"])
 def finances_monthly_transactions():
-    """
-    Query params:
-      - year (int, default: current UTC year)
-      - month (int, default: 6)
-      - transaction_status (optional, default RELEASED)
-      - marketplace_id (optional)
-      - transaction_type (optional, e.g. Shipment)
-      - format (json | excel)
-    """
-    # -------- auth --------
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"success": False, "error": "Authorization token is missing or invalid"}), 401
@@ -2895,13 +3206,12 @@ def finances_monthly_transactions():
     except jwt.InvalidTokenError:
         return jsonify({"success": False, "error": "Invalid token"}), 401
 
-    # -------- params --------
     now_utc = datetime.now(timezone.utc)
     try:
         year = int(request.args.get("year", now_utc.year))
         month = int(request.args.get("month", 6))
         if month < 1 or month > 12:
-            raise ValueError("month must be 1-12")
+            raise ValueError
     except ValueError:
         return jsonify({"success": False, "error": "Invalid year or month"}), 400
 
@@ -2910,10 +3220,15 @@ def finances_monthly_transactions():
     transaction_type_filter = request.args.get("transaction_type")
     response_format = (request.args.get("format") or "json").lower()
 
-    # -------- region + marketplace override --------
+    store_in_db = (request.args.get("store_in_db", "true").lower() != "false")
+    run_upload = (request.args.get("run_upload_pipeline", "false").lower() == "true")
+    ui_country = (request.args.get("country") or "").strip().lower()
+
+    if run_upload and not ui_country:
+        return jsonify({"success": False, "error": "country is required when run_upload_pipeline=true"}), 400
+
     _apply_region_and_marketplace_from_request()
 
-    # -------- load refresh token for this user + region --------
     au = amazon_user.query.filter_by(user_id=user_id, region=amazon_client.region).first()
     if not au or not au.refresh_token:
         return jsonify({
@@ -2924,10 +3239,8 @@ def finances_monthly_transactions():
 
     amazon_client.refresh_token = au.refresh_token
 
-    # -------- date range --------
     posted_after, posted_before = _month_date_range_utc(year, month)
 
-    # -------- call Finances API (pagination) --------
     params: Dict[str, Any] = {
         "postedAfter": posted_after,
         "postedBefore": posted_before,
@@ -2944,43 +3257,70 @@ def finances_monthly_transactions():
             method="GET",
             params=params,
         )
-
         if not res or "error" in res:
             return jsonify({"success": False, "error": res or {"error": "Unknown SP-API error"}}), 502
 
-        payload = res.get("payload") or res
-        transactions = payload.get("transactions") or []
+        payload_res = res.get("payload") or res
+        transactions = payload_res.get("transactions") or []
 
         for tx in transactions:
             tstatus = (tx or {}).get("transactionStatus")
             ttype = (tx or {}).get("transactionType")
 
-            # hard filter
             if tstatus != "RELEASED":
                 continue
-
-            # optional type filter
             if transaction_type_filter and ttype != transaction_type_filter:
                 continue
 
             all_rows.append(_flatten_transaction_to_row(tx or {}))
 
-        next_token = payload.get("nextToken")
+        next_token = payload_res.get("nextToken")
         if not next_token:
             break
         params = {"nextToken": next_token}
 
-    # -------- excel --------
+    pipeline_result = None
+    if run_upload:
+        if not store_in_db:
+            pipeline_result = {
+                "success": True,
+                "skipped": True,
+                "message": "run_upload_pipeline skipped because store_in_db=false and pipeline always uses DB."
+            }
+        else:
+            df_in = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
+            try:
+                pipeline_result = run_upload_pipeline_from_df(
+                    df_raw=df_in,
+                    user_id=user_id,
+                    country=ui_country,
+                    month_num=str(month),
+                    year=str(year),
+                    db_url=db_url,
+                    db_url_aux=db_url1,
+                )
+            except Exception as e:
+                return jsonify({"success": False, "error": f"Upload pipeline failed: {str(e)}"}), 500
+
+            if not pipeline_result or not pipeline_result.get("success"):
+                return jsonify({
+                    "success": False,
+                    "error": "Upload pipeline returned failure",
+                    "pipeline_result": pipeline_result,
+                }), 400
+
     if response_format == "excel":
         df = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
-        # ✅ force full MTD schema (and ensure missing cols appear)
         df = df.reindex(columns=MTD_COLUMNS, fill_value=0.0)
 
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
             df.to_excel(writer, index=False, sheet_name="Transactions")
-        output.seek(0)
 
+            if pipeline_result:
+                pd.DataFrame([pipeline_result]).to_excel(writer, index=False, sheet_name="PipelineMeta")
+
+        output.seek(0)
         filename = f"finances_transactions_{year}_{month:02d}.xlsx"
         return send_file(
             output,
@@ -2989,12 +3329,15 @@ def finances_monthly_transactions():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-    # -------- json --------
     return jsonify({
         "success": True,
         "year": year,
         "month": month,
         "count": len(all_rows),
+        "store_in_db": store_in_db,
+        "run_upload_pipeline": run_upload,
+        "country": ui_country,
+        "pipeline_result": pipeline_result,
         "transactions": all_rows,
     }), 200
 
@@ -3087,3 +3430,146 @@ def upload():
     if not result.get("success"):
         return jsonify(result), 400
     return jsonify(result), 200
+
+
+
+def _month_to_date_range_utc_safe(now_utc: datetime, safety_minutes: int = 3) -> Tuple[str, str]:
+    """
+    Amazon rule: postedBefore must be <= (current_time - 2 minutes).
+    We subtract 3 minutes by default to avoid edge timing issues.
+    """
+    start = datetime(now_utc.year, now_utc.month, 1, 0, 0, 0, tzinfo=timezone.utc)
+    end = now_utc - timedelta(minutes=safety_minutes)
+
+    # if system clock weird / very early month edge, keep end >= start
+    if end < start:
+        end = start
+
+    def iso_z(dt: datetime) -> str:
+        # strip microseconds (cleaner and avoids weird formats)
+        dt = dt.replace(microsecond=0)
+        return dt.isoformat().replace("+00:00", "Z")
+
+    return iso_z(start), iso_z(end)
+
+
+@amazon_api_bp.route("/amazon_api/finances/mtd_transactions", methods=["GET"])
+def finances_mtd_transactions():
+    """
+    Month-to-date transactions:
+      - postedAfter  = first day of current month 00:00:00Z
+      - postedBefore = current UTC datetime (now)
+
+    Query params:
+      - transaction_status (optional, default RELEASED)
+      - marketplace_id (optional)
+      - transaction_type (optional, e.g. Shipment)
+      - format (json | excel)
+    """
+    # -------- auth --------
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"success": False, "error": "Authorization token is missing or invalid"}), 401
+
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_id = payload["user_id"]
+    except jwt.ExpiredSignatureError:
+        return jsonify({"success": False, "error": "Token has expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"success": False, "error": "Invalid token"}), 401
+
+    # -------- params --------
+    transaction_status = request.args.get("transaction_status", "RELEASED")
+    marketplace_id = request.args.get("marketplace_id")
+    transaction_type_filter = request.args.get("transaction_type")
+    response_format = (request.args.get("format") or "json").lower()
+
+    # -------- region + marketplace override --------
+    _apply_region_and_marketplace_from_request()
+
+    # -------- load refresh token for this user + region --------
+    au = amazon_user.query.filter_by(user_id=user_id, region=amazon_client.region).first()
+    if not au or not au.refresh_token:
+        return jsonify({
+            "success": False,
+            "error": "Amazon account not connected for this region",
+            "status": "no_refresh_token",
+        }), 400
+
+    amazon_client.refresh_token = au.refresh_token
+
+    # -------- date range: 1st of month -> now (UTC) --------
+    now_utc = datetime.now(timezone.utc)
+    posted_after, posted_before = _month_to_date_range_utc_safe(now_utc, safety_minutes=3)
+
+
+    # -------- call Finances API (pagination) --------
+    params: Dict[str, Any] = {
+        "postedAfter": posted_after,
+        "postedBefore": posted_before,
+        "marketplaceId": marketplace_id or amazon_client.marketplace_id,
+    }
+    if transaction_status:
+        params["transactionStatus"] = transaction_status
+
+    all_rows: List[Dict[str, Any]] = []
+
+    while True:
+        res = amazon_client.make_api_call(
+            "/finances/2024-06-19/transactions",
+            method="GET",
+            params=params,
+        )
+
+        if not res or "error" in res:
+            return jsonify({"success": False, "error": res or {"error": "Unknown SP-API error"}}), 502
+
+        payload = res.get("payload") or res
+        transactions = payload.get("transactions") or []
+
+        for tx in transactions:
+            tstatus = (tx or {}).get("transactionStatus")
+            ttype = (tx or {}).get("transactionType")
+
+            # keep your hard filter (same as monthly route)
+            if tstatus != "RELEASED":
+                continue
+
+            if transaction_type_filter and ttype != transaction_type_filter:
+                continue
+
+            all_rows.append(_flatten_transaction_to_row(tx or {}))
+
+        next_token = payload.get("nextToken")
+        if not next_token:
+            break
+        params = {"nextToken": next_token}
+
+    # -------- excel --------
+    if response_format == "excel":
+        df = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
+        df = df.reindex(columns=MTD_COLUMNS, fill_value=0.0)
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="Transactions")
+        output.seek(0)
+
+        filename = f"finances_transactions_MTD_{now_utc.year}_{now_utc.month:02d}.xlsx"
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    # -------- json --------
+    return jsonify({
+        "success": True,
+        "posted_after": posted_after,
+        "posted_before": posted_before,
+        "count": len(all_rows),
+        "transactions": all_rows,
+    }), 200
