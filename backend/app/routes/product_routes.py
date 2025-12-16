@@ -175,7 +175,7 @@ def resolve_country(country, currency):
 def YearlySKU():
     country = (request.args.get('country') or '').lower()
     country_param = request.args.get('country', '').lower()
-    currency_param = (request.args.get('homeCurrency') or 'USD').lower()
+    currency_param = (request.args.get('homeCurrency') or '').lower()
 
     country = resolve_country(country_param, currency_param)
 
@@ -266,11 +266,11 @@ def YearlySKU():
 
 def resolve_country(country, currency):
     country = (country or "").lower()
-    currency = (currency or "").lower()
+    currency = (currency or "").lower()   # '' if missing
 
-    # 1. If country = global
+    # 1) Global: default to USD only here
     if country == "global":
-        if currency == "usd":
+        if currency in ("", "usd"):
             return "global"
         elif currency == "inr":
             return "global_inr"
@@ -279,25 +279,22 @@ def resolve_country(country, currency):
         elif currency == "cad":
             return "global_cad"
         else:
-            return "global"  # default fallback
+            return "global"
 
-    # 2. If country = uk
+    # 2) UK: only go to uk_usd if explicitly requested
     if country == "uk":
         if currency == "usd":
             return "uk_usd"
-        else:
-            return "uk"  # default for all other currencies
+        return "uk"
 
-    # 3. Default (no special logic)
     return country
-
 
 @product_bp.route('/quarterlyskutable', methods=['GET'])
 def quarterlyskutable():
     # Extract query parameters from the URL
     quarter = request.args.get('quarter')
     country_param = request.args.get('country', '')
-    currency_param = (request.args.get('homeCurrency') or 'USD').lower()
+    currency_param = (request.args.get('homeCurrency') or '').lower()
     print("currency-------------", currency_param)
 
     country = resolve_country(country_param, currency_param)
@@ -1632,7 +1629,7 @@ def skutableprofit(skuwise_file_name):
     try:
         engine = create_engine(db_url)
         country_param = request.args.get('country', '')
-        currency_param = (request.args.get('homeCurrency') or 'USD').lower()
+        currency_param = (request.args.get('homeCurrency') or '').lower()
 
         country = resolve_country(country_param, currency_param)
         month = request.args.get('month', '')

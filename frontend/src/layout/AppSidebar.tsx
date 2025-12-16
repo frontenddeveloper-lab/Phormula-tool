@@ -1166,17 +1166,18 @@ import {
 
 import { useConnectedPlatforms } from "@/lib/utils/useConnectedPlatforms";
 import { useShopifyStore } from "@/lib/utils/useShopifyStore";
+import { usePlatform } from "@/components/context/PlatformContext";
 
 type NavSubItem = {
   name: string;
   path:
-    | string
-    | ((params: {
-        ranged: string;
-        countryName: string;
-        month: string;
-        year: string;
-      }) => string);
+  | string
+  | ((params: {
+    ranged: string;
+    countryName: string;
+    month: string;
+    year: string;
+  }) => string);
   onClick?: () => void;
 };
 
@@ -1200,6 +1201,7 @@ const AppSidebar: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
   const routeParams = useParams();
+  const { setPlatform } = usePlatform();
 
   useEffect(() => {
     setIsMobileOpen(false);
@@ -1326,13 +1328,15 @@ const AppSidebar: React.FC = () => {
 
   // ===== Handle platform change from RegionSelect =====
   const onRegionChange = (val: string) => {
-    // 1) “Add More Countries”
+    const platform = val as PlatformId;
+
     if (val === "add_more_countries") {
       router.push("/settings/countries");
       return;
     }
 
-    const platform = val as PlatformId;
+    setSelectedPlatform(val);
+    setPlatform(platform);
 
     // 2) Shopify special redirect
     if (platform === "shopify") {
@@ -1500,8 +1504,7 @@ const AppSidebar: React.FC = () => {
             month: string;
             year: string;
           }) =>
-            `/productwiseperformance/${
-              params.productname ?? "Classic"
+            `/productwiseperformance/${params.productname ?? "Classic"
             }/${params.countryName}/${params.month}/${params.year}`,
         },
         {
@@ -1642,25 +1645,23 @@ const AppSidebar: React.FC = () => {
   return (
     <>
       <aside
-  className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-4 left-0 bg-white text-gray-900 h-screen overflow-y-auto transition-all duration-300 ease-in-out z-[1100]
-  ${
-    isMobileOpen
-      ? "w-full"
-      : isExpanded || isHovered
-      ? "w-[90px] md:w-[240px] lg:w-[260px] xl:w-[290px]"
-      : "w-[90px]"
-  }
+        className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-4 left-0 bg-white text-gray-900 h-screen overflow-y-auto transition-all duration-300 ease-in-out z-[1100]
+  ${isMobileOpen
+            ? "w-full"
+            : isExpanded || isHovered
+              ? "w-[90px] md:w-[240px] lg:w-[260px] xl:w-[290px]"
+              : "w-[90px]"
+          }
   ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
   lg:translate-x-0 font-lato`}
-  onMouseEnter={() => !isExpanded && setIsHovered(true)}
-  onMouseLeave={() => setIsHovered(false)}
->
+        onMouseEnter={() => !isExpanded && setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
 
         {/* Logo + toggle */}
         <div
-          className={`py-8 flex gap-2 items-center border-0 ${
-            !isExpanded && !isHovered ? "lg:justify-between" : "justify-between"
-          }`}
+          className={`py-8 flex gap-2 items-center border-0 ${!isExpanded && !isHovered ? "lg:justify-between" : "justify-between"
+            }`}
         >
           <Link href="/" className="flex items-center gap-2">
             {isExpanded || isHovered || isMobileOpen ? (
@@ -1753,9 +1754,8 @@ const AppSidebar: React.FC = () => {
                     {/* Section Header */}
                     <button
                       onClick={() => toggleSection(section.key)}
-                      className={`flex items-center justify-between w-full px-2 py-2 text-sm text-left text-[#5EA68E] font-semibold rounded hover:bg-[#5EA68E]/20 transition-colors cursor-pointer group ${
-                        isSectionActive ? "bg-[#5EA68E]/10" : ""
-                      }`}
+                      className={`flex items-center justify-between w-full px-2 py-2 text-sm text-left text-[#5EA68E] font-semibold rounded hover:bg-[#5EA68E]/20 transition-colors cursor-pointer group ${isSectionActive ? "bg-[#5EA68E]/10" : ""
+                        }`}
                     >
                       <div className="flex items-center">
                         {section.icon}
@@ -1765,11 +1765,10 @@ const AppSidebar: React.FC = () => {
                       </div>
                       {(isExpanded || isHovered || isMobileOpen) && (
                         <FaChevronDown
-                          className={`h-3 w-3 transition-transform duration-200 ${
-                            openSections[section.key]
-                              ? "rotate-0"
-                              : "rotate-90"
-                          }`}
+                          className={`h-3 w-3 transition-transform duration-200 ${openSections[section.key]
+                            ? "rotate-0"
+                            : "rotate-90"
+                            }`}
                         />
                       )}
                     </button>
@@ -1790,11 +1789,10 @@ const AppSidebar: React.FC = () => {
                                 onClick={() => {
                                   if (subItem.onClick) subItem.onClick();
                                 }}
-                                className={`block px-2 py-1.5 text-sm text-gray-700 hover:bg-[#5EA68E]/20 rounded transition-colors ${
-                                  isActive(subItem.path as any)
-                                    ? "bg-[#5EA68E]/20 text-[#5EA68E] font-medium"
-                                    : ""
-                                }`}
+                                className={`block px-2 py-1.5 text-sm text-gray-700 hover:bg-[#5EA68E]/20 rounded transition-colors ${isActive(subItem.path as any)
+                                  ? "bg-[#5EA68E]/20 text-[#5EA68E] font-medium"
+                                  : ""
+                                  }`}
                               >
                                 {subItem.name}
                               </Link>
