@@ -263,47 +263,79 @@ def debug_month_integrity(global_df, months_to_fetch):
     # 1) Raw rows per month table (based on the table names you fetched)
     print("[PF DEBUG] Expected months:", months_to_fetch)
 
-    # 2) Split by 'type' first
+    # Normalize type column (defensive)
+    if 'type' in global_df.columns:
+        global_df = global_df.copy()
+        global_df['type'] = global_df['type'].astype(str).str.strip().str.title()
+    else:
+        global_df = global_df.copy()
+        global_df['type'] = 'Unknown'
+
+    valid_types = {'Order', 'Shipment'}
+
+    # 2) Split by 'type' first (Orders + Shipments)
+    parsed_dt = pd.to_datetime(global_df['date_time'], errors='coerce')
     by_type = (
-        global_df.assign(_m=pd.to_datetime(global_df['date_time'], errors='coerce').dt.to_period('M'))
-                  .groupby(['_m','type'])['sku'].size().unstack(fill_value=0)
+        global_df.assign(_m=parsed_dt.dt.to_period('M'))
+                 .groupby(['_m', 'type'])['sku']
+                 .size()
+                 .unstack(fill_value=0)
     )
+
     print("\n[PF DEBUG] Rows by month x type (after naive to_datetime, coercing errors):")
     print(by_type.sort_index())
 
     # 3) Which rows failed parsing?
-    dt_parsed = pd.to_datetime(global_df['date_time'], errors='coerce', infer_datetime_format=True)
-    failed_parse = global_df[dt_parsed.isna()]
+    failed_parse = global_df[parsed_dt.isna()]
     if not failed_parse.empty:
         fp_by_month = (
             failed_parse.assign(_m=failed_parse['date_time'].astype(str).str.slice(0, 7))  # rough
-                        .groupby('_m')['sku'].size()
+                        .groupby('_m')['sku']
+                        .size()
         )
         print("\n[PF DEBUG] Rows with FAILED date parsing (rough bucketing by YYYY-MM):")
         print(fp_by_month.sort_index())
     else:
         print("\n[PF DEBUG] No rows failed date parsing.")
 
-    # 4) Orders-only, after your cleaning regex + parsing (matches your pipeline)
+    # 4) Orders + Shipments after regex-clean + parsing (matches pipeline)
     cleaned_dt = (
         global_df['date_time'].astype(str)
         .str.replace(r'\s(?:AM|PM)?\s?[A-Z]{3}$', '', regex=True)
         .pipe(pd.to_datetime, errors='coerce', infer_datetime_format=True)
     )
-    orders_only = global_df[(global_df['type'] == 'Order') & cleaned_dt.notna()].copy()
-    orders_only['_m'] = cleaned_dt[orders_only.index].dt.to_period('M')
 
-    orders_count = orders_only.groupby('_m')['sku'].size().reindex(
-        pd.period_range(min(orders_only['_m']), max(orders_only['_m']), freq='M'), fill_value=0
+    demand_df = global_df[
+        global_df['type'].isin(valid_types) & cleaned_dt.notna()
+    ].copy()
+
+    if demand_df.empty:
+        print("\n[PF DEBUG] ⚠️ No Order/Shipment rows survived cleaning + parsing.")
+        print("[PF DEBUG] ===============================\n")
+        return
+
+    demand_df['_m'] = cleaned_dt[demand_df.index].dt.to_period('M')
+
+    demand_range = pd.period_range(
+        demand_df['_m'].min(),
+        demand_df['_m'].max(),
+        freq='M'
     )
-    print("\n[PF DEBUG] Orders AFTER regex-clean + parsing (per month):")
-    print(orders_count)
 
-    # 5) Which expected months have zero orders after parsing?
+    demand_count = (
+        demand_df.groupby('_m')['sku']
+                 .size()
+                 .reindex(demand_range, fill_value=0)
+    )
+
+    print("\n[PF DEBUG] Orders + Shipments AFTER regex-clean + parsing (per month):")
+    print(demand_count)
+
+    # 5) Which expected months have zero demand after parsing?
     exp_periods = []
     for m in months_to_fetch:
         month = ''.join(filter(str.isalpha, m))
-        year  = ''.join(filter(str.isdigit,  m))
+        year = ''.join(filter(str.isdigit, m))
         try:
             dt = pd.to_datetime(f"{month} {year}")
             exp_periods.append(dt.to_period('M'))
@@ -311,173 +343,35 @@ def debug_month_integrity(global_df, months_to_fetch):
             pass
 
     exp_periods = pd.PeriodIndex(exp_periods, freq='M')
-    zero_months = [p for p in exp_periods if orders_count.get(p, 0) == 0]
+
+    zero_months = [p for p in exp_periods if demand_count.get(p, 0) == 0]
+
     if zero_months:
-        print("\n[PF DEBUG] ⚠️ Months with ZERO orders after parsing:", [str(p) for p in zero_months])
+        print(
+            "\n[PF DEBUG] ⚠️ Months with ZERO orders/shipments after parsing:",
+            [str(p) for p in zero_months]
+        )
     else:
-        print("\n[PF DEBUG] ✅ All expected months have some orders after parsing.")
+        print("\n[PF DEBUG] ✅ All expected months have some orders/shipments after parsing.")
+
     print("[PF DEBUG] ===============================\n")
 
 
-# def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="user"):
-#     """
-#     Build an orders-only dataframe for the last 12 full months (soft, best-effort):
-#       - Try per-month tables for each month in the 12M window.
-#       - If some months are missing, DO NOT raise; just log them.
-#       - If the merged/all-months table exists, append it to improve coverage.
-#       - Deduplicate and pass to generate_forecast.
-#     Then apply gating:
-#       - <5 latest contiguous months  -> ERROR 400
-#       - 5..11 latest contiguous months -> ARIMA ONLY
-#       - >=12 latest contiguous months  -> ARIMA + HYBRID
-#     """
-#     # --- 12-month window ending at last full month ---
-#     today = datetime.now()
-#     first_day_of_current_month = today.replace(day=1)
-#     last_full_month_start = (first_day_of_current_month - timedelta(days=1)).replace(day=1)
-#     start_date = (last_full_month_start - relativedelta(months=11))
-#     end_date = (last_full_month_start + relativedelta(months=1) - timedelta(days=1))
 
-#     months_to_fetch = [
-#         f"{month_name[dt.month]}{dt.year}"
-#         for dt in pd.date_range(start=start_date, end=end_date, freq="MS")
-#     ]
-#     print(f"[PF] 12M window: {start_date.strftime('%Y-%m-%d')} → {end_date.strftime('%Y-%m-%d')}")
-#     print(f"[PF] Monthly tables to try (12): {months_to_fetch}")
-
-#     # --- Introspect tables once ---
-#     meta = MetaData()
-#     meta.reflect(bind=engine)
-#     normalized_tables = {name.lower(): name for name in meta.tables.keys()}
-#     print(f"[PF] Tables available: {list(meta.tables.keys())}")
-
-#     fetched_data = []
-#     missing_months = []
-
-#     # --- Fetch each monthly table if present ---
-#     with engine.connect() as conn:
-#         for month in months_to_fetch:
-#             table_name = f"{table_name_prefix}_{user_id}_{country}_{month}_data"
-#             tkey = table_name.lower()
-#             if tkey in normalized_tables:
-#                 t_actual = normalized_tables[tkey]
-#                 try:
-#                     print(f"[PF] Fetching monthly: {t_actual}")
-#                     df_m = pd.read_sql(Table(t_actual, meta, autoload_with=engine).select(), conn)
-#                     # 👇 add a hint so we can recover year/month during parsing if needed
-#                     df_m['_source_month'] = month  # e.g. "August2025"
-#                     fetched_data.append(df_m)
-#                     print(f"[PF]  -> rows: {len(df_m)}")
-#                 except Exception as e:
-#                     print(f"[PF][WARN] Error fetching {t_actual}: {e}")
-#             else:
-#                 print(f"[PF][MISS] Monthly table not found: {table_name}")
-#                 missing_months.append(month)
-
-#         # --- Augment with merged/all-months table if present ---
-#         merged_name = f"{table_name_prefix}_{user_id}_{country}_merge_data_of_all_months"
-#         mkey = merged_name.lower()
-#         if mkey in normalized_tables:
-#             try:
-#                 print(f"[PF] Augmenting with merged table: {normalized_tables[mkey]}")
-#                 df_merged = pd.read_sql(Table(normalized_tables[mkey], meta, autoload_with=engine).select(), conn)
-#                 # No reliable month hint for merged table; leave _source_month absent/NaN
-#                 print(f"[PF]  -> merged rows: {len(df_merged)}")
-#                 fetched_data.append(df_merged)
-#             except Exception as e:
-#                 print(f"[PF][WARN] Error fetching merged table {normalized_tables[mkey]}: {e}")
-#         else:
-#             print(f"[PF] No merged table found ({merged_name}).")
-
-#     if not fetched_data:
-#         print("[PF][ABORT] No data fetched from monthly/merged sources.")
-#         return jsonify({"error": "No data available for the selected window."}), 400
-
-#     # --- Combine (raw) ---
-#     global_df = pd.concat(fetched_data, ignore_index=True)
-#     print(f"[PF] Global concat rows: {len(global_df)}")
-
-#     # Month integrity debug (helps identify which month failed parsing)
-#     debug_month_integrity(global_df, months_to_fetch)
-
-#     # --- Dedupe after integrity snapshot ---
-#     dedupe_keys = [k for k in ['order_id', 'date_time', 'sku', 'quantity', 'type'] if k in global_df.columns]
-#     if dedupe_keys:
-#         before = len(global_df)
-#         global_df = global_df.drop_duplicates(subset=dedupe_keys)
-#         print(f"[PF] After dedupe: {before} → {len(global_df)}")
-#     else:
-#         print(f"[PF] No dedupe keys available; keeping {len(global_df)} rows as-is.")
-
-#     # ✅ orders-only
-#     if 'type' in global_df.columns:
-#         filtered_df = global_df[global_df['type'] == 'Order'].copy()
-#     else:
-#         print("[PF][WARN] 'type' column missing; assuming all rows are Orders.")
-#         filtered_df = global_df.copy()
-
-#     if 'date_time' not in filtered_df.columns:
-#         return jsonify({"error": "[PF][FATAL] 'date_time' column missing after fetch/merge."}), 400
-
-#     # =======================
-#     # Robust date parsing (ISO-8601 + offsets + TZ abbrev + day-first + 2-digit years + fallback)
-#     # =======================
-#     source_hint = filtered_df['_source_month'] if '_source_month' in filtered_df.columns else None
-#     filtered_df['date_time'] = parse_order_datetime_series(filtered_df['date_time'], source_hint)
-#     filtered_df = filtered_df.dropna(subset=['date_time'])
-
-#     # Ensure required columns exist
-#     keep_cols = ['sku', 'date_time', 'quantity', 'price_in_gbp']
-#     for c in keep_cols:
-#         if c not in filtered_df.columns:
-#             filtered_df[c] = np.nan
-
-#     new_df = filtered_df[keep_cols].copy()
-#     new_df['quantity'] = pd.to_numeric(new_df['quantity'], errors='coerce').fillna(0).astype(int)
-#     new_df = new_df.sort_values(by='date_time').set_index('date_time')
-
-#     # ---- Compute latest contiguous-month streak ending at last full month ----
-#     def _contiguous_streak_ending_at(end_period: pd.Period, month_index: pd.Index) -> int:
-#         """Count consecutive months with any orders, going backwards from end_period."""
-#         months_present = set(pd.PeriodIndex(month_index.to_period('M')))
-#         streak = 0
-#         p = end_period
-#         while p in months_present:
-#             streak += 1
-#             p = p - 1
-#         return streak
-
-#     last_full_period = pd.Period(year=last_full_month_start.year,
-#                                  month=last_full_month_start.month, freq='M')
-#     streak = _contiguous_streak_ending_at(last_full_period, new_df.index)
-#     distinct_months = int(new_df.index.to_period('M').nunique())
-#     print(f"[PF] Distinct months in new_df (orders): {distinct_months}")
-#     print(f"[PF] Latest contiguous months streak ending {last_full_period}: {streak}")
-
-#     # ---- Gate logic (your requirement) ----
-#     if streak < 5:
-#         msg = (f"Insufficient recent data: only {streak} contiguous month(s) with orders up to {last_full_period}. "
-#                f"Need at least 5. Please upload missing monthly tables or fix date formats.")
-#         print(f"[PF][FATAL] {msg}")
-#         return jsonify({"error": msg}), 400
-
-#     hybrid_allowed = (streak >= 12)  # 5–11 => ARIMA-only; >=12 => ARIMA+HYBRID
-
-#     # call forecast with the flag
-#     return generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed=hybrid_allowed)
 
 def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="user"):
     """
-    Build an orders-only dataframe for the last 12 full months (soft, best-effort):
+    Build an orders+shipments dataframe for the last 12 full months (soft, best-effort):
       - Try per-month tables for each month in the 12M window.
       - If some months are missing, DO NOT raise; just log them.
-      - If the merged/all-months table exists, append it to improve coverage.
+      - ❌ DO NOT use merged/all-months table (Option 1).
       - Deduplicate and pass to generate_forecast.
     Then apply gating:
       - <5 latest contiguous months  -> ERROR 400
       - 5..11 latest contiguous months -> ARIMA ONLY
       - >=12 latest contiguous months  -> ARIMA + HYBRID
     """
+
     # --- 12-month window ending at last full month ---
     today = datetime.now()
     first_day_of_current_month = today.replace(day=1)
@@ -506,13 +400,16 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
         for month in months_to_fetch:
             table_name = f"{table_name_prefix}_{user_id}_{country}_{month}_data"
             tkey = table_name.lower()
+
             if tkey in normalized_tables:
                 t_actual = normalized_tables[tkey]
                 try:
                     print(f"[PF] Fetching monthly: {t_actual}")
-                    df_m = pd.read_sql(Table(t_actual, meta, autoload_with=engine).select(), conn)
-                    # 👇 add a hint so we can recover year/month during parsing if needed
-                    df_m['_source_month'] = month  # e.g. "August2025"
+                    df_m = pd.read_sql(
+                        Table(t_actual, meta, autoload_with=engine).select(),
+                        conn
+                    )
+                    df_m['_source_month'] = month
                     fetched_data.append(df_m)
                     print(f"[PF]  -> rows: {len(df_m)}")
                 except Exception as e:
@@ -521,53 +418,42 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
                 print(f"[PF][MISS] Monthly table not found: {table_name}")
                 missing_months.append(month)
 
-        # --- Augment with merged/all-months table if present ---
-        merged_name = f"{table_name_prefix}_{user_id}_{country}_merge_data_of_all_months"
-        mkey = merged_name.lower()
-        if mkey in normalized_tables:
-            try:
-                print(f"[PF] Augmenting with merged table: {normalized_tables[mkey]}")
-                df_merged = pd.read_sql(Table(normalized_tables[mkey], meta, autoload_with=engine).select(), conn)
-                # No reliable month hint for merged table; leave _source_month absent/NaN
-                print(f"[PF]  -> merged rows: {len(df_merged)}")
-                fetched_data.append(df_merged)
-            except Exception as e:
-                print(f"[PF][WARN] Error fetching merged table {normalized_tables[mkey]}: {e}")
-        else:
-            print(f"[PF] No merged table found ({merged_name}).")
-
     if not fetched_data:
-        print("[PF][ABORT] No data fetched from monthly/merged sources.")
+        print("[PF][ABORT] No data fetched from monthly sources.")
         return jsonify({"error": "No data available for the selected window."}), 400
 
     # --- Combine (raw) ---
     global_df = pd.concat(fetched_data, ignore_index=True)
     print(f"[PF] Global concat rows: {len(global_df)}")
 
-    # Month integrity debug (helps identify which month failed parsing)
+    # Month integrity debug
     debug_month_integrity(global_df, months_to_fetch)
 
-    # --- Dedupe after integrity snapshot ---
+    # --- Dedupe ---
     dedupe_keys = [k for k in ['order_id', 'date_time', 'sku', 'quantity', 'type'] if k in global_df.columns]
     if dedupe_keys:
         before = len(global_df)
         global_df = global_df.drop_duplicates(subset=dedupe_keys)
         print(f"[PF] After dedupe: {before} → {len(global_df)}")
-    else:
-        print(f"[PF] No dedupe keys available; keeping {len(global_df)} rows as-is.")
 
-    # ✅ orders-only
+    # ✅ Orders + Shipments (THIS IS THE KEY CHANGE)
+    valid_types = {'Order', 'Shipment'}
+
     if 'type' in global_df.columns:
-        filtered_df = global_df[global_df['type'] == 'Order'].copy()
+        filtered_df = global_df[global_df['type'].isin(valid_types)].copy()
     else:
-        print("[PF][WARN] 'type' column missing; assuming all rows are Orders.")
+        print("[PF][WARN] 'type' column missing; assuming all rows are demand.")
         filtered_df = global_df.copy()
 
+    if filtered_df.empty:
+        print("[PF][ABORT] No Order/Shipment rows found after filtering.")
+        return jsonify({"error": "No demand data available for forecasting."}), 400
+
     if 'date_time' not in filtered_df.columns:
-        return jsonify({"error": "[PF][FATAL] 'date_time' column missing after fetch/merge."}), 400
+        return jsonify({"error": "[PF][FATAL] 'date_time' column missing after fetch."}), 400
 
     # =======================
-    # Robust date parsing (ISO-8601 + offsets + TZ abbrev + day-first + 2-digit years + fallback)
+    # Robust date parsing
     # =======================
     source_hint = filtered_df['_source_month'] if '_source_month' in filtered_df.columns else None
     filtered_df['date_time'] = parse_order_datetime_series(filtered_df['date_time'], source_hint)
@@ -583,7 +469,7 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
     new_df['quantity'] = pd.to_numeric(new_df['quantity'], errors='coerce').fillna(0).astype(int)
     new_df = new_df.sort_values(by='date_time').set_index('date_time')
 
-    # 🔴 Drop any data outside the 12M window (especially partial current month)
+    # 🔴 Clip to 12M window
     new_df = new_df.loc[
         (new_df.index >= pd.Timestamp(start_date)) &
         (new_df.index <= pd.Timestamp(end_date))
@@ -591,12 +477,10 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
     print(f"[PF] Rows after clipping to 12M window: {len(new_df)}")
 
     if new_df.empty:
-        print("[PF][ABORT] No rows inside the 12M window after date filtering.")
         return jsonify({"error": "No usable data inside the 12-month window."}), 400
 
-    # ---- Compute latest contiguous-month streak ending at last full month ----
+    # ---- Compute contiguous-month streak ----
     def _contiguous_streak_ending_at(end_period: pd.Period, month_index: pd.Index) -> int:
-        """Count consecutive months with any orders, going backwards from end_period."""
         months_present = set(pd.PeriodIndex(month_index.to_period('M')))
         streak = 0
         p = end_period
@@ -605,24 +489,36 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
             p = p - 1
         return streak
 
-    last_full_period = pd.Period(year=last_full_month_start.year,
-                                 month=last_full_month_start.month, freq='M')
+    last_full_period = pd.Period(
+        year=last_full_month_start.year,
+        month=last_full_month_start.month,
+        freq='M'
+    )
+
     streak = _contiguous_streak_ending_at(last_full_period, new_df.index)
     distinct_months = int(new_df.index.to_period('M').nunique())
-    print(f"[PF] Distinct months in new_df (orders): {distinct_months}")
+    print(f"[PF] Distinct months in new_df (demand): {distinct_months}")
     print(f"[PF] Latest contiguous months streak ending {last_full_period}: {streak}")
 
-    # ---- Gate logic ----
     if streak < 5:
-        msg = (f"Insufficient recent data: only {streak} contiguous month(s) with orders up to {last_full_period}. "
-               f"Need at least 5. Please upload missing monthly tables or fix date formats.")
-        print(f"[PF][FATAL] {msg}")
+        msg = (
+            f"Insufficient recent data: only {streak} contiguous month(s) with demand up to {last_full_period}. "
+            f"Need at least 5."
+        )
         return jsonify({"error": msg}), 400
 
-    hybrid_allowed = (streak >= 12)  # 5–11 => ARIMA-only; >=12 => ARIMA+HYBRID
+    hybrid_allowed = (streak >= 12)
 
-    # call forecast with the flag
-    return generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed=hybrid_allowed)
+    return generate_forecast(
+        user_id,
+        new_df,
+        country,
+        mv,
+        year,
+        hybrid_allowed=hybrid_allowed
+    )
+
+
 
 
 
