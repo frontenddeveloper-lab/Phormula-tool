@@ -539,29 +539,17 @@ import {
 } from "@/lib/dashboard/date";
 import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
 
-type CurrencyCode = "USD" | "GBP" | "INR" | "CAD";
-
 type Props = {
   regions: Record<RegionKey, RegionMetrics>;
   defaultRegion?: RegionKey;
-
-  // ✅ pass from DashboardPage
-  homeCurrency: CurrencyCode;
-  convertToHomeCurrency: (
-    value: number,
-    from: CurrencyCode
-  ) => number;
-  formatHomeK: (value: number) => string;
 };
 
 export default function SalesTargetCard({
   regions,
   defaultRegion = "Global",
-  homeCurrency,
-  convertToHomeCurrency,
-  formatHomeK,
 }: Props) {
-  // Tabs: Global + only connected countries
+  const tab = value;
+
   const availableRegions = useMemo<RegionKey[]>(() => {
     const list: RegionKey[] = ["Global"];
     (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
@@ -580,8 +568,6 @@ export default function SalesTargetCard({
 
     return list;
   }, [regions]);
-
-  const [tab, setTab] = useState<RegionKey>(defaultRegion);
 
   const data = regions[tab] || regions.Global;
 
@@ -666,7 +652,7 @@ export default function SalesTargetCard({
         <SegmentedToggle<RegionKey>
           value={tab}
           options={availableRegions.map((r) => ({ value: r }))}
-          onChange={setTab}
+          onChange={onChange} 
           className="my-1"
         />
 

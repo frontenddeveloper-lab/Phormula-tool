@@ -1193,7 +1193,6 @@ export default function CurrentInventorySection({
   const [invError, setInvError] = useState<string>("");
   const [invRows, setInvRows] = useState<InventoryRow[]>([]);
 
-
   const [ageExpanded, setAgeExpanded] = useState(false);
   const toggleAgeExpanded = React.useCallback(
     () => setAgeExpanded((v) => !v),

@@ -2855,9 +2855,7 @@ import DashboardBargraphCard from "@/components/dashboard/DashboardBargraphCard"
 import ValueOrSkeleton from "@/components/common/ValueOrSkeleton";
 import SalesTargetCard from "@/components/dashboard/SalesTargetCard";
 import AmazonStatCard from "@/components/dashboard/AmazonStatCard";
-// import CurrentInventorySection from "@/components/dashboard/CurrentInventorySection";
 import CurrentInventorySection from "@/components/dashboard/CurrentInventorySection";
-
 
 import { RootState } from "@/lib/store";
 import { useAmazonConnections } from "@/lib/utils/useAmazonConnections";
@@ -2880,10 +2878,9 @@ import {
 } from "@/lib/dashboard/format";
 
 import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
-import { useGetUserDataQuery } from "@/lib/api/profileApi";
 
 
-type HomeCurrency = "USD" | "GBP" | "INR" | "CAD";
+type HomeCurrency = "USD" | "GBP";
 
 /* ===================== ENV & ENDPOINTS ===================== */
 const baseURL =
@@ -2931,6 +2928,8 @@ const MANUAL_LAST_MONTH_USD_CA = Number(
   process.env.NEXT_PUBLIC_MANUAL_LAST_MONTH_USD_CA || "0"
 );
 
+
+
 /* ===================== LOCAL HELPERS ===================== */
 
 const parsePercentToNumber = (
@@ -2961,10 +2960,15 @@ const getCurrencySymbol = (country: string) => {
   }
 };
 
+
+
 /* ===================== MAIN PAGE ===================== */
 
 export default function DashboardPage() {
-  // Amazon
+  const { platform } = usePlatform();
+
+
+
   const [loading, setLoading] = useState(false);
   const [unauthorized, setUnauthorized] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2993,6 +2997,7 @@ export default function DashboardPage() {
   // Shopify store info (shop_name + access_token)
   const [shopifyStore, setShopifyStore] = useState<any | null>(null);
 
+  const [salesTargetRegion, setSalesTargetRegion] = useState<RegionKey>("Global");
   // which region tab is selected in the Amazon card
   const [amazonRegion, setAmazonRegion] = useState<RegionKey>("Global");
 
@@ -3137,53 +3142,6 @@ export default function DashboardPage() {
     [homeCurrency]
   );
 
-  const formatHomeK = useCallback(
-  (value: number | null | undefined) => {
-    const n = toNumberSafe(value ?? 0);
-
-    if (!n) return formatHomeAmount(0);
-
-    const abs = Math.abs(n);
-    const isK = abs >= 1000;
-
-    const displayValue = isK ? n / 1000 : n;
-    const suffix = isK ? "k" : "";
-
-    let formatted: string;
-
-    switch (homeCurrency) {
-      case "USD":
-        formatted = fmtUSD(displayValue);
-        break;
-
-      case "GBP":
-        formatted = fmtGBP(displayValue);
-        break;
-
-      case "CAD":
-        formatted = new Intl.NumberFormat("en-CA", {
-          style: "currency",
-          currency: "CAD",
-        }).format(displayValue);
-        break;
-
-      case "INR":
-        formatted = new Intl.NumberFormat("en-IN", {
-          style: "currency",
-          currency: "INR",
-        }).format(displayValue);
-        break;
-
-      default:
-        formatted = fmtNum(displayValue);
-    }
-
-    return `${formatted}${suffix}`;
-  },
-  [homeCurrency, formatHomeAmount]
-);
-
-
   const inventoryCountry = useMemo(() => {
     const v = (graphRegion || "").toString().trim().toLowerCase();
     return v.length ? v : "global";
@@ -3288,6 +3246,18 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchFxRates();
   }, [fetchFxRates]);
+
+  useEffect(() => {
+    const r = platformToRegionKey(platform);
+
+    setSalesTargetRegion(r);
+
+    // Amazon card should probably only switch to country tabs, not "Global"
+    // If r is Global, keep it Global or default to first available later.
+    setAmazonRegion(r === "Global" ? "UK" : r); // tweak as you prefer
+
+    setGraphRegion(r);
+  }, [platform]);
 
   /* ===================== BRAND NAME ===================== */
 
@@ -4903,19 +4873,69 @@ export default function DashboardPage() {
             {/* RIGHT COLUMN: Sales Target card */}
             <aside className="col-span-12 lg:col-span-4 order-1 lg:order-2">
               <div className="lg:sticky lg:top-6 w-full">
-                {/* <SalesTargetCard regions={regions} defaultRegion="Global" /> */}
-                <SalesTargetCard
-                  regions={regions}
-                  defaultRegion="Global"
-                  homeCurrency={homeCurrency}
-                  convertToHomeCurrency={convertToHomeCurrency}
-                  formatHomeK={formatHomeK}
-                />
+                <SalesTargetCard regions={regions} defaultRegion="Global" />
               </div>
             </aside>
 
           </div>
 
+          {/* AMAZON P&L GRAPH */}
+          {/* {amazonIntegrated && (
+            <>
+              <div className="mt-8 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="text-sm text-gray-500">
+                    <PageBreadcrumb
+                      pageTitle="Amazon"
+                      align="left"
+                      textSize="2xl"
+                      variant="page"
+                    />
+                    <p className="text-charcoal-500">
+                      Real-time data from Amazon{" "}
+                      {graphRegion === "Global"
+                        ? "Global"
+                        : graphRegion}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <SegmentedToggle<RegionKey>
+                      value={graphRegion}
+                      options={graphRegions.map((r) => ({
+                        value: r,
+                      }))}
+                      onChange={setGraphRegion}
+                    />
+                    <DownloadIconButton
+                      onClick={handleDownload}
+                    />
+                  </div>
+                </div>
+
+                <div ref={chartRef}>
+                  <DashboardBargraphCard
+                    countryName={countryNameForGraph}
+                    formattedMonthYear={formattedMonthYear}
+                    currencySymbol={currencySymbol}
+                    labels={labels}
+                    values={values}
+                    colors={colors}
+                    loading={loading}
+                    allValuesZero={allValuesZero}
+                  />
+                </div>
+              </div>
+
+
+              <CurrentInventorySection region={graphRegion as RegionKey} />
+
+            
+            </>
+          )} */}
+
+
+          {/* P&L GRAPH (Global + Amazon/Shopify) */}
           {hasAnyGraphData && (
             <>
               <div className="mt-8 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
@@ -4965,9 +4985,9 @@ export default function DashboardPage() {
               </div>
 
               {/* Inventory section only makes sense for Amazon, so keep this guard */}
-              {amazonIntegrated && (
+              {/* {amazonIntegrated && (
                 <CurrentInventorySection region={graphRegion as RegionKey} />
-              )}
+              )} */}
 
               {/* <AgeingInventorySection /> */}
             </>
