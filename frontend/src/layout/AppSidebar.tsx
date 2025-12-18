@@ -1480,10 +1480,10 @@ const AppSidebar: React.FC = () => {
           path: `/`,
           onClick: handleFetchCurrentInventory,
         },
-        {
-          name: "Live AI Insights",
-          path: `/live-business-insight/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-        },
+        // {
+        //   name: "Live AI Insights",
+        //   path: `/live-business-insight/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+        // },
       ],
     },
     {

@@ -1223,11 +1223,11 @@
 
 //             {/* Top & Bottom tables */}
 //             <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2 
-            
-            
-            
-            
-            
+
+
+
+
+
 //             ">
 //                 <div className=" flex flex-col justify-between gap-7 md:gap-3 text-[#414042] md:flex-row">
 //                     <div className="flex-1">
@@ -1608,6 +1608,7 @@ const getDisplayProductNameFromRow = (row: TableRow): string => {
   return "-";
 };
 
+
 /* ---------- Component ---------- */
 
 const SKUtable: React.FC<SKUtableProps> = ({
@@ -1652,6 +1653,35 @@ const SKUtable: React.FC<SKUtableProps> = ({
     if (typeof window === "undefined") return "";
     return (localStorage.getItem("homeCurrency") || "").toLowerCase();
   });
+
+  const isMissingName = (v: unknown) => {
+    if (v === undefined || v === null) return true;
+
+    // real NaN (number)
+    if (typeof v === "number" && Number.isNaN(v)) return true;
+
+    const s = String(v).trim().toLowerCase();
+
+    // treat these as missing
+    return (
+      s === "" ||
+      s === "0" ||
+      s === "nan" ||
+      s === "none" ||
+      s === "null" ||
+      s === "undefined"
+    );
+  };
+
+  const getDisplayProductNameFromRow = (row: TableRow): string => {
+    if (!isMissingName(row.product_name)) return String(row.product_name);
+
+    // ✅ fallback to SKU when product_name is missing/nan
+    if (!isMissingName(row.sku)) return String(row.sku);
+
+    return "-";
+  };
+
 
   useEffect(() => {
     if (!isGlobalPage) return;
@@ -1921,7 +1951,20 @@ const SKUtable: React.FC<SKUtableProps> = ({
         }
 
         if (Array.isArray(data)) {
-          setTableData(data);
+          const normalized = data.map((r) => {
+            // keep totals row as-is if it already has "Total"
+            if (!isMissingName(r.product_name) && String(r.product_name).toLowerCase() === "total") {
+              return r;
+            }
+
+            if (isMissingName(r.product_name) && !isMissingName(r.sku)) {
+              return { ...r, product_name: String(r.sku) };
+            }
+
+            return r;
+          });
+
+          setTableData(normalized);
           setNoDataFound(false);
 
           const lastRow = data[data.length - 1] || {};
@@ -2133,9 +2176,9 @@ const SKUtable: React.FC<SKUtableProps> = ({
       { [columnsToDisplay2[0]]: "Cost of Advertisement (-)", [columnsToDisplay2[10]]: Math.abs(Number(totals.advertising_total)) },
       ...((countryName === "us" || countryName === "global")
         ? [{
-            [columnsToDisplay2[0]]: "Shipment Charges (-)",
-            [columnsToDisplay2[10]]: Math.abs(Number(totals.shipment_charges)),
-          }]
+          [columnsToDisplay2[0]]: "Shipment Charges (-)",
+          [columnsToDisplay2[10]]: Math.abs(Number(totals.shipment_charges)),
+        }]
         : []),
       { [columnsToDisplay2[0]]: "Platform Fees (-)", [columnsToDisplay2[10]]: Math.abs(Number(totals.platform_fee)) },
       { [columnsToDisplay2[0]]: "CM2 Profit/Loss", [columnsToDisplay2[10]]: Math.abs(Number(totals.cm2_profit)) },
@@ -2355,21 +2398,21 @@ const SKUtable: React.FC<SKUtableProps> = ({
                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-green-700">
                       (+)
                     </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]">
+                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
                       (-)
                     </td>
                     <td
                       onClick={handleAmazonFeeClick}
-                      className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]"
+                      className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]"
                     >
                       (-)
                     </td>
                     {showamazonfee && (
                       <>
-                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]">
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
                           (-)
                         </td>
-                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]">
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
                           (-)
                         </td>
                       </>
@@ -2396,9 +2439,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
                       return (
                         <tr
                           key={index}
-                          className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${
-                            isLastRow ? "bg-gray-200 font-semibold" : ""
-                          }`}
+                          className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${isLastRow ? "bg-gray-200 font-semibold" : ""
+                            }`}
                         >
                           <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
                             {isLastRow ? "" : index + 1}
@@ -2420,9 +2462,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
                             return (
                               <td
                                 key={idx}
-                                className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ${
-                                  isProductName ? "text-left" : "text-center"
-                                }`}
+                                className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ${isProductName ? "text-left" : "text-center"
+                                  }`}
                               >
                                 {isProductName && !isLastRow ? (
                                   <span

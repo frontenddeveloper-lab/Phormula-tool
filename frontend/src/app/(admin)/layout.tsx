@@ -7,6 +7,7 @@ import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
 import React from "react";
 import { useParams, useRouter } from "next/navigation";
+import ChatbotWidget from "@/components/chatbot/ChatbotWidget";
 
 
 export default function AdminLayout({
@@ -52,7 +53,7 @@ export default function AdminLayout({
         </div>
 
         {/* Floating Chatbot Button */}
-        <button
+        {/* <button
           className="
     fixed bottom-4 right-3 z-[9999]
     w-16 h-16                  
@@ -67,14 +68,14 @@ export default function AdminLayout({
             src="/Chatbot.png"
             alt="Chatbot"
             className="
-      w-16 h-16                  /* Keep image smaller than button */
-      object-contain            /* Prevent cropping */
+      w-16 h-16                  
+      object-contain            
       pointer-events-none
     "
           />
-        </button>
+        </button> */}
 
-
+<ChatbotWidget />
       </div>
     </AuthGuard>
   );

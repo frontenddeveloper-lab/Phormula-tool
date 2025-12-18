@@ -17,7 +17,7 @@ from dotenv import find_dotenv, load_dotenv
 from flask import Blueprint, Response, jsonify, make_response, request
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from app import db
-from app.models.user_models import UploadHistory, amazon_user
+from app.models.user_models import UploadHistory, amazon_user, Liveorder
 from app.utils.us_process_utils  import process_skuwise_us_data , process_us_yearly_skuwise_data, process_us_quarterly_skuwise_data
 from app.utils.uk_process_utils import process_skuwise_data , process_quarterly_skuwise_data, process_yearly_skuwise_data 
 from app.utils.plotting_utils import ( apply_modifications_fatch 
@@ -27,6 +27,8 @@ from app.utils.currency_utils import (  process_global_yearly_skuwise_data ,
     process_global_monthly_skuwise_data
 )
 from app.models.user_models import db, Product
+from app.utils.formulas_utils import uk_profit, safe_num
+from app.routes.live_data_bi_routes import construct_prev_table_name, engine_hist, compute_sku_metrics_from_df
 
 from dotenv import load_dotenv
 
@@ -2204,319 +2206,6 @@ def list_amazon_connections():
     })
 
 
-# from datetime import datetime, timezone
-
-# def _month_date_range_utc(year: int, month: int) -> tuple[str, str]:
-#     """
-#     Returns (postedAfter, postedBefore) ISO8601 (UTC) for given month.
-#     postedAfter is inclusive, postedBefore is exclusive.
-#     """
-#     start = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
-
-#     if month == 12:
-#         end = datetime(year + 1, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-#     else:
-#         end = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-
-#     def iso_z(dt: datetime) -> str:
-#         return dt.isoformat().replace("+00:00", "Z")
-
-#     return iso_z(start), iso_z(end)
-
-
-# def _extract_order_id_from_related_identifiers(related_identifiers: list[dict] | None) -> Optional[str]:
-#     if not related_identifiers:
-#         return None
-#     for rid in related_identifiers:
-#         name = (rid or {}).get("relatedIdentifierName")
-#         val = (rid or {}).get("relatedIdentifierValue")
-#         if name == "ORDER_ID" and val:
-#             return str(val)
-#     return None
-
-
-# def _extract_sku_and_qty_from_contexts(contexts: list[dict] | None) -> tuple[Optional[str], Optional[float]]:
-#     """
-#     ProductContext usually has sku, asin, quantityShipped, etc.
-#     We'll just take the first one.
-#     """
-#     if not contexts:
-#         return None, None
-#     for ctx in contexts:
-#         if (ctx or {}).get("contextType") == "ProductContext":
-#             sku = ctx.get("sku")
-#             qty = ctx.get("quantityShipped")
-#             try:
-#                 qty_f = float(qty) if qty is not None else None
-#             except (TypeError, ValueError):
-#                 qty_f = None
-#             return sku, qty_f
-#     return None, None
-
-
-# def _sum_breakdowns_by_keyword(breakdowns: list[dict] | None, keyword: str) -> float:
-#     """
-#     Traverse breakdown tree and sum `breakdownAmount.currencyAmount`
-#     where breakdownType contains keyword (case-insensitive).
-#     """
-#     if not breakdowns:
-#         return 0.0
-
-#     total = 0.0
-
-#     def walk(nodes: list[dict]):
-#         nonlocal total
-#         for b in nodes or []:
-#             btype = str(b.get("breakdownType", "")).lower()
-#             if keyword in btype:
-#                 amount = (((b.get("breakdownAmount") or {}).get("currencyAmount")) or 0)  # may be None
-#                 try:
-#                     total_amount = float(amount)
-#                 except (TypeError, ValueError):
-#                     total_amount = 0.0
-#                 total += total_amount
-
-#             nested = b.get("breakdowns")
-#             if isinstance(nested, list):
-#                 walk(nested)
-
-#     walk(breakdowns)
-#     return total
-
-
-# def _flatten_transaction_to_row(tx: dict) -> dict:
-#     """
-#     Map a Finances v2024-06-19 Transaction object to your internal row schema.
-
-#     Returns a dict using *normalized* column names (values of COLUMN_MAPPING),
-#     e.g. 'date_time', 'order_id', 'sku', 'product_sales', 'selling_fees', etc.
-#     """
-#     posted_date = tx.get("postedDate")  # ISO8601 string
-#     ttype = tx.get("transactionType")
-#     tstatus = tx.get("transactionStatus")
-#     desc = tx.get("description")
-#     total_amount = (tx.get("totalAmount") or {}).get("currencyAmount")
-#     marketplace_details = tx.get("marketplaceDetails") or {}
-#     breakdowns = tx.get("breakdowns") or []
-
-#     related_identifiers = tx.get("relatedIdentifiers") or []
-#     order_id = _extract_order_id_from_related_identifiers(related_identifiers)
-
-#     # Try to get SKU + quantity from first item.contexts
-#     sku = None
-#     quantity = None
-#     items = tx.get("items") or []
-#     if items:
-#         item0 = items[0] or {}
-#         ctxs = item0.get("contexts") or []
-#         sku, quantity = _extract_sku_and_qty_from_contexts(ctxs)
-
-#     # Marketplace name / id
-#     marketplace_name = marketplace_details.get("marketplaceName")
-#     marketplace_id = marketplace_details.get("marketplaceId")
-#     marketplace = marketplace_name or marketplace_id
-
-#     # Basic numeric amounts (best effort from transaction-level breakdowns)
-#     product_sales = _sum_breakdowns_by_keyword(breakdowns, "sales")
-#     # If for some transaction there are no "sales" breakdowns, fall back to totalAmount
-#     if product_sales == 0.0:
-#         try:
-#             product_sales = float(total_amount)
-#         except (TypeError, ValueError):
-#             product_sales = 0.0
-
-#     selling_fees = _sum_breakdowns_by_keyword(breakdowns, "fee")
-#     fba_fees = _sum_breakdowns_by_keyword(breakdowns, "fba")
-#     promo = _sum_breakdowns_by_keyword(breakdowns, "promotion")
-#     tax = _sum_breakdowns_by_keyword(breakdowns, "tax")
-#     shipping_credits = _sum_breakdowns_by_keyword(breakdowns, "shipping")
-
-#     # Map into your normalized columns (same names you use in DB)
-#     row = {
-#         "date_time": posted_date,
-#         "settlement_id": None,  # not present in Finances API; comes from legacy settlement reports
-#         "type": ttype,
-#         "order_id": order_id,
-#         "sku": sku,
-#         "description": desc,
-#         "quantity": quantity,
-#         "marketplace": marketplace,
-#         "fulfilment": None,     # can be inferred from contexts if needed
-#         "fulfillment": None,
-#         "order_city": None,
-#         "order_state": None,
-#         "order_postal": None,
-#         "tax_collection_model": None,
-#         "product_sales": product_sales,
-#         "product_sales_tax": tax,
-#         "postage_credits": 0.0,
-#         "shipping_credits": shipping_credits,
-#         "shipping_credits_tax": 0.0,
-#         "gift_wrap_credits": 0.0,
-#         "giftwrap_credits_tax": 0.0,
-#         "promotional_rebates": promo,
-#         "promotional_rebates_tax": 0.0,
-#         "sales_tax_collected": tax,
-#         "marketplace_withheld_tax": 0.0,
-#         "marketplace_facilitator_tax": 0.0,
-#         "selling_fees": selling_fees,
-#         "fba_fees": fba_fees,
-#         "other_transaction_fees": 0.0,
-#         "other": 0.0,
-#         "total": product_sales - selling_fees - fba_fees,  # naive; tweak as you like
-#         "account_type": None,
-#         "regulatory_fee": 0.0,
-#         "tax_on_regulatory_fee": 0.0,
-#         "bucket": tstatus,  # just an example – up to you
-#     }
-
-#     return row
-
-# from flask import Blueprint, Response, jsonify, make_response, request, send_file
-
-
-# @amazon_api_bp.route("/amazon_api/finances/monthly_transactions", methods=["GET"])
-# def finances_monthly_transactions():
-#     """
-#     Fetch Finances API v2024-06-19 transactions for a given month,
-#     flatten them into COLUMN_MAPPING-style columns, and return JSON or Excel.
-
-#     Query params:
-#       - year (int, default: current UTC year)
-#       - month (int, default: 6 for June)
-#       - transaction_status (optional: RELEASED, DEFERRED, DEFERRED_RELEASED)
-#       - marketplace_id (optional)
-#       - format (optional: 'json' (default) or 'excel')
-#     """
-#     # -------- auth --------
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'success': False, 'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'success': False, 'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'success': False, 'error': 'Invalid token'}), 401
-
-#     # -------- params --------
-#     now_utc = datetime.now(timezone.utc)
-#     try:
-#         year = int(request.args.get("year", now_utc.year))
-#         month = int(request.args.get("month", 6))  # default = June
-#         if month < 1 or month > 12:
-#             raise ValueError("month must be 1-12")
-#     except ValueError:
-#         return jsonify({"success": False, "error": "Invalid year or month"}), 400
-
-#     # default to RELEASED if client doesn’t pass anything
-#     transaction_status = request.args.get("transaction_status", "RELEASED")
-
-#     marketplace_id = request.args.get("marketplace_id")
-
-#     # ✅ NEW: choose response format
-#     response_format = (request.args.get("format") or "json").lower()
-
-#     # -------- region + marketplace from request (optional overrides) --------
-#     _apply_region_and_marketplace_from_request()
-
-#     # -------- load refresh token for this user + region --------
-#     au = amazon_user.query.filter_by(
-#         user_id=user_id,
-#         region=amazon_client.region
-#     ).first()
-
-#     if not au or not au.refresh_token:
-#         return jsonify({
-#             "success": False,
-#             "error": "Amazon account not connected for this region",
-#             "status": "no_refresh_token"
-#         }), 400
-
-#     amazon_client.refresh_token = au.refresh_token
-
-#     # -------- build date range for requested month (e.g. June) --------
-#     posted_after, posted_before = _month_date_range_utc(year, month)
-
-#     # -------- call Finances API listTransactions (with pagination) --------
-#     params = {
-#         "postedAfter": posted_after,
-#         "postedBefore": posted_before,
-#         "marketplaceId": marketplace_id or amazon_client.marketplace_id,
-#     }
-#     if transaction_status:
-#         params["transactionStatus"] = transaction_status
-
-#     all_rows: list[dict] = []
-
-#     while True:
-#         res = amazon_client.make_api_call(
-#             "/finances/2024-06-19/transactions",
-#             method="GET",
-#             params=params,
-#         )
-
-#         if not res or "error" in res:
-#             # Bubble up SP-API error details so you can debug
-#             return jsonify({
-#                 "success": False,
-#                 "error": res or {"error": "Unknown SP-API error"},
-#             }), 502
-
-#         payload = res.get("payload") or res
-#         transactions = payload.get("transactions") or []
-
-#         for tx in transactions:
-#             tstatus = (tx or {}).get("transactionStatus")
-#             # hard filter in code too
-#             if tstatus != "RELEASED":
-#                 continue
-
-#             row = _flatten_transaction_to_row(tx or {})
-#             all_rows.append(row)
-
-
-#         next_token = payload.get("nextToken")
-#         if not next_token:
-#             break
-
-#         # Next page only needs nextToken
-#         params = {"nextToken": next_token}
-
-#     # ✅ If Excel requested, return file instead of JSON
-#     if response_format == "excel":
-#         if not all_rows:
-#             # still return an empty sheet, but you could also return 204 if you prefer
-#             df = pd.DataFrame()
-#         else:
-#             df = pd.DataFrame(all_rows)
-
-#         output = io.BytesIO()
-#         # xlsxwriter or openpyxl, both are fine if installed
-#         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-#             df.to_excel(writer, index=False, sheet_name="Transactions")
-
-#         output.seek(0)
-#         filename = f"finances_transactions_{year}_{month:02d}.xlsx"
-
-#         return send_file(
-#             output,
-#             as_attachment=True,
-#             download_name=filename,
-#             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#         )
-
-#     # 🔁 default JSON response (same as you already have)
-#     return jsonify({
-#         "success": True,
-#         "year": year,
-#         "month": month,
-#         "count": len(all_rows),
-#         "transactions": all_rows,
-#     }), 200
 
 from typing import Optional, Tuple, List, Dict, Any
 from datetime import datetime, timezone
@@ -3063,134 +2752,6 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
 # =========================================================
 # ROUTE
 # =========================================================
-# @amazon_api_bp.route("/amazon_api/finances/monthly_transactions", methods=["GET"])
-# def finances_monthly_transactions():
-#     """
-#     Query params:
-#       - year (int, default: current UTC year)
-#       - month (int, default: 6)
-#       - transaction_status (optional, default RELEASED)
-#       - marketplace_id (optional)
-#       - transaction_type (optional, e.g. Shipment)
-#       - format (json | excel)
-#     """
-#     # -------- auth --------
-#     auth_header = request.headers.get("Authorization")
-#     if not auth_header or not auth_header.startswith("Bearer "):
-#         return jsonify({"success": False, "error": "Authorization token is missing or invalid"}), 401
-
-#     token = auth_header.split(" ")[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-#         user_id = payload["user_id"]
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({"success": False, "error": "Token has expired"}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({"success": False, "error": "Invalid token"}), 401
-
-#     # -------- params --------
-#     now_utc = datetime.now(timezone.utc)
-#     try:
-#         year = int(request.args.get("year", now_utc.year))
-#         month = int(request.args.get("month", 6))
-#         if month < 1 or month > 12:
-#             raise ValueError("month must be 1-12")
-#     except ValueError:
-#         return jsonify({"success": False, "error": "Invalid year or month"}), 400
-
-#     transaction_status = request.args.get("transaction_status", "RELEASED")
-#     marketplace_id = request.args.get("marketplace_id")
-#     transaction_type_filter = request.args.get("transaction_type")
-#     response_format = (request.args.get("format") or "json").lower()
-
-#     # -------- region + marketplace override --------
-#     _apply_region_and_marketplace_from_request()
-
-#     # -------- load refresh token for this user + region --------
-#     au = amazon_user.query.filter_by(user_id=user_id, region=amazon_client.region).first()
-#     if not au or not au.refresh_token:
-#         return jsonify({
-#             "success": False,
-#             "error": "Amazon account not connected for this region",
-#             "status": "no_refresh_token",
-#         }), 400
-
-#     amazon_client.refresh_token = au.refresh_token
-
-#     # -------- date range --------
-#     posted_after, posted_before = _month_date_range_utc(year, month)
-
-#     # -------- call Finances API (pagination) --------
-#     params: Dict[str, Any] = {
-#         "postedAfter": posted_after,
-#         "postedBefore": posted_before,
-#         "marketplaceId": marketplace_id or amazon_client.marketplace_id,
-#     }
-#     if transaction_status:
-#         params["transactionStatus"] = transaction_status
-
-#     all_rows: List[Dict[str, Any]] = []
-
-#     while True:
-#         res = amazon_client.make_api_call(
-#             "/finances/2024-06-19/transactions",
-#             method="GET",
-#             params=params,
-#         )
-
-#         if not res or "error" in res:
-#             return jsonify({"success": False, "error": res or {"error": "Unknown SP-API error"}}), 502
-
-#         payload = res.get("payload") or res
-#         transactions = payload.get("transactions") or []
-
-#         for tx in transactions:
-#             tstatus = (tx or {}).get("transactionStatus")
-#             ttype = (tx or {}).get("transactionType")
-
-#             # hard filter
-#             if tstatus != "RELEASED":
-#                 continue
-
-#             # optional type filter
-#             if transaction_type_filter and ttype != transaction_type_filter:
-#                 continue
-
-#             all_rows.append(_flatten_transaction_to_row(tx or {}))
-
-#         next_token = payload.get("nextToken")
-#         if not next_token:
-#             break
-#         params = {"nextToken": next_token}
-
-#     # -------- excel --------
-#     if response_format == "excel":
-#         df = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
-#         # ✅ force full MTD schema (and ensure missing cols appear)
-#         df = df.reindex(columns=MTD_COLUMNS, fill_value=0.0)
-
-#         output = io.BytesIO()
-#         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-#             df.to_excel(writer, index=False, sheet_name="Transactions")
-#         output.seek(0)
-
-#         filename = f"finances_transactions_{year}_{month:02d}.xlsx"
-#         return send_file(
-#             output,
-#             as_attachment=True,
-#             download_name=filename,
-#             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-#         )
-
-#     # -------- json --------
-#     return jsonify({
-#         "success": True,
-#         "year": year,
-#         "month": month,
-#         "count": len(all_rows),
-#         "transactions": all_rows,
-#     }), 200
-
 @amazon_api_bp.route("/amazon_api/finances/monthly_transactions", methods=["GET"])
 def finances_monthly_transactions():
     auth_header = request.headers.get("Authorization")
@@ -3223,6 +2784,9 @@ def finances_monthly_transactions():
     store_in_db = (request.args.get("store_in_db", "true").lower() != "false")
     run_upload = (request.args.get("run_upload_pipeline", "false").lower() == "true")
     ui_country = (request.args.get("country") or "").strip().lower()
+    if not ui_country:
+        ui_country = "uk"  # fallback (or map by marketplace_id)
+
 
     if run_upload and not ui_country:
         return jsonify({"success": False, "error": "country is required when run_upload_pipeline=true"}), 400
@@ -3452,21 +3016,563 @@ def _month_to_date_range_utc_safe(now_utc: datetime, safety_minutes: int = 3) ->
 
     return iso_z(start), iso_z(end)
 
+import io
+import os
+import jwt
+import logging
+import calendar
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, List, Tuple, Optional
 
+import pandas as pd
+from flask import jsonify, request, send_file
+from sqlalchemy import and_, text, create_engine
+
+logger = logging.getLogger("amazon_sp_api")
+
+# ---------------------------------------------------------
+# CURRENCY MAP
+# ---------------------------------------------------------
+COUNTRY_TO_SELECTED_CURRENCY = {
+    "uk": "GBP",
+    "us": "USD",
+    "india": "INR",
+}
+
+# sku table currency column is INR (per your screenshot)
+DEFAULT_SKU_PRICE_CURRENCY = "INR"
+
+
+# ---------------------------------------------------------
+# ENGINES
+# ---------------------------------------------------------
+db_url = os.getenv("DATABASE_URL")
+db_url1 = os.getenv("DATABASE_ADMIN_URL") or db_url
+
+PHORMULA_ENGINE = create_engine(db_url, pool_pre_ping=True)
+ADMIN_ENGINE = create_engine(db_url1, pool_pre_ping=True)
+
+
+# ---------------------------------------------------------
+# UTILS
+# ---------------------------------------------------------
+def _parse_amz_dt(s: str):
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except Exception:
+        return None
+
+def _f(v):
+    try:
+        return float(v) if v is not None else 0.0
+    except Exception:
+        return 0.0
+
+def _i(v):
+    try:
+        return int(v) if v is not None else None
+    except Exception:
+        return None
+
+def _month_name_lower(month_num: int) -> str:
+    return calendar.month_name[int(month_num)].lower()
+
+def _month_to_date_range_utc_safe(now_utc: datetime, safety_minutes: int = 3) -> Tuple[str, str]:
+    start = datetime(now_utc.year, now_utc.month, 1, 0, 0, 0, tzinfo=timezone.utc)
+    end = now_utc - timedelta(minutes=safety_minutes)
+    if end < start:
+        end = start
+
+    def iso_z(dt: datetime) -> str:
+        dt = dt.replace(microsecond=0)
+        return dt.isoformat().replace("+00:00", "Z")
+
+    return iso_z(start), iso_z(end)
+
+
+# ---------------------------------------------------------
+# SKU PRICE MAP (PHORMULA DB)
+# ---------------------------------------------------------
+def fetch_sku_price_map(user_id: int, country: str) -> Dict[str, float]:
+    """
+    Reads from: public."sku_{user_id}_data_table"
+    Returns {sku: price}
+    Uses sku_uk if country=uk, sku_us if country=us.
+    """
+    uid = int(user_id)
+    country = (country or "").strip().lower()
+
+    table = f'public."sku_{uid}_data_table"'
+    sql = text(f"SELECT sku_uk, sku_us, price FROM {table}")
+
+    mp: Dict[str, float] = {}
+    use_uk = (country == "uk")
+    use_us = (country == "us")
+
+    with PHORMULA_ENGINE.connect() as conn:
+        rows = conn.execute(sql).fetchall()
+
+    for sku_uk, sku_us, price in rows:
+        if price is None:
+            continue
+        try:
+            p = float(price)
+        except Exception:
+            continue
+
+        if use_uk and sku_uk:
+            mp.setdefault(str(sku_uk).strip(), p)
+        elif use_us and sku_us:
+            mp.setdefault(str(sku_us).strip(), p)
+        else:
+            if sku_uk:
+                mp.setdefault(str(sku_uk).strip(), p)
+            if sku_us:
+                mp.setdefault(str(sku_us).strip(), p)
+
+    return mp
+
+
+# ---------------------------------------------------------
+# CONVERSION RATE (ADMIN DB)
+# ---------------------------------------------------------
+def fetch_conversion_rate(country: str, year: int, month_name: str,
+                          user_currency: str, selected_currency: str) -> float:
+    """
+    Uses full key:
+      country + year + month + user_currency + selected_currency
+    Example row:
+      user_currency=INR | country=uk | selected_currency=GBP | month=december | year=2025 | rate=0.00834
+    """
+    sql = text("""
+        SELECT conversion_rate
+        FROM public.currency_conversion
+        WHERE country = :country
+          AND year = :year
+          AND month = :month
+          AND user_currency = :user_currency
+          AND selected_currency = :selected_currency
+        ORDER BY id DESC
+        LIMIT 1
+    """)
+
+    with ADMIN_ENGINE.connect() as conn:
+        row = conn.execute(sql, {
+            "country": (country or "").lower(),
+            "year": int(year),
+            "month": (month_name or "").lower(),
+            "user_currency": (user_currency or "").upper(),
+            "selected_currency": (selected_currency or "").upper(),
+        }).fetchone()
+
+    try:
+        return float(row[0]) if row and row[0] is not None else 1.0
+    except Exception:
+        return 1.0
+
+
+# ---------------------------------------------------------
+# TOTALS (includes cogs)
+# ---------------------------------------------------------
+TOTAL_FIELDS = [
+    "quantity",
+    "product_sales",
+    "product_sales_tax",
+    "postage_credits",
+    "shipping_credits",
+    "shipping_credits_tax",
+    "gift_wrap_credits",
+    "giftwrap_credits_tax",
+    "promotional_rebates",
+    "promotional_rebates_tax",
+    "marketplace_facilitator_tax",
+    "selling_fees",
+    "fba_fees",
+    "cogs",                   # ✅ include cogs in totals
+    "profit",
+    "other_transaction_fees",
+    "other",
+    "total",
+]
+
+def compute_totals(rows: List[Dict[str, Any]]) -> Dict[str, float]:
+    out = {k: 0.0 for k in TOTAL_FIELDS}
+    for r in rows or []:
+        for k in TOTAL_FIELDS:
+            if k == "quantity":
+                out[k] += float(_i(r.get(k)) or 0)
+            else:
+                out[k] += float(_f(r.get(k)))
+    return out
+
+def add_profit_column_from_uk_profit(rows: List[Dict[str, Any]], country: str) -> None:
+    """
+    Adds row["profit"] for each row by:
+      - computing sku-level profit using uk_profit(df, want_breakdown=True)
+      - converting to per-unit profit
+      - assigning profit per row = per_unit_profit * row_qty
+    Mutates rows in-place.
+    """
+    if not rows:
+        return
+
+    df = pd.DataFrame(rows)
+
+    if df.empty or "sku" not in df.columns:
+        for r in rows:
+            r["profit"] = 0.0
+        return
+
+    # normalize sku + qty
+    df["sku"] = df["sku"].astype(str).str.strip()
+    df["quantity"] = df.get("quantity", 0).apply(lambda x: float(_i(x) or 0))
+
+    # uk_profit() expects cost_of_unit_sold, so map your cogs into that
+    # (Your cogs is already qty*price*conversion_rate per row)
+    df["cost_of_unit_sold"] = safe_num(df.get("cogs", 0.0)).abs()
+
+    # compute sku-level profit breakdown
+    profit_total, profit_by_sku, _ = uk_profit(df, country=country, want_breakdown=True)
+
+    # profit_by_sku has columns: sku, __metric__ (=profit per sku)
+    if profit_by_sku is None or profit_by_sku.empty:
+        for r in rows:
+            r["profit"] = 0.0
+        return
+
+    profit_map = {str(s).strip(): float(p) for s, p in zip(profit_by_sku["sku"], profit_by_sku["__metric__"])}
+
+    # qty by sku (for per-unit allocation)
+    qty_by_sku = df.groupby("sku", as_index=True)["quantity"].sum().to_dict()
+
+    per_unit_profit = {}
+    for sku, sku_profit in profit_map.items():
+        q = float(qty_by_sku.get(sku, 0.0) or 0.0)
+        per_unit_profit[sku] = (sku_profit / q) if q else 0.0
+
+    # assign row-profit
+    for r in rows:
+        sku = str((r.get("sku") or "")).strip()
+        qty = float(_i(r.get("quantity")) or 0)
+        r["profit"] = float(per_unit_profit.get(sku, 0.0)) * qty
+
+# ---------------------------------------------------------
+# UPSERT WITH COGS
+# ---------------------------------------------------------
+def upsert_liveorders_from_rows(rows, user_id: int, country: str, now_utc: datetime):
+    if not rows:
+        return {"inserted": 0, "updated": 0, "deduped": 0, "conversion_rate": 1.0}
+
+    country = (country or "").strip().lower()
+
+    sku_price_map = fetch_sku_price_map(user_id=user_id, country=country)
+
+    month_name = _month_name_lower(now_utc.month)
+    user_currency = DEFAULT_SKU_PRICE_CURRENCY
+    selected_currency = COUNTRY_TO_SELECTED_CURRENCY.get(country, user_currency)
+
+    conversion_rate = fetch_conversion_rate(
+        country=country,
+        year=now_utc.year,
+        month_name=month_name,
+        user_currency=user_currency,
+        selected_currency=selected_currency
+    )
+
+    logger.info(
+        f"[COGS] country={country} month={month_name} year={now_utc.year} "
+        f"pair={user_currency}->{selected_currency} rate={conversion_rate}"
+    )
+
+    # ✅ Deduplicate by order_id (keep latest date_time)
+    best = {}
+    for r in rows:
+        oid = r.get("order_id")
+        if not oid:
+            continue
+        dt = _parse_amz_dt(r.get("date_time"))
+        if oid not in best:
+            best[oid] = (dt, r)
+        else:
+            prev_dt, _ = best[oid]
+            if (dt or datetime.min.replace(tzinfo=timezone.utc)) >= (prev_dt or datetime.min.replace(tzinfo=timezone.utc)):
+                best[oid] = (dt, r)
+
+    deduped = len(rows) - len(best)
+    final_rows = [v[1] for v in best.values()]
+    order_ids = list(best.keys())
+
+    existing = Liveorder.query.filter(
+        and_(Liveorder.user_id == user_id, Liveorder.amazon_order_id.in_(order_ids))
+    ).all()
+    existing_map = {e.amazon_order_id: e for e in existing}
+
+    inserted = 0
+    updated = 0
+
+    for r in final_rows:
+        oid = r.get("order_id")
+        if not oid:
+            continue
+
+        obj = existing_map.get(oid)
+        if obj is None:
+            obj = Liveorder(user_id=user_id, amazon_order_id=oid)
+            db.session.add(obj)
+            existing_map[oid] = obj
+            inserted += 1
+        else:
+            updated += 1
+
+        obj.purchase_date = _parse_amz_dt(r.get("date_time"))
+        obj.order_status = (r.get("bucket") or "")
+        obj.sku = (r.get("sku") or "").strip() or None
+        obj.quantity = _i(r.get("quantity")) or 0
+
+        # ✅ correct cogs
+        price = sku_price_map.get(obj.sku) if obj.sku else None
+        if price is None or obj.quantity <= 0:
+            obj.cogs = 0.0
+        else:
+            obj.cogs = float(obj.quantity) * float(price) * float(conversion_rate)
+
+        # ✅ NEW: store profit (computed earlier in route)
+        obj.profit = _f(r.get("profit"))
+
+        # other fields
+        obj.type = r.get("type")
+        obj.description = r.get("description")
+        obj.marketplace = r.get("marketplace")
+
+        obj.product_sales = _f(r.get("product_sales"))
+        obj.product_sales_tax = _f(r.get("product_sales_tax"))
+        obj.postage_credits = _f(r.get("postage_credits"))
+        obj.shipping_credits = _f(r.get("shipping_credits"))
+        obj.shipping_credits_tax = _f(r.get("shipping_credits_tax"))
+        obj.gift_wrap_credits = _f(r.get("gift_wrap_credits"))
+        obj.giftwrap_credits_tax = _f(r.get("giftwrap_credits_tax"))
+        obj.promotional_rebates = _f(r.get("promotional_rebates"))
+        obj.promotional_rebates_tax = _f(r.get("promotional_rebates_tax"))
+        obj.marketplace_facilitator_tax = _f(r.get("marketplace_facilitator_tax"))
+        obj.selling_fees = _f(r.get("selling_fees"))
+        obj.fba_fees = _f(r.get("fba_fees"))
+        obj.other_transaction_fees = _f(r.get("other_transaction_fees"))
+        obj.other = _f(r.get("other"))
+        obj.total = _f(r.get("total"))
+        obj.bucket = r.get("bucket")
+
+    db.session.commit()
+
+    return {
+        "inserted": inserted,
+        "updated": updated,
+        "deduped": deduped,
+        "conversion_rate": conversion_rate,
+        "month": month_name,
+        "year": now_utc.year,
+        "country": country,
+        "pair": f"{user_currency}->{selected_currency}"
+    }
+
+
+from datetime import date, datetime
+import calendar
+
+def previous_month_mtd_range(now_utc: datetime) -> tuple[date, date]:
+    """
+    Previous-month MTD range (inclusive, same day number as today if possible).
+
+    Example:
+      now_utc = 2025-12-17
+      -> prev_start = 2025-11-01
+      -> prev_end   = 2025-11-17
+    """
+    today_day = int(now_utc.day)
+
+    # previous month/year
+    if now_utc.month == 1:
+        py, pm = now_utc.year - 1, 12
+    else:
+        py, pm = now_utc.year, now_utc.month - 1
+
+    prev_start = date(py, pm, 1)
+    last_day_prev_month = calendar.monthrange(py, pm)[1]
+
+    # ✅ inclusive MTD: end at the same day number (clamped to month length)
+    prev_end_day = min(today_day, last_day_prev_month)
+
+    prev_end = date(py, pm, prev_end_day)
+    return prev_start, prev_end
+
+
+from sqlalchemy import text
+from datetime import datetime, timedelta, date
+import pandas as pd
+import re
+
+def _safe_sql_identifier_table(name: str) -> str:
+    """
+    Allow only safe SQL identifiers for table names.
+    Prevents SQL injection when using dynamic table names.
+    """
+    if not name:
+        raise ValueError("Table name is empty")
+
+    # Allow: letters, numbers, underscore, dot, double quotes, hyphen
+    if not re.fullmatch(r'[A-Za-z0-9_."-]+', name):
+        raise ValueError(f"Unsafe table name: {name}")
+
+    return name
+
+
+def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: date):
+    """
+    Return:
+      sku_metrics: list (per-SKU metrics)
+      prev_totals: {
+        "quantity": float,
+        "gross_sales": float,      # ✅ NEW (sum of product_sales)
+        "net_sales": float,        # product_sales + promotional_rebates
+        "profit": float,           # sum of sku_metrics profit
+        "asp": float,              # net_sales / quantity
+        "profit_percentage": float # profit / net_sales * 100
+      }
+      daily_series: list of {date, quantity, net_sales} (optional for chart)
+
+    Notes:
+      - prev_start/prev_end are dates (no time). Query uses [start, end+1day) timestamps.
+      - gross_sales = sum(product_sales)
+      - net_sales = product_sales + promotional_rebates
+      - profit total = sum of profit in sku_metrics (since sku_metrics already calculates profit per SKU)
+    """
+    table_name = construct_prev_table_name(
+        user_id=user_id,
+        country=country,
+        month=prev_start.month,
+        year=prev_start.year,
+    )
+    table_name = _safe_sql_identifier_table(table_name)
+
+    query = text(f"""
+        SELECT *
+        FROM (
+            SELECT
+                *,
+                NULLIF(NULLIF(date_time, '0'), '')::timestamp AS date_ts
+            FROM {table_name}
+        ) t
+        WHERE date_ts >= :start_ts
+          AND date_ts < :end_ts_excl
+    """)
+
+    params = {
+        "start_ts": datetime.combine(prev_start, datetime.min.time()),
+        "end_ts_excl": datetime.combine(prev_end + timedelta(days=1), datetime.min.time()),
+    }
+
+    with engine_hist.connect() as conn:
+        result = conn.execute(query, params)
+        rows = result.fetchall()
+
+        if not rows:
+            return [], {
+                "quantity": 0.0,
+                "gross_sales": 0.0,
+                "net_sales": 0.0,
+                "profit": 0.0,
+                "asp": 0.0,
+                "profit_percentage": 0.0,
+            }, []
+
+        df = pd.DataFrame(rows, columns=result.keys())
+
+    # -------------------------
+    # Per-SKU metrics (existing)
+    # -------------------------
+    sku_metrics = compute_sku_metrics_from_df(df) or []
+
+    # -------------------------
+    # Totals (NOT day-wise)
+    # -------------------------
+    quantity_total = float(safe_num(df.get("quantity", 0.0)).sum())
+
+    gross_sales_total = float(safe_num(df.get("product_sales", 0.0)).sum())  # ✅ NEW
+    promo_rebates_total = float(safe_num(df.get("promotional_rebates", 0.0)).sum())
+
+    net_sales_total = gross_sales_total + promo_rebates_total
+
+    # Profit total from sku_metrics
+    profit_total = sum(float(x.get("profit", 0.0) or 0.0) for x in sku_metrics)
+
+    asp = (net_sales_total / quantity_total) if quantity_total else 0.0
+    profit_percentage = (profit_total / net_sales_total * 100) if net_sales_total else 0.0
+
+    prev_totals = {
+        "quantity": round(quantity_total, 2),
+        "gross_sales": round(gross_sales_total, 2),      # ✅ NEW
+        "net_sales": round(net_sales_total, 2),
+        "profit": round(profit_total, 2),
+        "asp": round(asp, 2),
+        "profit_percentage": round(profit_percentage, 2),
+    }
+
+    # -------------------------
+    # Optional daily series
+    # -------------------------
+    daily_series = []
+    date_col = "date_ts" if "date_ts" in df.columns else ("date_time" if "date_time" in df.columns else None)
+
+    if date_col:
+        tmp = df.copy()
+        tmp["date_only"] = pd.to_datetime(tmp[date_col], errors="coerce").dt.date
+
+        tmp["quantity"] = safe_num(tmp.get("quantity", 0.0))
+        tmp["product_sales"] = safe_num(tmp.get("product_sales", 0.0))
+        tmp["promotional_rebates"] = safe_num(tmp.get("promotional_rebates", 0.0))
+        tmp["net_sales"] = tmp["product_sales"] + tmp["promotional_rebates"]
+
+        g = tmp.groupby("date_only", as_index=False).agg(
+            quantity=("quantity", "sum"),
+            net_sales=("net_sales", "sum"),
+        )
+
+        for d, qd, ns in zip(g["date_only"], g["quantity"], g["net_sales"]):
+            if pd.isna(d):
+                continue
+            daily_series.append({
+                "date": d.isoformat(),
+                "quantity": float(qd),
+                "net_sales": float(ns),
+            })
+
+    return sku_metrics, prev_totals, daily_series
+
+
+def get_previous_month_mtd_payload(user_id: int, country: str, now_utc: datetime) -> dict:
+    prev_start, prev_end = previous_month_mtd_range(now_utc)
+
+    sku_metrics, prev_totals, _daily_series = fetch_previous_period_data(
+        user_id=user_id,
+        country=country,
+        prev_start=prev_start,
+        prev_end=prev_end,
+    )
+
+    return {
+        "prev_start": prev_start.isoformat(),
+        "prev_end": prev_end.isoformat(),
+        "totals": prev_totals,      # ✅ total only
+        "sku_metrics": sku_metrics, # keep if you need per-sku table
+    }
+
+
+# ---------------------------------------------------------
+# ROUTE (MTD)  ✅ includes totals + cogs in JSON
+# ---------------------------------------------------------
 @amazon_api_bp.route("/amazon_api/finances/mtd_transactions", methods=["GET"])
 def finances_mtd_transactions():
-    """
-    Month-to-date transactions:
-      - postedAfter  = first day of current month 00:00:00Z
-      - postedBefore = current UTC datetime (now)
-
-    Query params:
-      - transaction_status (optional, default RELEASED)
-      - marketplace_id (optional)
-      - transaction_type (optional, e.g. Shipment)
-      - format (json | excel)
-    """
-    # -------- auth --------
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"success": False, "error": "Authorization token is missing or invalid"}), 401
@@ -3474,22 +3580,22 @@ def finances_mtd_transactions():
     token = auth_header.split(" ")[1]
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        user_id = payload["user_id"]
+        user_id = int(payload["user_id"])
     except jwt.ExpiredSignatureError:
         return jsonify({"success": False, "error": "Token has expired"}), 401
     except jwt.InvalidTokenError:
         return jsonify({"success": False, "error": "Invalid token"}), 401
 
-    # -------- params --------
     transaction_status = request.args.get("transaction_status", "RELEASED")
     marketplace_id = request.args.get("marketplace_id")
     transaction_type_filter = request.args.get("transaction_type")
     response_format = (request.args.get("format") or "json").lower()
+    store_in_db = (request.args.get("store_in_db", "true").lower() != "false")
 
-    # -------- region + marketplace override --------
+    ui_country = (request.args.get("country") or "").strip().lower() or "uk"
+
     _apply_region_and_marketplace_from_request()
 
-    # -------- load refresh token for this user + region --------
     au = amazon_user.query.filter_by(user_id=user_id, region=amazon_client.region).first()
     if not au or not au.refresh_token:
         return jsonify({
@@ -3500,12 +3606,23 @@ def finances_mtd_transactions():
 
     amazon_client.refresh_token = au.refresh_token
 
-    # -------- date range: 1st of month -> now (UTC) --------
     now_utc = datetime.now(timezone.utc)
     posted_after, posted_before = _month_to_date_range_utc_safe(now_utc, safety_minutes=3)
 
+    # ✅ prepare cogs inputs once
+    month_name = _month_name_lower(now_utc.month)
+    user_currency = DEFAULT_SKU_PRICE_CURRENCY
+    selected_currency = COUNTRY_TO_SELECTED_CURRENCY.get(ui_country, user_currency)
 
-    # -------- call Finances API (pagination) --------
+    sku_price_map = fetch_sku_price_map(user_id=user_id, country=ui_country)
+    conversion_rate = fetch_conversion_rate(
+        country=ui_country,
+        year=now_utc.year,
+        month_name=month_name,
+        user_currency=user_currency,
+        selected_currency=selected_currency
+    )
+
     params: Dict[str, Any] = {
         "postedAfter": posted_after,
         "postedBefore": posted_before,
@@ -3522,41 +3639,95 @@ def finances_mtd_transactions():
             method="GET",
             params=params,
         )
-
         if not res or "error" in res:
             return jsonify({"success": False, "error": res or {"error": "Unknown SP-API error"}}), 502
 
-        payload = res.get("payload") or res
-        transactions = payload.get("transactions") or []
+        payload_res = res.get("payload") or res
+        transactions = payload_res.get("transactions") or []
 
         for tx in transactions:
             tstatus = (tx or {}).get("transactionStatus")
             ttype = (tx or {}).get("transactionType")
 
-            # keep your hard filter (same as monthly route)
             if tstatus != "RELEASED":
                 continue
-
             if transaction_type_filter and ttype != transaction_type_filter:
                 continue
 
-            all_rows.append(_flatten_transaction_to_row(tx or {}))
+            row = _flatten_transaction_to_row(tx or {})
 
-        next_token = payload.get("nextToken")
+            # ✅ add cogs per row
+            sku = (row.get("sku") or "").strip()
+            qty = _i(row.get("quantity")) or 0
+            price = sku_price_map.get(sku) if sku else None
+            row["cogs"] = float(qty) * float(price) * float(conversion_rate) if (price is not None and qty > 0) else 0.0
+
+            all_rows.append(row)
+
+        next_token = payload_res.get("nextToken")
         if not next_token:
             break
         params = {"nextToken": next_token}
 
-    # -------- excel --------
+    # ✅ profit per row
+    add_profit_column_from_uk_profit(all_rows, country=ui_country)
+
+    # ✅ store to DB
+    db_result = None
+    if store_in_db:
+        try:
+            db_result = upsert_liveorders_from_rows(
+                all_rows,
+                user_id=user_id,
+                country=ui_country,
+                now_utc=now_utc
+            )
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "error": f"DB store failed: {str(e)}"}), 500
+
+    totals = compute_totals(all_rows)
+
+    selling_fees = float(totals.get("selling_fees", 0.0))
+    fba_fees     = float(totals.get("fba_fees", 0.0))
+    amazon_fees  = abs(selling_fees) + abs(fba_fees)   # ✅ positive
+
+    net_sales = float(totals.get("product_sales", 0.0)) + float(totals.get("promotional_rebates", 0.0))
+    qty = float(totals.get("quantity", 0.0)) or 0.0
+    asp = (net_sales / qty) if qty else 0.0
+
+    profit = float(totals.get("profit", 0.0))
+    profit_percentage = (profit / net_sales * 100) if net_sales else 0.0
+
+    derived_totals = {
+        "amazon_fees": round(amazon_fees, 2),
+        "net_sales": round(net_sales, 2),
+        "asp": round(asp, 2),
+        "profit": round(profit, 2),
+        "profit_percentage": round(profit_percentage, 2),
+    }
+
+    # ✅ NEW: previous-month MTD data
+    previous_period = get_previous_month_mtd_payload(
+        user_id=user_id,
+        country=ui_country,
+        now_utc=now_utc
+    )
+
     if response_format == "excel":
         df = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
-        df = df.reindex(columns=MTD_COLUMNS, fill_value=0.0)
+        df = df.reindex(columns=MTD_COLUMNS + ["cogs", "profit"], fill_value=0.0)
 
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
             df.to_excel(writer, index=False, sheet_name="Transactions")
-        output.seek(0)
+            pd.DataFrame([totals]).to_excel(writer, index=False, sheet_name="Totals")
+            pd.DataFrame([derived_totals]).to_excel(writer, index=False, sheet_name="DerivedTotals")
+            pd.DataFrame([previous_period]).to_excel(writer, index=False, sheet_name="PrevPeriodMeta")
+            if db_result:
+                pd.DataFrame([db_result]).to_excel(writer, index=False, sheet_name="DBMeta")
 
+        output.seek(0)
         filename = f"finances_transactions_MTD_{now_utc.year}_{now_utc.month:02d}.xlsx"
         return send_file(
             output,
@@ -3565,11 +3736,22 @@ def finances_mtd_transactions():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-    # -------- json --------
     return jsonify({
         "success": True,
         "posted_after": posted_after,
         "posted_before": posted_before,
         "count": len(all_rows),
+        "stored": bool(store_in_db),
+        "db_result": db_result,
+        "cogs_meta": {
+            "country": ui_country,
+            "month": month_name,
+            "year": now_utc.year,
+            "pair": f"{user_currency}->{selected_currency}",
+            "conversion_rate": conversion_rate,
+        },
+        "totals": totals,
+        "derived_totals": derived_totals,
+        "previous_period": previous_period,   # ✅ added
         "transactions": all_rows,
     }), 200

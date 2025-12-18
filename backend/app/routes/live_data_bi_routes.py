@@ -18,7 +18,7 @@ from app.utils.formulas_utils import (
     sku_mask,
     safe_num,
 )
-from app.utils.email_utils import send_live_bi_email , get_user_email_by_id, has_recent_bi_email, mark_bi_email_sent
+# from app.utils.email_utils import send_live_bi_email , get_user_email_by_id, has_recent_bi_email, mark_bi_email_sent
 # -----------------------------------------------------------------------------
 # ENV / DB SETUP
 # -----------------------------------------------------------------------------
@@ -1752,46 +1752,46 @@ def live_mtd_vs_previous():
         overall_summary = overall.get("summary_bullets", [])
         overall_actions = overall.get("action_bullets", [])
 
-        # ============================
-        # SEND EMAIL WITH AI SUMMARY
-        # ============================
+        # # ============================
+        # # SEND EMAIL WITH AI SUMMARY
+        # # ============================
 
-        # 1) Try to read email from JWT payload, else from query param
-        user_email = payload.get("email") or request.args.get("email")
-        if not user_email:
-            user_email = get_user_email_by_id(user_id)
+        # # 1) Try to read email from JWT payload, else from query param
+        # user_email = payload.get("email") or request.args.get("email")
+        # if not user_email:
+        #     # user_email = get_user_email_by_id(user_id)
 
 
-        if user_email:
-            # 3) Throttle: only once in 24 hours per user+country
-            if has_recent_bi_email(user_id, country, hours=24):
-                print(f"[INFO] BI email already sent in last 24h for user_id={user_id}, country={country}; skipping.")
-            else:
-                # 4) Generate a fresh token for this user for deep-link
-                email_token_payload = {
-                    "user_id": user_id,
-                    "email": user_email,
-                    "scope": "live_mtd_bi",
-                    "exp": datetime.utcnow() + timedelta(hours=24),
-                }
-                email_token = jwt.encode(email_token_payload, SECRET_KEY, algorithm="HS256")
+        # if user_email:
+        #     # 3) Throttle: only once in 24 hours per user+country
+        #     if has_recent_bi_email(user_id, country, hours=24):
+        #         print(f"[INFO] BI email already sent in last 24h for user_id={user_id}, country={country}; skipping.")
+        #     else:
+        #         # 4) Generate a fresh token for this user for deep-link
+        #         email_token_payload = {
+        #             "user_id": user_id,
+        #             "email": user_email,
+        #             "scope": "live_mtd_bi",
+        #             "exp": datetime.utcnow() + timedelta(hours=24),
+        #         }
+        #         email_token = jwt.encode(email_token_payload, SECRET_KEY, algorithm="HS256")
 
-                try:
-                    send_live_bi_email(
-                        to_email=user_email,
-                        overall_summary=overall_summary,
-                        overall_actions=overall_actions,
-                        country=country,
-                        prev_label=prev_label,
-                        curr_label=curr_label,
-                        deep_link_token=email_token,
-                    )
-                    mark_bi_email_sent(user_id, country)
-                except Exception as e:
-                    # Don't break the API if email fails
-                    print(f"[WARN] Error sending live BI email: {e}")
-        else:
-            print("[WARN] No user email found in token, query params, or DB; skipping BI email.")
+        #         try:
+        #             send_live_bi_email(
+        #                 to_email=user_email,
+        #                 overall_summary=overall_summary,
+        #                 overall_actions=overall_actions,
+        #                 country=country,
+        #                 prev_label=prev_label,
+        #                 curr_label=curr_label,
+        #                 deep_link_token=email_token,
+        #             )
+        #             mark_bi_email_sent(user_id, country)
+        #         except Exception as e:
+        #             # Don't break the API if email fails
+        #             print(f"[WARN] Error sending live BI email: {e}")
+        # else:
+        #     print("[WARN] No user email found in token, query params, or DB; skipping BI email.")
 
 
 

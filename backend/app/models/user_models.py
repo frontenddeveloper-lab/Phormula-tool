@@ -604,6 +604,44 @@ class Order(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+class Liveorder(db.Model):
+    __tablename__ = 'Liveorders'
+    __bind_key__ = 'amazon'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, index=True)
+
+    # from your payload
+    amazon_order_id = db.Column(db.String(255), nullable=False, index=True, unique=True)  # maps from order_id
+    purchase_date = db.Column(db.DateTime, index=True)  # maps from date_time
+    order_status = db.Column(db.String(50), index=True)  # maps from bucket (or tx status)
+    sku = db.Column(db.String(255), index=True)
+    quantity = db.Column(db.Integer)
+    cogs = db.Column(db.Float, default=0.0)
+    profit = db.Column(db.Float, default=0.0) 
+
+    # extra columns you listed
+    type = db.Column(db.String(100))
+    description = db.Column(db.Text)
+    marketplace = db.Column(db.String(255))
+
+    product_sales = db.Column(db.Float, default=0.0)
+    product_sales_tax = db.Column(db.Float, default=0.0)
+    postage_credits = db.Column(db.Float, default=0.0)
+    shipping_credits = db.Column(db.Float, default=0.0)
+    shipping_credits_tax = db.Column(db.Float, default=0.0)
+    gift_wrap_credits = db.Column(db.Float, default=0.0)
+    giftwrap_credits_tax = db.Column(db.Float, default=0.0)
+    promotional_rebates = db.Column(db.Float, default=0.0)
+    promotional_rebates_tax = db.Column(db.Float, default=0.0)
+    marketplace_facilitator_tax = db.Column(db.Float, default=0.0)
+    selling_fees = db.Column(db.Float, default=0.0)
+    fba_fees = db.Column(db.Float, default=0.0)
+    other_transaction_fees = db.Column(db.Float, default=0.0)
+    other = db.Column(db.Float, default=0.0)
+    total = db.Column(db.Float, default=0.0)
+    bucket = db.Column(db.String(50))
+
 
 class amazon_user(db.Model):
     __tablename__ = 'amazon_user'
