@@ -563,64 +563,31 @@ class MonthwiseInventory(db.Model):
 
 # --------------------------------- Order model ---------------------------------
 
-class Order(db.Model):
-    __tablename__ = 'orders'
-    __bind_key__ = 'amazon'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer)
-    amazon_order_id = db.Column(db.String(255), nullable=False, index=True, unique=True)
-    purchase_date = db.Column(db.DateTime, index=True)
-    order_status = db.Column(db.String(50), index=True)
-    sku = db.Column(db.String(255), index=True)
-    quantity = db.Column(db.Integer)
-    cogs = db.Column(db.Numeric(12, 2))
-    product_name = db.Column(db.String(255))
-    total_amount = db.Column(db.Numeric(12, 2))
-    selling_fees = db.Column(db.Numeric(12, 2), nullable=True)  
-    fba_fees = db.Column(db.Numeric(12, 2), nullable=True)
-    profit = db.Column(db.Numeric(12, 2), nullable=True)
-    product_sales = db.Column(db.Numeric(12, 2))
-    product_sales_tax = db.Column(db.Numeric(12, 2))
-    postage_credits = db.Column(db.Numeric(12, 2))
-    shipping_credits_tax = db.Column(db.Numeric(12, 2))
-    gift_wrap_credits = db.Column(db.Numeric(12, 2))
-    giftwrap_credits_tax = db.Column(db.Numeric(12, 2))
-    promotional_rebates = db.Column(db.Numeric(12, 2))
-    promotional_rebates_tax = db.Column(db.Numeric(12, 2))
-    marketplace_withheld_tax = db.Column(db.Numeric(12, 2))
-    other_transaction_fees = db.Column(db.Numeric(12, 2))
-    other = db.Column(db.Numeric(12, 2))
-    total = db.Column(db.Numeric(12, 2))
-    order_finances = db.Column(JSONB, nullable=True)      
-    currency = db.Column(db.String(10))
-    marketplace_id = db.Column(db.String(255), index=True)
-    sales_channel = db.Column(db.String(50))
-    city = db.Column(db.String(255), index=True)
-    state = db.Column(db.String(255), index=True)  
-    postal_code = db.Column(db.String(32), index=True)
-    country = db.Column(db.String(3), index=True)
-    synced_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 class Liveorder(db.Model):
-    __tablename__ = 'Liveorders'
+    __tablename__ = 'liveorders'
     __bind_key__ = 'amazon'
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, index=True)
 
-    # from your payload
-    amazon_order_id = db.Column(db.String(255), nullable=False, index=True, unique=True)  # maps from order_id
-    purchase_date = db.Column(db.DateTime, index=True)  # maps from date_time
-    order_status = db.Column(db.String(50), index=True)  # maps from bucket (or tx status)
+    # ✅ allow NULL + duplicates
+    amazon_order_id = db.Column(db.String(255), nullable=True, index=True)
+
+    # ✅ new transaction key (unique per user)
+    tx_key = db.Column(db.Text, nullable=False, index=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'tx_key', name='uq_liveorders_user_tx_key'),
+    )
+
+    purchase_date = db.Column(db.DateTime, index=True)
+    order_status = db.Column(db.String(50), index=True)
     sku = db.Column(db.String(255), index=True)
     quantity = db.Column(db.Integer)
     cogs = db.Column(db.Float, default=0.0)
-    profit = db.Column(db.Float, default=0.0) 
+    profit = db.Column(db.Float, default=0.0)
 
-    # extra columns you listed
     type = db.Column(db.String(100))
     description = db.Column(db.Text)
     marketplace = db.Column(db.String(255))

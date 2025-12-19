@@ -227,7 +227,7 @@
 //     });
 
 
-    
+
 //     const option = {
 //       color: ['#CECBC7', '#F47A00'],
 //       tooltip: {
@@ -1637,7 +1637,7 @@
 //   .legend-box{
 //     width:14px;
 //     height:14px;
-    
+
 //   }
 
 //   .compare-button-container{ margin-top:10px; text-align:right; }
@@ -2884,7 +2884,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
       console.error('live_mtd_bi error:', err?.response?.data || err.message);
       setError(
         err?.response?.data?.error ||
-          'An error occurred while fetching live BI data.'
+        'An error occurred while fetching live BI data.'
       );
     } finally {
       if (!generateInsights) setPageLoading(false);
@@ -3033,7 +3033,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
             (r.sku && r.sku === selectedSku) ||
             (r.product_name &&
               r.product_name.toLowerCase().trim() ===
-                String(productName).toLowerCase().trim())
+              String(productName).toLowerCase().trim())
         ),
         -1
       );
@@ -3063,8 +3063,8 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
       console.error('row-feedback error:', err?.response?.data || err.message);
       setError(
         err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          'Failed to submit feedback. Please try again.'
+        err?.response?.data?.message ||
+        'Failed to submit feedback. Please try again.'
       );
     } finally {
       setFbSubmitting(false);
@@ -3446,10 +3446,10 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
 
   const allSkuRows = categorizedGrowth
     ? [
-        ...(categorizedGrowth.top_80_skus || []),
-        ...(categorizedGrowth.new_or_reviving_skus || []),
-        ...(categorizedGrowth.other_skus || []),
-      ]
+      ...(categorizedGrowth.top_80_skus || []),
+      ...(categorizedGrowth.new_or_reviving_skus || []),
+      ...(categorizedGrowth.other_skus || []),
+    ]
     : [];
 
   const [showAllSkus, setShowAllSkus] = useState(false);
@@ -3507,10 +3507,10 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
       const mix =
         Number(
           (r as any).sales_mix_month2 ??
-            (r as any).sales_mix_curr ??
-            (r as any)['Sales Mix (Month2)'] ??
-            (r as any).sales_mix ??
-            0
+          (r as any).sales_mix_curr ??
+          (r as any)['Sales Mix (Month2)'] ??
+          (r as any).sales_mix ??
+          0
         ) || 0;
 
       quantity += q;
@@ -3522,9 +3522,9 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
       const upVal =
         Number(
           (r as any).unit_wise_profitability_month2 ??
-            (r as any).unit_wise_profitability_curr ??
-            r.unit_wise_profitability ??
-            0
+          (r as any).unit_wise_profitability_curr ??
+          r.unit_wise_profitability ??
+          0
         ) || 0;
 
       aspWeighted += aspVal * q;
@@ -3748,89 +3748,89 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
       salesMix: totalSalesMix,
       ...(activeTab === 'all_skus'
         ? {
-            unit: Number(manualTotalsForAll.quantity ?? 0).toFixed(2),
-            asp: Number(manualTotalsForAll.asp ?? 0).toFixed(2),
-            sales: Number(manualTotalsForAll.net_sales ?? 0).toFixed(2),
-            ...(activeTab === 'new_or_reviving_skus' ? {} : { mixChange: '' }),
-            unitProfit: Number(manualTotalsForAll.unit_wise_profitability ?? 0).toFixed(2),
-            profit: Number(manualTotalsForAll.profit ?? 0).toFixed(2),
-          }
+          unit: Number(manualTotalsForAll.quantity ?? 0).toFixed(2),
+          asp: Number(manualTotalsForAll.asp ?? 0).toFixed(2),
+          sales: Number(manualTotalsForAll.net_sales ?? 0).toFixed(2),
+          ...(activeTab === 'new_or_reviving_skus' ? {} : { mixChange: '' }),
+          unitProfit: Number(manualTotalsForAll.unit_wise_profitability ?? 0).toFixed(2),
+          profit: Number(manualTotalsForAll.profit ?? 0).toFixed(2),
+        }
         : activeTab !== 'new_or_reviving_skus'
           ? {
-              unit: (() => {
-                const g = segmentTotal?.['Unit Growth'] as GrowthCategory | undefined;
-                if (!g || g.value == null) return 'N/A';
-                return (
-                  <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
-                    {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
-                    {g.category} ({g.value >= 0 ? '+' : '-'}
-                    {Math.abs(Number(g.value)).toFixed(2)}%)
-                  </span>
-                );
-              })(),
-              asp: (() => {
-                const g = segmentTotal?.['ASP Growth'] as GrowthCategory | undefined;
-                if (!g || g.value == null) return 'N/A';
-                return (
-                  <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
-                    {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
-                    {g.category} ({g.value >= 0 ? '+' : '-'}
-                    {Math.abs(Number(g.value)).toFixed(2)}%)
-                  </span>
-                );
-              })(),
-              sales: (() => {
-                const g = segmentTotal?.['Sales Growth'] as GrowthCategory | undefined;
-                if (!g || g.value == null) return 'N/A';
-                return (
-                  <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
-                    {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
-                    {g.category} ({g.value >= 0 ? '+' : '-'}
-                    {Math.abs(Number(g.value)).toFixed(2)}%)
-                  </span>
-                );
-              })(),
-              mixChange: (() => {
-                const g = segmentTotal?.['Sales Mix Change'] as GrowthCategory | undefined;
-                if (!g || g.value == null) return 'N/A';
-                return (
-                  <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
-                    {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
-                    {g.category} ({g.value >= 0 ? '+' : '-'}
-                    {Math.abs(Number(g.value)).toFixed(2)}%)
-                  </span>
-                );
-              })(),
-              unitProfit: (() => {
-                const g = segmentTotal?.['Profit Per Unit'] as GrowthCategory | undefined;
-                if (!g || g.value == null) return 'N/A';
-                return (
-                  <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
-                    {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
-                    {g.category} ({g.value >= 0 ? '+' : '-'}
-                    {Math.abs(Number(g.value)).toFixed(2)}%)
-                  </span>
-                );
-              })(),
-              profit: (() => {
-                const g = segmentTotal?.['CM1 Profit Impact'] as GrowthCategory | undefined;
-                if (!g || g.value == null) return 'N/A';
-                return (
-                  <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
-                    {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
-                    {g.category} ({g.value >= 0 ? '+' : '-'}
-                    {Math.abs(Number(g.value)).toFixed(2)}%)
-                  </span>
-                );
-              })(),
-            }
+            unit: (() => {
+              const g = segmentTotal?.['Unit Growth'] as GrowthCategory | undefined;
+              if (!g || g.value == null) return 'N/A';
+              return (
+                <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
+                  {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
+                  {g.category} ({g.value >= 0 ? '+' : '-'}
+                  {Math.abs(Number(g.value)).toFixed(2)}%)
+                </span>
+              );
+            })(),
+            asp: (() => {
+              const g = segmentTotal?.['ASP Growth'] as GrowthCategory | undefined;
+              if (!g || g.value == null) return 'N/A';
+              return (
+                <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
+                  {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
+                  {g.category} ({g.value >= 0 ? '+' : '-'}
+                  {Math.abs(Number(g.value)).toFixed(2)}%)
+                </span>
+              );
+            })(),
+            sales: (() => {
+              const g = segmentTotal?.['Sales Growth'] as GrowthCategory | undefined;
+              if (!g || g.value == null) return 'N/A';
+              return (
+                <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
+                  {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
+                  {g.category} ({g.value >= 0 ? '+' : '-'}
+                  {Math.abs(Number(g.value)).toFixed(2)}%)
+                </span>
+              );
+            })(),
+            mixChange: (() => {
+              const g = segmentTotal?.['Sales Mix Change'] as GrowthCategory | undefined;
+              if (!g || g.value == null) return 'N/A';
+              return (
+                <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
+                  {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
+                  {g.category} ({g.value >= 0 ? '+' : '-'}
+                  {Math.abs(Number(g.value)).toFixed(2)}%)
+                </span>
+              );
+            })(),
+            unitProfit: (() => {
+              const g = segmentTotal?.['Profit Per Unit'] as GrowthCategory | undefined;
+              if (!g || g.value == null) return 'N/A';
+              return (
+                <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
+                  {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
+                  {g.category} ({g.value >= 0 ? '+' : '-'}
+                  {Math.abs(Number(g.value)).toFixed(2)}%)
+                </span>
+              );
+            })(),
+            profit: (() => {
+              const g = segmentTotal?.['CM1 Profit Impact'] as GrowthCategory | undefined;
+              if (!g || g.value == null) return 'N/A';
+              return (
+                <span style={{ fontWeight: 700, color: g.category === 'High Growth' ? '#16a34a' : g.category === 'Negative Growth' ? '#dc2626' : '#000' }}>
+                  {g.category === 'High Growth' ? '↑ ' : g.category === 'Negative Growth' ? '↓ ' : ''}
+                  {g.category} ({g.value >= 0 ? '+' : '-'}
+                  {Math.abs(Number(g.value)).toFixed(2)}%)
+                </span>
+              );
+            })(),
+          }
           : {
-              unit: '',
-              asp: '',
-              sales: '',
-              unitProfit: '',
-              profit: '',
-            }),
+            unit: '',
+            asp: '',
+            sales: '',
+            unitProfit: '',
+            profit: '',
+          }),
       ...(Object.keys(skuInsights).length > 0 ? { ai: '' } : {}),
     };
 
@@ -3911,33 +3911,37 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
 
           <div>
             <div className="mt-6 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
-              <div className="flex md:flex-row flex-col justify-between items-center">
-                <h2 className="text-2xl font-bold text-[#414042]">
+              {/* Header */}
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                {/* Left */}
+                <h2 className="text-2xl font-bold text-[#414042] whitespace-nowrap">
                   Performance-based SKU split
                 </h2>
 
-                <div className="flex justify-center gap-3">
+                {/* Right */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:justify-end">
+                  {/* Toggle */}
                   <div
                     style={{
-                      border: '1px solid #D9D9D9E5',
+                      border: "1px solid #D9D9D9E5",
                       borderRadius: 8,
-                      display: 'inline-flex',
-                      overflow: 'hidden',
+                      display: "inline-flex",
+                      overflow: "hidden",
                     }}
-                    className="p-1"
+                    className="p-1 w-fit"
                   >
                     {(
-                      ['top_80_skus', 'new_or_reviving_skus', 'other_skus', 'all_skus'] as TabKey[]
+                      ["top_80_skus", "new_or_reviving_skus", "other_skus", "all_skus"] as TabKey[]
                     ).map((key) => (
                       <button
                         key={key}
                         onClick={() => setActiveTab(key)}
                         className="text-sm font-normal"
                         style={{
-                          padding: '3px 12px',
-                          backgroundColor: activeTab === key ? '#5EA68E80' : '#ffffff',
-                          color: '#414042',
-                          border: 'none',
+                          padding: "3px 12px",
+                          backgroundColor: activeTab === key ? "#5EA68E80" : "#ffffff",
+                          color: "#414042",
+                          border: "none",
                           borderRadius: 5,
                           fontWeight: activeTab === key ? 600 : 400,
                         }}
@@ -3947,27 +3951,28 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                     ))}
                   </div>
 
-                  <div className="flex gap-3">
+                  {/* Buttons */}
+                  <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
                     <button
                       onClick={analyzeSkus}
                       disabled={!hasAnySkus}
-                      className="bg-custom-effect text-[#F8EDCE] rounded-sm px-4 flex items-center justify-end disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ boxShadow: '0px 4px 4px 0px #00000040' }}
+                      className="bg-custom-effect text-[#F8EDCE] rounded-sm px-4 py-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ boxShadow: "0px 4px 4px 0px #00000040" }}
                     >
-                      <BsStars style={{ fontSize: '12px', color: '#F8EDCE' }} />
-                      {loadingInsight ? 'Generating...' : 'AI Insights'}
+                      <BsStars style={{ fontSize: "12px", color: "#F8EDCE" }} />
+                      {loadingInsight ? "Generating..." : "AI Insights"}
                     </button>
 
                     <button
                       onClick={() => {
-                        const prevShortName = prevShort || 'Prev';
-                        const currShortName = currShort || 'Curr';
+                        const prevShortName = prevShort || "Prev";
+                        const currShortName = currShort || "Curr";
                         const file = `AllSKUs-${prevShortName}vs${currShortName}.xlsx`;
                         const allRows = getAllSkusForExport();
                         exportToExcel(allRows, prevShortName, currShortName, file);
                       }}
                       className="bg-white border border-[#8B8585] px-1 rounded-sm"
-                      style={{ boxShadow: '0px 4px 4px 0px #00000040' }}
+                      style={{ boxShadow: "0px 4px 4px 0px #00000040" }}
                     >
                       <IoDownload size={27} />
                     </button>
@@ -3975,6 +3980,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                 </div>
               </div>
 
+              {/* Table */}
               {hasAnySkus ? (
                 <div className="pt-6">
                   <DataTable<BIGridRow>
@@ -3984,7 +3990,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                     zebra
                     scrollY
                     maxHeight="60vh"
-                    paginate={false} // ✅ total row always visible at bottom
+                    paginate={false}
                     className="rounded-xl"
                     tableClassName="w-full"
                     rowClassName={rowClassNameForDataTable}
@@ -3996,6 +4002,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                 </div>
               )}
             </div>
+
 
             {activeTab === 'all_skus' && allSkuRows.length > 5 && (
               <div className="mt-3 flex justify-center">

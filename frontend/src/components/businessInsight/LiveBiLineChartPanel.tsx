@@ -468,7 +468,7 @@ export default function LiveBiLineGraph({ dailySeries, periods, loading, error }
 
   return (
     <div className="w-full">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-[#414042]">
             Performance Trend{" "}

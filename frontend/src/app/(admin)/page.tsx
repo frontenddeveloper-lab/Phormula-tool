@@ -2261,11 +2261,12 @@ export default function DashboardPage() {
     const grossSalesGBP =
       totals?.product_sales != null ? toNumberSafe(totals.product_sales) : null; // ✅ current gross
 
+    const advertisingGBP =
+      derived?.advertising_fees != null ? toNumberSafe(derived.advertising_fees) : 0;
 
+    const platformFeeGBP =
+      derived?.platform_fee != null ? toNumberSafe(derived.platform_fee) : 0;
 
-    // ❗ your finances response does not include advertising/platform_fee right now
-    const advertisingGBP = 0;
-    const platformFeeGBP = 0;
 
     return {
       unitsGBP,
@@ -2396,7 +2397,7 @@ export default function DashboardPage() {
   }, [amazonUK_USD, shopifyDeriv?.netSales, inrToUsd]);
 
   const prevAmazonMtdSalesGBP = toNumberSafe(data?.previous_period?.totals?.net_sales ?? 0);
-const prevAmazonMtdSalesUSD = prevAmazonMtdSalesGBP * gbpToUsd;
+  const prevAmazonMtdSalesUSD = prevAmazonMtdSalesGBP * gbpToUsd;
 
   const prevAmazonUKTotalUSD = useMemo(() => {
     const prevTotalGBP = toNumberSafe(data?.previous_month_total_net_sales?.total);
@@ -2850,10 +2851,7 @@ const prevAmazonMtdSalesUSD = prevAmazonMtdSalesGBP * gbpToUsd;
         </>
       )}
 
-
-
-      {/* 🔴 NEW LAYOUT CONTAINER → Prevent overflow + match Global layout */}
-      <div className="mx-auto max-w-7xl px-4 lg:px-6">
+      <div className="mx-auto w-full max-w-full px-4 lg:px-6">
 
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col leading-tight">
@@ -2906,7 +2904,8 @@ const prevAmazonMtdSalesUSD = prevAmazonMtdSalesGBP * gbpToUsd;
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6 gap-3 auto-rows-fr">
+
                     <AmazonStatCard
                       label="Units"
                       current={globalCurrUnits}
@@ -3025,7 +3024,8 @@ const prevAmazonMtdSalesUSD = prevAmazonMtdSalesGBP * gbpToUsd;
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6 gap-3 auto-rows-fr">
+
                     <AmazonStatCard
                       label="Units"
                       current={showLiveBI && rangeActive ? rangeKpis.units : (totals?.quantity ?? 0)}
@@ -3110,8 +3110,8 @@ const prevAmazonMtdSalesUSD = prevAmazonMtdSalesGBP * gbpToUsd;
 
                 {/* Live BI graph */}
                 {showLiveBI && (
-                  <div className="w-full rounded-2xl border bg-white p-5 shadow-sm overflow-x-auto">
-                    <div className="min-w-full">
+                  <div className="w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
+                    <div className="w-full max-w-full min-w-0">
                       <LiveBiLineGraph
                         dailySeries={biDailySeries}
                         periods={biPeriods}
@@ -3216,9 +3216,10 @@ const prevAmazonMtdSalesUSD = prevAmazonMtdSalesGBP * gbpToUsd;
         </div>
 
         {/* Months for BI */}
-        <div className="w-full overflow-x-auto">
+        <div className="w-full overflow-x-hidden">
           {showLiveBI && (
-            <div className="min-w-full">
+            <div className="w-full max-w-full min-w-0">
+
               <MonthsforBI
                 countryName={countryName}
                 ranged="MTD"
@@ -3259,8 +3260,9 @@ const prevAmazonMtdSalesUSD = prevAmazonMtdSalesGBP * gbpToUsd;
                 )}
               </div>
 
-              <div ref={chartRef} className="overflow-x-auto">
-                <div className="min-w-full">
+              <div ref={chartRef} className="overflow-x-hidden">
+                <div className="w-full max-w-full min-w-0">
+
                   <DashboardBargraphCard
                     countryName={countryNameForGraph}
                     formattedMonthYear={formattedMonthYear}

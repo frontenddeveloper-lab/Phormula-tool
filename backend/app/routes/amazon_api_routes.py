@@ -1,6 +1,9 @@
 from __future__ import annotations
 import base64, io, os,time, calendar, json, logging, inspect
 import urllib.parse
+from sqlalchemy import text
+from datetime import datetime, timedelta, date
+import re
 import pandas as pd
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -27,10 +30,30 @@ from app.utils.currency_utils import (  process_global_yearly_skuwise_data ,
     process_global_monthly_skuwise_data
 )
 from app.models.user_models import db, Product
-from app.utils.formulas_utils import uk_profit, safe_num
+from app.utils.formulas_utils import uk_profit, safe_num, uk_advertising, uk_platform_fee
 from app.routes.live_data_bi_routes import construct_prev_table_name, engine_hist, compute_sku_metrics_from_df
+from typing import Optional, Tuple, List, Dict, Any
+from datetime import datetime, timezone
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, text
+from flask import jsonify, request, send_file
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, List, Tuple, Optional
+from flask import jsonify, request, send_file
+from sqlalchemy import and_, text, create_engine
 
-from dotenv import load_dotenv
+
+# ---------------------------------------------------------
+# CURRENCY MAP
+# ---------------------------------------------------------
+COUNTRY_TO_SELECTED_CURRENCY = {
+    "uk": "GBP",
+    "us": "USD",
+    "india": "INR",
+}
+
+# sku table currency column is INR (per your screenshot)
+DEFAULT_SKU_PRICE_CURRENCY = "INR"
+
 
 # App config / auth
 from config import Config
@@ -45,6 +68,9 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 db_url  = os.getenv('DATABASE_URL')
 db_url1 = os.getenv('DATABASE_ADMIN_URL') or db_url  # fallback
+
+PHORMULA_ENGINE = create_engine(db_url, pool_pre_ping=True)
+ADMIN_ENGINE = create_engine(db_url1, pool_pre_ping=True)
 
 if not db_url:
     raise RuntimeError("DATABASE_URL is not set")
@@ -1266,11 +1292,7 @@ def run_upload_pipeline_from_df(
     db_url_aux: str | None = None,
     profile_id: str | None = None,
 ) -> dict:
-    import os
-    import io
-    import base64
-    import pandas as pd
-    from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, text
+    
 
     # ---------------------------
     # ENV DB URL FALLBACKS
@@ -1906,7 +1928,6 @@ def amazon_oauth_callback():
     """ % refresh
 
 
-
 @amazon_api_bp.route("/amazon_api/status", methods=["GET"])
 def amazon_status():
     # -------- auth (same as amazon_login) --------
@@ -1985,7 +2006,6 @@ def debug_env():
         "api_base_url": amazon_client.api_base_url,
         "has_refresh_token": bool(amazon_client.refresh_token),
     })
-
 
 
 # ------------------------------ SKUs (FBA inventory) ------------------------------
@@ -2173,7 +2193,6 @@ def amazon_account():
     }), 200
 
 
-
 @amazon_api_bp.route("/amazon_api/connections", methods=["GET"])
 def list_amazon_connections():
     # -------- auth --------
@@ -2206,12 +2225,7 @@ def list_amazon_connections():
     })
 
 
-
-from typing import Optional, Tuple, List, Dict, Any
-from datetime import datetime, timezone
-import io
-import pandas as pd
-from flask import jsonify, request, send_file
+# ------------------------------------------------- MTD fetched -------------------------------------------------
 
 # =========================================================
 # OUTPUT COLUMNS (MATCH YOUR MTD FILE)
@@ -2499,10 +2513,10 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
             "total": total_calc, "bucket": tstatus,
         }
 
-    # ServiceFee => put total in fba_fees
+    # ServiceFee => NOT FBA fulfillment fees (usually storage/aged inventory/etc)
     if ttype_norm == "servicefee":
-        fba_fees = -abs(total_amount) if abs(total_amount) > eps else 0.0
-        total_calc = fba_fees
+        other_transaction_fees = total_amount  # keep signed amount
+        total_calc = other_transaction_fees
         return {
             "date_time": posted_date, "settlement_id": None, "type": ttype,
             "order_id": order_id, "sku": sku, "description": desc, "quantity": quantity,
@@ -2514,11 +2528,12 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
             "promotional_rebates": 0.0, "promotional_rebates_tax": 0.0,
             "sales_tax_collected": 0.0, "marketplace_withheld_tax": 0.0,
             "marketplace_facilitator_tax": 0.0,
-            "selling_fees": 0.0, "fba_fees": fba_fees,
-            "other_transaction_fees": 0.0, "other": 0.0,
+            "selling_fees": 0.0, "fba_fees": 0.0,
+            "other_transaction_fees": other_transaction_fees, "other": 0.0,
             "regulatory_fee": 0.0, "tax_on_regulatory_fee": 0.0, "account_type": None,
             "total": total_calc, "bucket": tstatus,
         }
+
 
     # SellerDealPayment => put in other
     if ttype_norm == "sellerdealpayment":
@@ -2611,26 +2626,33 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         "facilitatortax", "facilitator"
     ]
 
-    def _has_non_tax_fee_descendant(children: Optional[List[Dict[str, Any]]], fee_keys: List[str]) -> bool:
-        for c in children or []:
-            ct = _btype(c)
-            camt = _amt(c)
-            is_tax = ("tax" in ct)
-            is_fee = _contains_any(ct, fee_keys)
-            if (not is_tax) and is_fee and abs(camt) > 1e-12:
-                return True
-            gch = c.get("breakdowns")
-            if isinstance(gch, list) and gch:
-                if _has_non_tax_fee_descendant(gch, fee_keys):
-                    return True
-        return False
+    # def _has_non_tax_fee_descendant(children: Optional[List[Dict[str, Any]]], fee_keys: List[str]) -> bool:
+    #     for c in children or []:
+    #         ct = _btype(c)
+    #         camt = _amt(c)
+    #         is_tax = ("tax" in ct)
+    #         is_fee = _contains_any(ct, fee_keys)
+    #         if (not is_tax) and is_fee and abs(camt) > 1e-12:
+    #             return True
+    #         gch = c.get("breakdowns")
+    #         if isinstance(gch, list) and gch:
+    #             if _has_non_tax_fee_descendant(gch, fee_keys):
+    #                 return True
+    #     return False
 
     def _accumulate_withheld_and_facilitator(breakdowns: List[Dict[str, Any]]):
         nonlocal marketplace_withheld_tax, marketplace_facilitator_tax
+
         for node, t, path in _walk_all_breakdowns_with_path(breakdowns):
+            # ✅ only leaf nodes to avoid double counting
+            children = node.get("breakdowns")
+            if isinstance(children, list) and children:
+                continue
+
             amt = _amt(node)
             if abs(amt) < 1e-12:
                 continue
+
             path_str = "".join(path)
             if _contains_any(path_str, WITHHELD_KEYS_STRONG):
                 marketplace_withheld_tax += amt
@@ -2641,8 +2663,12 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     _accumulate_withheld_and_facilitator(tx_breakdowns)
     _accumulate_withheld_and_facilitator(item_breakdowns)
 
-    # fee nets from tx tree
+
+    # fee nets from tx tree (LEAF ONLY to avoid double counting)
     for node, t, path in _walk_all_breakdowns_with_path(tx_breakdowns):
+        if _node_has_children(node):
+            continue  # ✅ only leaf nodes
+
         amt = _amt(node)
         if abs(amt) < 1e-12:
             continue
@@ -2650,26 +2676,24 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
         path_str = "".join(path)
         is_tax = ("tax" in t) or ("tax" in path_str)
 
+        # skip withheld/facilitator
         if _contains_any(path_str, WITHHELD_KEYS_STRONG) or _contains_any(path_str, FACILITATOR_KEYS_STRONG):
             continue
 
         is_selling_fee = _contains_any(path_str, SELLING_FEE_KEYS)
         is_fba_fee = _contains_any(path_str, FBA_FEE_KEYS)
+
+        # exclude storage/service-fee-like things from fba_fees bucket
         is_service_fee_like = (ttype_norm == "servicefee") or _contains_any(path_str, SERVICE_FEE_EXCLUDE_KEYS)
 
         if is_selling_fee and (not is_tax) and (not is_fba_fee):
-            children = node.get("breakdowns") if _node_has_children(node) else None
-            if _has_non_tax_fee_descendant(children, SELLING_FEE_KEYS):
-                continue
             selling_fees += amt
             continue
 
         if is_fba_fee and (not is_tax) and (not is_service_fee_like):
-            children = node.get("breakdowns") if _node_has_children(node) else None
-            if _has_non_tax_fee_descendant(children, FBA_FEE_KEYS):
-                continue
             fba_fees += amt
             continue
+
 
     # normalize signs
     if selling_fees > 0:
@@ -2681,9 +2705,9 @@ def _flatten_transaction_to_row(tx: Dict[str, Any]) -> Dict[str, Any]:
     if marketplace_facilitator_tax > 0:
         marketplace_facilitator_tax = -abs(marketplace_facilitator_tax)
 
-    # divide by 2 (your requirement)
-    selling_fees = selling_fees / 2.0 if abs(selling_fees) > 1e-12 else selling_fees
-    fba_fees = fba_fees / 2.0 if abs(fba_fees) > 1e-12 else fba_fees
+    # # divide by 2 (your requirement)
+    # selling_fees = selling_fees / 2.0 if abs(selling_fees) > 1e-12 else selling_fees
+    # fba_fees = fba_fees / 2.0 if abs(fba_fees) > 1e-12 else fba_fees
 
     sales_tax_collected = marketplace_withheld_tax
 
@@ -3016,41 +3040,7 @@ def _month_to_date_range_utc_safe(now_utc: datetime, safety_minutes: int = 3) ->
 
     return iso_z(start), iso_z(end)
 
-import io
-import os
-import jwt
-import logging
-import calendar
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List, Tuple, Optional
-
-import pandas as pd
-from flask import jsonify, request, send_file
-from sqlalchemy import and_, text, create_engine
-
-logger = logging.getLogger("amazon_sp_api")
-
-# ---------------------------------------------------------
-# CURRENCY MAP
-# ---------------------------------------------------------
-COUNTRY_TO_SELECTED_CURRENCY = {
-    "uk": "GBP",
-    "us": "USD",
-    "india": "INR",
-}
-
-# sku table currency column is INR (per your screenshot)
-DEFAULT_SKU_PRICE_CURRENCY = "INR"
-
-
-# ---------------------------------------------------------
-# ENGINES
-# ---------------------------------------------------------
-db_url = os.getenv("DATABASE_URL")
-db_url1 = os.getenv("DATABASE_ADMIN_URL") or db_url
-
-PHORMULA_ENGINE = create_engine(db_url, pool_pre_ping=True)
-ADMIN_ENGINE = create_engine(db_url1, pool_pre_ping=True)
+# ---------------------------------------------------------- Live data fetching ----------------------------------------------------------
 
 
 # ---------------------------------------------------------
@@ -3190,6 +3180,8 @@ TOTAL_FIELDS = [
     "marketplace_facilitator_tax",
     "selling_fees",
     "fba_fees",
+    "platform_fees",        # ✅ add (if present in rows)
+    "advertising_cost",     # ✅ add (if present in rows)
     "cogs",                   # ✅ include cogs in totals
     "profit",
     "other_transaction_fees",
@@ -3258,12 +3250,23 @@ def add_profit_column_from_uk_profit(rows: List[Dict[str, Any]], country: str) -
         qty = float(_i(r.get("quantity")) or 0)
         r["profit"] = float(per_unit_profit.get(sku, 0.0)) * qty
 
+def build_tx_key(r: dict) -> str:
+    dt = (r.get("date_time") or "").strip()
+    t  = (r.get("type") or "").strip()
+    oid = (r.get("order_id") or "").strip()
+    sku = (r.get("sku") or "").strip()
+    qty = str(_i(r.get("quantity")) or 0)
+    total = f"{_f(r.get('total')):.2f}"
+    desc = (r.get("description") or "").strip()
+    return f"{dt}|{t}|{oid}|{sku}|{qty}|{total}|{desc}"
+
+
 # ---------------------------------------------------------
 # UPSERT WITH COGS
 # ---------------------------------------------------------
 def upsert_liveorders_from_rows(rows, user_id: int, country: str, now_utc: datetime):
     if not rows:
-        return {"inserted": 0, "updated": 0, "deduped": 0, "conversion_rate": 1.0}
+        return {"inserted": 0, "updated": 0, "conversion_rate": 1.0}
 
     country = (country or "").strip().lower()
 
@@ -3286,45 +3289,37 @@ def upsert_liveorders_from_rows(rows, user_id: int, country: str, now_utc: datet
         f"pair={user_currency}->{selected_currency} rate={conversion_rate}"
     )
 
-    # ✅ Deduplicate by order_id (keep latest date_time)
-    best = {}
+    # ✅ build tx_key for every row (INCLUDING order_id=None rows)
     for r in rows:
-        oid = r.get("order_id")
-        if not oid:
-            continue
-        dt = _parse_amz_dt(r.get("date_time"))
-        if oid not in best:
-            best[oid] = (dt, r)
-        else:
-            prev_dt, _ = best[oid]
-            if (dt or datetime.min.replace(tzinfo=timezone.utc)) >= (prev_dt or datetime.min.replace(tzinfo=timezone.utc)):
-                best[oid] = (dt, r)
+        r["tx_key"] = build_tx_key(r)
 
-    deduped = len(rows) - len(best)
-    final_rows = [v[1] for v in best.values()]
-    order_ids = list(best.keys())
+    tx_keys = [r["tx_key"] for r in rows if r.get("tx_key")]
 
+    # ✅ load existing rows by tx_key (not amazon_order_id)
     existing = Liveorder.query.filter(
-        and_(Liveorder.user_id == user_id, Liveorder.amazon_order_id.in_(order_ids))
+        and_(Liveorder.user_id == user_id, Liveorder.tx_key.in_(tx_keys))
     ).all()
-    existing_map = {e.amazon_order_id: e for e in existing}
+    existing_map = {e.tx_key: e for e in existing}
 
     inserted = 0
     updated = 0
 
-    for r in final_rows:
-        oid = r.get("order_id")
-        if not oid:
+    for r in rows:
+        tx_key = r.get("tx_key")
+        if not tx_key:
             continue
 
-        obj = existing_map.get(oid)
+        obj = existing_map.get(tx_key)
         if obj is None:
-            obj = Liveorder(user_id=user_id, amazon_order_id=oid)
+            obj = Liveorder(user_id=user_id, tx_key=tx_key)
             db.session.add(obj)
-            existing_map[oid] = obj
+            existing_map[tx_key] = obj
             inserted += 1
         else:
             updated += 1
+
+        # ✅ order_id can be NULL now
+        obj.amazon_order_id = (r.get("order_id") or None)
 
         obj.purchase_date = _parse_amz_dt(r.get("date_time"))
         obj.order_status = (r.get("bucket") or "")
@@ -3338,10 +3333,8 @@ def upsert_liveorders_from_rows(rows, user_id: int, country: str, now_utc: datet
         else:
             obj.cogs = float(obj.quantity) * float(price) * float(conversion_rate)
 
-        # ✅ NEW: store profit (computed earlier in route)
         obj.profit = _f(r.get("profit"))
 
-        # other fields
         obj.type = r.get("type")
         obj.description = r.get("description")
         obj.marketplace = r.get("marketplace")
@@ -3368,7 +3361,6 @@ def upsert_liveorders_from_rows(rows, user_id: int, country: str, now_utc: datet
     return {
         "inserted": inserted,
         "updated": updated,
-        "deduped": deduped,
         "conversion_rate": conversion_rate,
         "month": month_name,
         "year": now_utc.year,
@@ -3377,8 +3369,6 @@ def upsert_liveorders_from_rows(rows, user_id: int, country: str, now_utc: datet
     }
 
 
-from datetime import date, datetime
-import calendar
 
 def previous_month_mtd_range(now_utc: datetime) -> tuple[date, date]:
     """
@@ -3407,10 +3397,6 @@ def previous_month_mtd_range(now_utc: datetime) -> tuple[date, date]:
     return prev_start, prev_end
 
 
-from sqlalchemy import text
-from datetime import datetime, timedelta, date
-import pandas as pd
-import re
 
 def _safe_sql_identifier_table(name: str) -> str:
     """
@@ -3699,13 +3685,34 @@ def finances_mtd_transactions():
     profit = float(totals.get("profit", 0.0))
     profit_percentage = (profit / net_sales * 100) if net_sales else 0.0
 
+    df_all = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
+
+    platform_fee_total = 0.0
+    advertising_fee_total = 0.0
+
+    if not df_all.empty:
+        for col, default in [("description", ""), ("total", 0.0), ("platform_fees", 0.0), ("advertising_cost", 0.0)]:
+            if col not in df_all.columns:
+                df_all[col] = default
+
+        platform_fee_total, _, _ = uk_platform_fee(df_all, country=ui_country, want_breakdown=False)
+        advertising_fee_total, _, _ = uk_advertising(df_all, country=ui_country, want_breakdown=False)
+
+    platform_fee_total = float(platform_fee_total or 0.0)
+    advertising_fee_total = float(advertising_fee_total or 0.0)
+
+
+
     derived_totals = {
         "amazon_fees": round(amazon_fees, 2),
+        "platform_fee": round(platform_fee_total, 2),          # ✅ NEW
+        "advertising_fees": round(advertising_fee_total, 2),   # ✅ NEW
         "net_sales": round(net_sales, 2),
         "asp": round(asp, 2),
         "profit": round(profit, 2),
         "profit_percentage": round(profit_percentage, 2),
     }
+
 
     # ✅ NEW: previous-month MTD data
     previous_period = get_previous_month_mtd_payload(
@@ -3755,3 +3762,4 @@ def finances_mtd_transactions():
         "previous_period": previous_period,   # ✅ added
         "transactions": all_rows,
     }), 200
+

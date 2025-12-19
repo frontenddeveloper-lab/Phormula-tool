@@ -1482,7 +1482,7 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
 
   return (
     <div className="w-full rounded-md border border-charcoal-500 bg-[#D9D9D933] p-4 sm:p-5 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         {/* LEFT: Title + country toggles */}
         <div className="flex-1">
           <h3 className="m-0 text-xl font-bold text-[#414042]">
@@ -1553,33 +1553,28 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
         </div>
 
         {/* RIGHT: Search dropdown + Segmented toggle */}
-        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <div className="w-full sm:w-64 md:w-72">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+
+          <div className="w-full lg:w-72">
             <ProductSearchDropdown
               authToken={authToken}
               onProductSelect={onProductSelect}
             />
           </div>
 
-          <SegmentedToggle<TrendTab>
-            value={activeTab}
-            onChange={setActiveTab}
-            textSizeClass="text-xs sm:text-sm"
-            options={[
-              { value: "sales_cm1", label: "Sales & CM1 Profit" },
-              { value: "units", label: "Units" },
-            ]}
-          />
+          <div className="w-full sm:w-auto">
+            <SegmentedToggle<TrendTab>
+              value={activeTab}
+              onChange={setActiveTab}
+              textSizeClass="text-xs sm:text-sm"
+              className="w-full sm:w-auto"   // ✅ add this if your component supports className
+              options={[
+                { value: "sales_cm1", label: "Sales & CM1 Profit" },
+                { value: "units", label: "Units" },
+              ]}
+            />
+          </div>
 
-          {/* {onViewBusinessInsights && (
-            <button
-              type="button"
-              onClick={onViewBusinessInsights}
-              className="inline-flex items-center rounded-md bg-slate-800 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-100 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400"
-            >
-              View Business Insights
-            </button>
-          )} */}
           {onViewBusinessInsights && (
             <button
               type="button"
@@ -1673,7 +1668,7 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
         {/* Centered legend */}
         <div className="flex-1 flex justify-center">
           {activeTab === "sales_cm1" ? (
-            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-gray-700">
+            <div className="flex flex-wrap justify-center items-center gap-6 text-sm sm:text-base font-semibold text-gray-700">
               <div className="flex items-center gap-2">
                 <span className="h-[2px] w-10 bg-gray-800" />
                 <span>Net Sales</span>
