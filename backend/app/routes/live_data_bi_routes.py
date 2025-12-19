@@ -2226,7 +2226,7 @@ def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
     metrics["credits_metric"] = safe_num(metrics.get("credits_metric", 0.0))
     metrics["profit_metric"] = safe_num(metrics.get("profit_metric", 0.0))
 
-    metrics["net_sales"] = metrics["sales_metric"] + metrics["credits_metric"]
+    metrics["net_sales"] = metrics["sales_metric"]
     metrics["profit"] = metrics["profit_metric"]
 
     # asp & per-unit profitability
@@ -3758,12 +3758,14 @@ def live_mtd_vs_previous():
                     send_live_bi_email(
                         to_email=user_email,
                         overall_summary=overall_summary,
-                        overall_actions=overall_actions,
+                        overall_actions=overall_actions,  # ✅ now valid
+                        sku_actions=None,                 # or pass structured list when you have it
                         country=country,
                         prev_label=prev_label,
                         curr_label=curr_label,
                         deep_link_token=email_token,
                     )
+
                     mark_bi_email_sent(user_id, country)
                 except Exception as e:
                     # Don't break the API if email fails

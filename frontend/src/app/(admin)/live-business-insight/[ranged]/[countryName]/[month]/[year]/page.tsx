@@ -2434,7 +2434,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import { FaThumbsUp, FaThumbsDown } from 'react-icons/fa';
@@ -2447,13 +2447,12 @@ import { FaArrowUp, FaArrowDown } from 'react-icons/fa';
 import Loader from '@/components/loader/Loader';
 import DataTable, { ColumnDef } from '@/components/ui/table/DataTable';
 
-// import DataTable, { ColumnDef, Row as DataTableRow } from '@/components/DataTable'; 
-
 type MonthsforBIProps = {
-  countryName: string; // "uk" | "us" | "ca"
-  ranged: string; // "QTD", "MTD", etc
-  month: string; // "november"
-  year: string; // "2025"
+  countryName: string;
+  ranged: string;
+  month: string;
+  year: string;
+  initialData?: ApiResponse | null;
 };
 
 // =========================
@@ -2583,6 +2582,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
   ranged,
   month,
   year,
+  initialData,
 }) => {
   const [categorizedGrowth, setCategorizedGrowth] = useState<CategorizedGrowth>(
     {
@@ -2800,6 +2800,36 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+
+  useEffect(() => {
+    if (!initialData) return;
+
+    const newPeriods = initialData.periods || null;
+    const rawCat = initialData.categorized_growth || {
+      top_80_skus: [],
+      new_or_reviving_skus: [],
+      other_skus: [],
+    };
+
+    const normalized = normalizeCategorizedGrowth(rawCat);
+
+    setPeriods(newPeriods);
+    setCategorizedGrowth(normalized);
+
+    const currentLabel = newPeriods?.current_mtd?.label || "";
+    setMonth2Label(currentLabel);
+
+    setOverallSummary(initialData.overall_summary || []);
+    setOverallActions(initialData.overall_actions || []);
+
+    const incomingInsights = initialData.ai_insights || {};
+    if (Object.keys(incomingInsights).length) {
+      setSkuInsights(incomingInsights);
+      saveInsightsToStorage(incomingInsights);
+    }
+  }, [initialData]);
+
+
   // =========================
   // Fetch live BI (current MTD vs previous)
   // =========================
@@ -2891,11 +2921,20 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
     }
   };
 
+  const didFetchRef = useRef(false);
+
+  // useEffect(() => {
+  //   if (initialData) return; // ✅ if parent already gave data, don't fetch
+
+  //   if (!normalizedCountry || normalizedCountry === "global") return;
+  //   fetchLiveBi(false);
+  // }, [initialData, normalizedCountry, ranged, month, year]);
+
   useEffect(() => {
-    if (!normalizedCountry || normalizedCountry === 'global') return;
-    fetchLiveBi(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedCountry, ranged, month, year]);
+    if (initialData) return;   // 🔒 HARD BLOCK
+    // nothing else here
+  }, [initialData]);
+
 
   // =========================
   // AI insights generate (button)
@@ -2941,6 +2980,10 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
     if (item.sku && skuInsights[item.sku]) return [item.sku, skuInsights[item.sku]];
     return getInsightByProductName(item.product_name);
   };
+
+
+
+
 
   // =========================
   // Export to Excel

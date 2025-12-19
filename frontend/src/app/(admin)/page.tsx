@@ -1428,7 +1428,7 @@
 
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -1532,12 +1532,21 @@ type PeriodInfo = {
 };
 
 type BiApiResponse = {
+  message?: string;
   periods?: {
     previous?: PeriodInfo;
     current_mtd?: PeriodInfo;
   };
   daily_series?: DailySeries;
+
+  // 👇 add these for MonthsforBI
+  categorized_growth?: any;
+  insights?: Record<string, any>;
+  ai_insights?: Record<string, any>;
+  overall_summary?: string[];
+  overall_actions?: string[];
 };
+
 
 /* ===================== SMALL HELPERS ===================== */
 const getShort = (label?: string) => (label ? label.split(" ")[0] || label : "");
@@ -1771,6 +1780,7 @@ export default function DashboardPage() {
   const [biError, setBiError] = useState<string | null>(null);
   const [biDailySeries, setBiDailySeries] = useState<DailySeries | null>(null);
   const [biPeriods, setBiPeriods] = useState<BiApiResponse["periods"] | null>(null);
+  const [liveBiPayload, setLiveBiPayload] = useState<BiApiResponse | null>(null);
 
   /* ===================== FX RATES ===================== */
   const [gbpToUsd, setGbpToUsd] = useState(GBP_TO_USD_ENV);
@@ -2155,11 +2165,29 @@ export default function DashboardPage() {
   /* ===================== ✅ SHARED BI FETCH (FOR CARDS + GRAPH) ===================== */
   const { monthName: currMonthName, year: currYear } = getISTYearMonth();
 
+  const lastBiKeyRef = useRef<string>("");
+
   const fetchBiSeries = useCallback(
     async (startDay?: number | null, endDay?: number | null) => {
       if (!showLiveBI) return;
+      
       const normalized = (countryName || "").toLowerCase();
       if (!normalized || normalized === "global") return;
+
+
+      const key = JSON.stringify({
+        country: normalized,
+        ranged: "MTD",
+        month: currMonthName.toLowerCase(),
+        year: currYear,
+        startDay: startDay ?? null,
+        endDay: endDay ?? null,
+      });
+
+      if (lastBiKeyRef.current === key) return;
+      lastBiKeyRef.current = key;
+      // ✅ END ADD
+
 
       setBiLoading(true);
       setBiError(null);
@@ -2186,6 +2214,7 @@ export default function DashboardPage() {
         const json: BiApiResponse = await res.json();
         if (!res.ok) throw new Error((json as any)?.error || "Failed to load BI series");
 
+        setLiveBiPayload(json);
         setBiPeriods(json?.periods || null);
         setBiDailySeries(json?.daily_series || null);
       } catch (e: any) {
@@ -2199,7 +2228,6 @@ export default function DashboardPage() {
     [showLiveBI, countryName, currMonthName, currYear]
   );
 
-  // whenever country/month/year or selected range changes → fetch once
   useEffect(() => {
     if (!showLiveBI) return;
     fetchBiSeries(selectedStartDay, selectedEndDay);
@@ -2212,23 +2240,33 @@ export default function DashboardPage() {
       await Promise.all([fetchShopify(), fetchShopifyPrev()]);
     }
     // also refresh BI (keep current selected range)
-    if (showLiveBI) {
-      await fetchBiSeries(selectedStartDay, selectedEndDay);
-    }
+    // if (showLiveBI) {
+    //   await fetchBiSeries(selectedStartDay, selectedEndDay);
+    // }
   }, [
     fetchAmazon,
     fetchShopify,
     fetchShopifyPrev,
     shopifyStore,
-    showLiveBI,
-    fetchBiSeries,
-    selectedStartDay,
-    selectedEndDay,
+    // showLiveBI,
+    // fetchBiSeries,
+    // selectedStartDay,
+    // selectedEndDay,
   ]);
 
+  // useEffect(() => {
+  //   refreshAll();
+  // }, [refreshAll]);
+
+  const didRefreshRef = useRef(false);
+
   useEffect(() => {
+    if (didRefreshRef.current) return;
+    didRefreshRef.current = true;
+
     refreshAll();
-  }, [refreshAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   /* ===================== AMAZON DERIVED DATA ===================== */
@@ -3219,13 +3257,14 @@ export default function DashboardPage() {
         <div className="w-full overflow-x-hidden">
           {showLiveBI && (
             <div className="w-full max-w-full min-w-0">
-
               <MonthsforBI
                 countryName={countryName}
                 ranged="MTD"
                 month={currMonthName.toLowerCase()}
                 year={String(currYear)}
+                initialData={liveBiPayload}
               />
+
             </div>
           )}
         </div>
