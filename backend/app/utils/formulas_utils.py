@@ -263,7 +263,16 @@ def uk_platform_fee(
     country: Optional[str] = None,
     want_breakdown: Optional[bool] = None,
     desc_prefixes: tuple[str, ...] = (
-        "FBA Return Fee", "FBA Long-Term Storage Fee", "FBA storage fee", "Subscription"
+        # original
+        "FBA Return Fee",
+        "FBA Long-Term Storage Fee",
+        "FBA storage fee",
+        "Subscription",
+
+        # NEW (deduped)
+        "FBADisposal",
+        "FBAStorageBilling",
+        "FBALongTermStorageBilling",
     ),
     desc_col: str = "description",
     amount_col: str = "total",
@@ -283,19 +292,19 @@ def uk_platform_fee(
     w = df.copy()
 
     # Description-based component
-    from_desc = pd.Series([0.0] * len(w), index=w.index)
-    if desc_col in w.columns and amount_col in w.columns:
-        # safe coercions
+    from_desc = pd.Series(0.0, index=w.index)
+    if desc_col in w.columns and amount_col in w.columns and desc_prefixes:
         desc = w[desc_col].astype(str)
         amt  = safe_num(w[amount_col])
-        # .startswith accepts a tuple; keep case-sensitive to match your current logic
+
+        # startswith accepts a tuple; keeping your case-sensitive behavior
         mask = desc.str.startswith(desc_prefixes, na=False)
         from_desc = amt.where(mask, 0.0).abs()
 
     # Explicit column
     from_col = safe_num(w.get(explicit_col, 0.0)).abs()
 
-    # Totals use ALL rows (keep parity with your current totals behavior)
+    # Totals use ALL rows
     total = float((from_desc + from_col).sum())
 
     # Per-SKU breakdown uses only valid SKUs
@@ -305,9 +314,8 @@ def uk_platform_fee(
         comps = ["from_description_abs", "from_column_abs"]
         return 0.0, pd.DataFrame(columns=["sku", "__metric__", *comps]), comps
 
-    # Recompute components on the filtered frame
-    from_desc_sku = from_desc.loc[w.index] if len(from_desc) == len(df) else safe_num(0.0)
-    from_col_sku  = from_col.loc[w.index]  if len(from_col)  == len(df) else safe_num(0.0)
+    from_desc_sku = from_desc.loc[w.index] if len(from_desc) == len(df) else 0.0
+    from_col_sku  = from_col.loc[w.index]  if len(from_col)  == len(df) else 0.0
 
     per = (
         pd.DataFrame({
@@ -318,9 +326,11 @@ def uk_platform_fee(
         .groupby("sku", as_index=False)[["from_description_abs", "from_column_abs"]]
         .sum()
     )
+
     per["__metric__"] = per["from_description_abs"] + per["from_column_abs"]
     comps = ["from_description_abs", "from_column_abs"]
     return total, per[["sku", "__metric__", *comps]], comps
+
 
 
 def uk_advertising(
@@ -328,7 +338,19 @@ def uk_advertising(
     *,
     country: Optional[str] = None,
     want_breakdown: Optional[bool] = None,
-    keywords: tuple[str, ...] = ("Cost of Advertising", "Coupon Redemption Fee", "Deals", "Lightning Deal"),
+    keywords: tuple[str, ...] = (
+        # original
+        "Cost of Advertising",
+        "Coupon Redemption Fee",
+        "Deals",
+        "Lightning Deal",
+
+        # NEW – deduplicated
+        "ProductAdsPayment",
+        "CouponPerformanceEvent",
+        "CouponParticipationEvent",
+        "SellerDealComplete",
+    ),
     desc_col: str = "description",
     amount_col: str = "total",
     explicit_col: str = "advertising_cost",
@@ -336,37 +358,51 @@ def uk_advertising(
 ) -> Tuple[float, pd.DataFrame, List[str]]:
     """
     Advertising logic (centralized):
-      total = |sum(total) for rows with description containing any keyword (case-insensitive)|
-             + |sum(explicit advertising_cost column if present)|
+
+      total =
+        |sum(total) for rows with description containing any keyword (case-insensitive)|
+        + |sum(explicit advertising_cost column if present)|
 
     Per-SKU breakdown mirrors uk_platform_fee().
     """
+    import re
+
     w = df.copy()
 
-    # Description-based component (case-insensitive 'contains')
-    from_desc = pd.Series([0.0] * len(w), index=w.index)
+    # ---------------------------
+    # Description-based component
+    # ---------------------------
+    from_desc = pd.Series(0.0, index=w.index)
+
     if desc_col in w.columns and amount_col in w.columns and keywords:
         patt = "|".join(map(re.escape, keywords))
         desc = w[desc_col].astype(str)
         amt  = safe_num(w[amount_col])
+
         mask = desc.str.contains(patt, case=False, na=False)
         from_desc = amt.where(mask, 0.0).abs()
 
-    # Explicit column
+    # ---------------------------
+    # Explicit advertising column
+    # ---------------------------
     from_col = safe_num(w.get(explicit_col, 0.0)).abs()
 
-    # Totals use ALL rows
+    # ---------------------------
+    # TOTAL (all rows)
+    # ---------------------------
     total = float((from_desc + from_col).sum())
 
-    # Per-SKU breakdown uses valid SKUs
+    # ---------------------------
+    # PER-SKU BREAKDOWN
+    # ---------------------------
     if "sku" in w.columns:
         w = w.loc[sku_mask(w)].copy()
     else:
         comps = ["from_description_abs", "from_column_abs"]
         return 0.0, pd.DataFrame(columns=["sku", "__metric__", *comps]), comps
 
-    from_desc_sku = from_desc.loc[w.index] if len(from_desc) == len(df) else safe_num(0.0)
-    from_col_sku  = from_col.loc[w.index]  if len(from_col)  == len(df) else safe_num(0.0)
+    from_desc_sku = from_desc.loc[w.index] if len(from_desc) == len(df) else 0.0
+    from_col_sku  = from_col.loc[w.index]  if len(from_col)  == len(df) else 0.0
 
     per = (
         pd.DataFrame({
@@ -377,9 +413,12 @@ def uk_advertising(
         .groupby("sku", as_index=False)[["from_description_abs", "from_column_abs"]]
         .sum()
     )
+
     per["__metric__"] = per["from_description_abs"] + per["from_column_abs"]
+
     comps = ["from_description_abs", "from_column_abs"]
     return total, per[["sku", "__metric__", *comps]], comps
+
 
 # ---------- convenience -------------------------------------------------------
 def uk_all(df: pd.DataFrame) -> dict:

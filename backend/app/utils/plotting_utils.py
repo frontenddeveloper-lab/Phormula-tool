@@ -988,28 +988,27 @@ def apply_modifications(df, country):
     try:
         # NaN ko 0 se fill kar rahe ho
         df = df.fillna(0)
-        print("p1")
+        
 
         # Database connection
         db_url1 = os.getenv('DATABASE_ADMIN_URL', 'postgresql://postgres:password@localhost:5432/admin_db')
         engine_cat = create_engine(db_url1)
-        print("p2")
-
+        
         # Category table load karo
         category_df = pd.read_sql("SELECT category, price_from, price_to, referral_fee_percent_est FROM category", engine_cat)
-        print("p3")
+        
 
         # Ensure numeric types
         category_df["price_from"] = pd.to_numeric(category_df["price_from"], errors="coerce").fillna(0)
         category_df["price_to"] = pd.to_numeric(category_df["price_to"], errors="coerce").fillna(9999999)
         category_df["referral_fee_percent_est"] = pd.to_numeric(category_df["referral_fee_percent_est"], errors="coerce").fillna(0)
         category_df["category"] = category_df["category"].str.lower().str.strip()
-        print("p4")
+        
 
         # Initialize new columns
         df["referral_fee"] = 0.0
         df["total_value"] = 0.0
-        print("p5")
+       
 
         # Selling fees ko absolute value mein convert karo
         
@@ -1029,7 +1028,7 @@ def apply_modifications(df, country):
             'shipping_credits_tax': float,
             'product_group': str,
         }
-        print("p7")
+        
 
         for col, dtype in column_dtypes.items():
             if col not in df.columns:
@@ -1040,12 +1039,12 @@ def apply_modifications(df, country):
             if dtype != str:
                 df[col] = df[col].astype(dtype)
         
-        print("p8")
+        
 
         # ✅ SINGLE LOOP - No nested loops
         for index, row in df.iterrows():
             sku = row.get('sku', '')
-            print(f"Processing row {index}")
+            
 
             # Get product_sales
             try:
@@ -1080,7 +1079,7 @@ def apply_modifications(df, country):
             except (TypeError, ValueError):
                 shipping_credits_tax = 0.0
             
-            print("p10")
+         
 
             # ✅ Country-wise calculations
             if country.lower() == 'uk':
@@ -1088,7 +1087,7 @@ def apply_modifications(df, country):
                 postage_credits = float(row.get('postage_credits', 0) or 0)
                 promotional_rebates = float(row.get('promotional_rebates', 0) or 0)
                 promotional_rebates_tax = float(row.get('promotional_rebates_tax', 0) or 0)
-                print("p11")
+                
 
                 if postage_credits > 0:
                     postage_shipping_total = postage_credits + shipping_credits_tax
@@ -1109,13 +1108,13 @@ def apply_modifications(df, country):
 
                 additions = product_sales + product_sales_tax + postage_credits + promotional_rebates + promotional_rebates_tax + shipping_credits_tax
                 deductions = final_postage_shipping_total
-                print("p12")
+               
 
             elif country.lower() == 'us':
                 gift_wrap_credits = float(row.get('gift_wrap_credits', 0) or 0)
                 shipping_credits = float(row.get('shipping_credits', 0) or 0)
                 promotional_rebates = float(row.get('promotional_rebates', 0) or 0)
-                print("p13")
+                
 
                 additions = product_sales + gift_wrap_credits + shipping_credits
                 deductions = promotional_rebates
@@ -1126,17 +1125,17 @@ def apply_modifications(df, country):
 
             # Calculate total_value
             total_value = ((additions - deductions) / quantity)
-            print("p14")
+            
             # Proper rounding (9.995 → 10)
             total_value = float(Decimal(total_value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
             df.at[index, 'total_value'] = total_value
 
            
-            print("p15")
+           
 
             # ✅ Match category table for referral_fee
             product_group = str(row.get("product_group", "")).strip().lower()
-            print(f"p17 - Product Group: {product_group}, Total Value: {total_value}")
+            # print(f"p17 - Product Group: {product_group}, Total Value: {total_value}")
 
             # Match category
             matched_row = category_df[
@@ -1144,7 +1143,7 @@ def apply_modifications(df, country):
                 (total_value >= category_df["price_from"]) &
                 (total_value <= category_df["price_to"])
             ]
-            print("p18")
+            # print("p18")
 
             if 'selling_fees' in df.columns:
                 df['selling_fees'] = df['selling_fees'].abs()
@@ -1152,13 +1151,13 @@ def apply_modifications(df, country):
 
             if not matched_row.empty:
                 referral_fee = float(matched_row.iloc[0]["referral_fee_percent_est"])
-                print(f"Matched referral_fee: {referral_fee}%")
+                # print(f"Matched referral_fee: {referral_fee}%")
             else:
                 referral_fee = 0.0
-                print(f"No match found for product_group: {product_group}")
+                # print(f"No match found for product_group: {product_group}")
 
             df.at[index, "referral_fee"] = referral_fee
-            print("p19")
+         
 
             # Get description
             desc = str(row.get('description', '')).strip().lower()
@@ -1178,7 +1177,7 @@ def apply_modifications(df, country):
 
             # Calculate difference
             difference = round(selling_fees - answer, 2)
-            print("p20")
+            # print("p20")
 
             # Error status
             if difference == 0:
@@ -1220,7 +1219,7 @@ def apply_modifications(df, country):
                     df.at[index, 'errorstatus'] = 'NoReferralFee'
                     df.at[index, 'fbaerrorstatus'] = 'NoReferralFee'
 
-        print("Processing complete!")
+        # print("Processing complete!")
         return df
 
     except Exception as e:
@@ -1238,28 +1237,28 @@ def apply_modifications_fatch(df, country):
     try:
         # NaN ko 0 se fill kar rahe ho
         df = df.fillna(0)
-        print("p1")
+       
 
         # Database connection
         db_url1 = os.getenv('DATABASE_ADMIN_URL', 'postgresql://postgres:password@localhost:5432/admin_db')
         engine_cat = create_engine(db_url1)
-        print("p2")
+       
 
         # Category table load karo
         category_df = pd.read_sql("SELECT category, price_from, price_to, referral_fee_percent_est FROM category", engine_cat)
-        print("p3")
+        
 
         # Ensure numeric types
         category_df["price_from"] = pd.to_numeric(category_df["price_from"], errors="coerce").fillna(0)
         category_df["price_to"] = pd.to_numeric(category_df["price_to"], errors="coerce").fillna(9999999)
         category_df["referral_fee_percent_est"] = pd.to_numeric(category_df["referral_fee_percent_est"], errors="coerce").fillna(0)
         category_df["category"] = category_df["category"].str.lower().str.strip()
-        print("p4")
+        
 
         # Initialize new columns
         df["referral_fee"] = 0.0
         df["total_value"] = 0.0
-        print("p5")
+        
 
         # Selling fees ko absolute value mein convert karo
         if 'selling_fees' in df.columns:
@@ -1280,7 +1279,7 @@ def apply_modifications_fatch(df, country):
             'shipping_credits_tax': float,
             'product_group': str,
         }
-        print("p7")
+      
 
         for col, dtype in column_dtypes.items():
             if col not in df.columns:
@@ -1291,12 +1290,12 @@ def apply_modifications_fatch(df, country):
             if dtype != str:
                 df[col] = df[col].astype(dtype)
         
-        print("p8")
+     
 
         # ✅ SINGLE LOOP - No nested loops
         for index, row in df.iterrows():
             sku = row.get('sku', '')
-            print(f"Processing row {index}")
+            
 
             # Get product_sales
             try:
@@ -1331,7 +1330,7 @@ def apply_modifications_fatch(df, country):
             except (TypeError, ValueError):
                 shipping_credits_tax = 0.0
             
-            print("p10")
+            
 
             # ✅ Country-wise calculations
             if country.lower() == 'uk':
@@ -1339,7 +1338,7 @@ def apply_modifications_fatch(df, country):
                 postage_credits = float(row.get('postage_credits', 0) or 0)
                 promotional_rebates = float(row.get('promotional_rebates', 0) or 0)
                 promotional_rebates_tax = float(row.get('promotional_rebates_tax', 0) or 0)
-                print("p11")
+          
 
                 if postage_credits > 0:
                     postage_shipping_total = postage_credits + shipping_credits_tax
@@ -1348,13 +1347,13 @@ def apply_modifications_fatch(df, country):
 
                 additions = product_sales + product_sales_tax + postage_credits + promotional_rebates + promotional_rebates_tax + shipping_credits_tax
                 deductions = postage_shipping_total
-                print("p12")
+                
 
             elif country.lower() == 'us':
                 gift_wrap_credits = float(row.get('gift_wrap_credits', 0) or 0)
                 shipping_credits = float(row.get('shipping_credits', 0) or 0)
                 promotional_rebates = float(row.get('promotional_rebates', 0) or 0)
-                print("p13")
+               
 
                 additions = product_sales + gift_wrap_credits + shipping_credits
                 deductions = promotional_rebates
@@ -1365,13 +1364,13 @@ def apply_modifications_fatch(df, country):
 
             # Calculate total_value
             total_value = ((additions - deductions) / quantity)
-            print("p14")
+            
             df.at[index, 'total_value'] = total_value
-            print("p15")
+           
 
             # ✅ Match category table for referral_fee
             product_group = str(row.get("product_group", "")).strip().lower()
-            print(f"p17 - Product Group: {product_group}, Total Value: {total_value}")
+            # print(f"p17 - Product Group: {product_group}, Total Value: {total_value}")
 
             # Match category
             matched_row = category_df[
@@ -1379,17 +1378,17 @@ def apply_modifications_fatch(df, country):
                 (total_value >= category_df["price_from"]) &
                 (total_value <= category_df["price_to"])
             ]
-            print("p18")
+            # print("p18")
 
             if not matched_row.empty:
                 referral_fee = float(matched_row.iloc[0]["referral_fee_percent_est"])
-                print(f"Matched referral_fee: {referral_fee}%")
+                # print(f"Matched referral_fee: {referral_fee}%")
             else:
                 referral_fee = 0.0
-                print(f"No match found for product_group: {product_group}")
+                # print(f"No match found for product_group: {product_group}")
 
             df.at[index, "referral_fee"] = referral_fee
-            print("p19")
+         
 
             # Get description
             desc = str(row.get('description', '')).strip().lower()
@@ -1409,7 +1408,7 @@ def apply_modifications_fatch(df, country):
 
             # Calculate difference
             difference = round(selling_fees - answer, 2)
-            print("p20")
+            # print("p20")
 
             # Error status
             if difference == 0:
@@ -1445,7 +1444,7 @@ def apply_modifications_fatch(df, country):
                     df.at[index, 'errorstatus'] = 'NoReferralFee'
                     df.at[index, 'fbaerrorstatus'] = 'NoReferralFee'
 
-        print("Processing complete!")
+        # print("Processing complete!")
         return df
 
     except Exception as e:

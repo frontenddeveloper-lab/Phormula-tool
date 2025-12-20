@@ -563,46 +563,51 @@ class MonthwiseInventory(db.Model):
 
 # --------------------------------- Order model ---------------------------------
 
-class Order(db.Model):
-    __tablename__ = 'orders'
+
+class Liveorder(db.Model):
+    __tablename__ = 'liveorders'
     __bind_key__ = 'amazon'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer)
-    amazon_order_id = db.Column(db.String(255), nullable=False, index=True, unique=True)
+    user_id = db.Column(db.Integer, index=True)
+
+    # ✅ allow NULL + duplicates
+    amazon_order_id = db.Column(db.String(255), nullable=True, index=True)
+
+    # ✅ new transaction key (unique per user)
+    tx_key = db.Column(db.Text, nullable=False, index=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'tx_key', name='uq_liveorders_user_tx_key'),
+    )
+
     purchase_date = db.Column(db.DateTime, index=True)
     order_status = db.Column(db.String(50), index=True)
     sku = db.Column(db.String(255), index=True)
     quantity = db.Column(db.Integer)
-    cogs = db.Column(db.Numeric(12, 2))
-    product_name = db.Column(db.String(255))
-    total_amount = db.Column(db.Numeric(12, 2))
-    selling_fees = db.Column(db.Numeric(12, 2), nullable=True)  
-    fba_fees = db.Column(db.Numeric(12, 2), nullable=True)
-    profit = db.Column(db.Numeric(12, 2), nullable=True)
-    product_sales = db.Column(db.Numeric(12, 2))
-    product_sales_tax = db.Column(db.Numeric(12, 2))
-    postage_credits = db.Column(db.Numeric(12, 2))
-    shipping_credits_tax = db.Column(db.Numeric(12, 2))
-    gift_wrap_credits = db.Column(db.Numeric(12, 2))
-    giftwrap_credits_tax = db.Column(db.Numeric(12, 2))
-    promotional_rebates = db.Column(db.Numeric(12, 2))
-    promotional_rebates_tax = db.Column(db.Numeric(12, 2))
-    marketplace_withheld_tax = db.Column(db.Numeric(12, 2))
-    other_transaction_fees = db.Column(db.Numeric(12, 2))
-    other = db.Column(db.Numeric(12, 2))
-    total = db.Column(db.Numeric(12, 2))
-    order_finances = db.Column(JSONB, nullable=True)      
-    currency = db.Column(db.String(10))
-    marketplace_id = db.Column(db.String(255), index=True)
-    sales_channel = db.Column(db.String(50))
-    city = db.Column(db.String(255), index=True)
-    state = db.Column(db.String(255), index=True)  
-    postal_code = db.Column(db.String(32), index=True)
-    country = db.Column(db.String(3), index=True)
-    synced_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    cogs = db.Column(db.Float, default=0.0)
+    profit = db.Column(db.Float, default=0.0)
+
+    type = db.Column(db.String(100))
+    description = db.Column(db.Text)
+    marketplace = db.Column(db.String(255))
+
+    product_sales = db.Column(db.Float, default=0.0)
+    product_sales_tax = db.Column(db.Float, default=0.0)
+    postage_credits = db.Column(db.Float, default=0.0)
+    shipping_credits = db.Column(db.Float, default=0.0)
+    shipping_credits_tax = db.Column(db.Float, default=0.0)
+    gift_wrap_credits = db.Column(db.Float, default=0.0)
+    giftwrap_credits_tax = db.Column(db.Float, default=0.0)
+    promotional_rebates = db.Column(db.Float, default=0.0)
+    promotional_rebates_tax = db.Column(db.Float, default=0.0)
+    marketplace_facilitator_tax = db.Column(db.Float, default=0.0)
+    selling_fees = db.Column(db.Float, default=0.0)
+    fba_fees = db.Column(db.Float, default=0.0)
+    other_transaction_fees = db.Column(db.Float, default=0.0)
+    other = db.Column(db.Float, default=0.0)
+    total = db.Column(db.Float, default=0.0)
+    bucket = db.Column(db.String(50))
 
 
 class amazon_user(db.Model):

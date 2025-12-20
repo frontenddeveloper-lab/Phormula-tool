@@ -71,6 +71,16 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
     global: true
   });
 
+  useEffect(() => {
+  const scope = (countryName || "").toLowerCase();
+
+  if (scope === "uk") {
+    setSelectedCountries({ uk: true, global: false });
+  } else if (scope === "global") {
+    setSelectedCountries({ uk: false, global: true });
+  }
+}, [countryName]);
+
 
 
   // Generate years (e.g., last 5 years)
@@ -144,7 +154,19 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
 
   // Map UI country keys (uk/global/us) to backend keys based on currency (e.g., uk_gbp vs uk_usd).
   // If a key is already suffixed, keep it as-is.
-  const backendKeyFor = (country: string) => (country.includes("_") ? country : `${country}_${baseCurrencyLower}`);
+//  const backendKeyFor = (country: string) => {
+//   const c = country.toLowerCase();
+//   if (c.includes("_")) return c;
+
+//   // UK data source generally GBP
+//   if (c === "uk") return "uk_gbp";
+
+//   // global should follow page currency
+//   if (c === "global") return baseCurrencyLower === "gbp" ? "global_gbp" : "global_usd";
+
+//   return `${c}_${baseCurrencyLower}`;
+// };
+
 
 
   const fetchProductData = async () => {
@@ -153,17 +175,16 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
 
     try {
       // Get selected countries as array
-      const countries = Object.keys(selectedCountries).filter(country => selectedCountries[country]);
-      const backendCountries = countries.map((c) => backendKeyFor(c));
+const countries = Object.keys(selectedCountries).filter(c => selectedCountries[c]);
 
-      // Prepare request payload
-      const requestPayload = {
-        product_name: productname,
-        time_range: timeRange,
-        year: selectedYear,
-        quarter: timeRange === 'Quarterly' ? selectedQuarter : null,
-        countries: backendCountries
-      };
+const requestPayload = {
+  product_name: productname,
+  time_range: timeRange,
+  year: selectedYear,
+  quarter: timeRange === "Quarterly" ? selectedQuarter : null,
+  countries,               // ✅ "uk", "global" direct
+  home_currency: baseCurrency,  // ✅ backend ko bata do kis currency me chahiye
+};
 
       console.log('Sending request:', requestPayload);
 
@@ -214,8 +235,9 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
   };
 
   useEffect(() => {
-    fetchProductData();
-  }, [productname, year]);
+  fetchProductData();
+}, [productname, year, timeRange, selectedQuarter, baseCurrency]);
+
 
 const prepareChartData = () => {
   if (!data || !data.data) return [];
@@ -266,27 +288,41 @@ const prepareChartData = () => {
       rows = countryBlock;
     } else {
       // pick first array inside the object
-      const firstArr = Object.values(countryBlock).find((v: any) => Array.isArray(v)) as any[] | undefined;
-      if (firstArr) rows = firstArr;
+const preferred = (countryBlock as any)?.[timeRange];
+if (Array.isArray(preferred)) {
+  rows = preferred;
+} else {
+  const firstArr = Object.values(countryBlock).find((v: any) => Array.isArray(v)) as any[] | undefined;
+  if (firstArr) rows = firstArr;
+}
+
     }
 
-    const found = rows.find((m: any) => m.month === month);
+const found = rows.find((m: any) => String(m.month) === String(month));
     return found ? Number(found.net_sales || 0) : 0;
   };
 
   return labels.map((month) => {
-const ukRaw = getMetric(backendKeyFor('uk'), month);
-const usRaw = getMetric(backendKeyFor('us'), month);
-const globalRaw = getMetric(backendKeyFor('global'), month);
+const ukRaw = getMetric("uk", month);
+const usRaw = getMetric("us", month);
+const rawGlobal = getMetric("global", month);
+
+const sumSelected =
+  (selectedCountries.uk ? ukRaw : 0) +
+  (selectedCountries.us ? usRaw : 0);
+
+// ProductwisePerformance behavior:
+// agar selected countries ka sum available hai to wahi GLOBAL dikhao,
+// warna backend ka rawGlobal fallback
+const globalShown = sumSelected !== 0 ? sumSelected : rawGlobal;
 
 const point: Record<string, any> = { month };
 
 if (selectedCountries.uk) point.uk = ukRaw;
 if (selectedCountries.us) point.us = usRaw;
-if (selectedCountries.global) point.global = globalRaw;
+if (selectedCountries.global) point.global = globalShown;
 
 return point;
-
   });
 };
 
@@ -318,10 +354,15 @@ return point;
     const labels = raw.map(item => item.month);
   const datasets = Object.keys(selectedCountries)
   .filter(country => selectedCountries[country])
-  .filter(country => {
-        const k = backendKeyFor(country);
-        return Array.isArray((data?.data as any)?.[k]) && ((data?.data as any)?.[k].length > 0);
-      })
+.filter(country => {
+  const block = (data?.data as any)?.[country];
+  if (!block) return false;
+
+  // block can be an array OR { Yearly: [...], Quarterly: [...] }
+  if (Array.isArray(block)) return block.length > 0;
+
+  return Object.values(block).some((v: any) => Array.isArray(v) && v.length > 0);
+})
       .map(country => ({
         label: country.toUpperCase(),
         data: raw.map(item => item[country] || 0),
@@ -376,6 +417,15 @@ return point;
   };
 
   const isImprovementsPage = pathname?.includes("mprovements") || false;
+
+  const scope = (countryName || "").toLowerCase();
+
+const visibleCountries =
+  scope === "uk"
+    ? ["uk"]              // UK page: only UK option visible
+    : scope === "global"
+    ? ["global"]          // Global page: only Global option visible
+    : Object.keys(selectedCountries);
 
   return (
     <>
@@ -754,23 +804,27 @@ h2 {
 
                     <div className="net-sales-right">
                       <div className="country-toggle-group">
-                        {Object.entries(selectedCountries).map(([country, isSelected]) => {
-                          const color = getCountryColor(country);
-                          return (
-                            <label
-                              key={country}
-                              className={`country-toggle ${isSelected ? "active" : ""}`}
-                              style={{ ['--country-color' as string]: color }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => handleCountryChange(country)}
-                              />
-                              <span className="country-label">{country.toUpperCase()}</span>
-                            </label>
-                          );
-                        })}
+                        
+{Object.entries(selectedCountries)
+  .filter(([country]) => visibleCountries.includes(country))
+  .map(([country, isSelected]) => {
+    const color = getCountryColor(country);
+    return (
+      <label
+        key={country}
+        className={`country-toggle ${isSelected ? "active" : ""}`}
+        style={{ ['--country-color' as string]: color }}
+      >
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => handleCountryChange(country)}
+        />
+        <span className="country-label">{country.toUpperCase()}</span>
+      </label>
+    );
+  })}
+
                       </div>
                     </div>
                   </div>
