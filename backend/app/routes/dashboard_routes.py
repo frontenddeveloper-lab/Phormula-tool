@@ -961,6 +961,32 @@ def getForecastFile():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+def resolve_country(country, currency):
+    country = (country or "").lower()
+    currency = (currency or "").lower()
+
+    # 1. If country = global
+    if country == "global":
+        if currency == "usd":
+            return "global"
+        elif currency == "inr":
+            return "global_inr"
+        elif currency == "gbp":
+            return "global_gbp"
+        elif currency == "cad":
+            return "global_cad"
+        else:
+            return "global"  # default fallback
+
+    # 2. If country = uk
+    if country == "uk":
+        if currency == "usd":
+            return "uk_usd"
+        else:
+            return "uk"  # default for all other currencies
+
+    # 3. Default (no special logic)
+    return country
 
 
 @dashboard_bp.route('/cashflow', methods=['GET'])
@@ -980,7 +1006,11 @@ def cashflow():
 
     month = request.args.get('month')
     year = request.args.get('year')
-    country = request.args.get('country')
+    country_param = request.args.get('country', '')
+    currency_param = (request.args.get('currency') or 'USD').lower()
+
+    
+    country = resolve_country(country_param, currency_param)
     period_type = request.args.get('period_type', 'monthly')
 
     if not year:
@@ -1095,7 +1125,7 @@ def cashflow():
             table_name = ""
             if period_type == 'monthly':
                 suffix = f"{month_name.lower()}{year}"
-                table_name = f"skuwisemonthly_{user_id}_{record_country.lower()}_{suffix}_table" if record_country.lower() == "global" else f"skuwisemonthly_{user_id}_{record_country.lower()}_{suffix}"
+                table_name = f"skuwisemonthly_{user_id}_{record_country.lower()}_{suffix}_table" if record_country.lower().startswith("global") else f"skuwisemonthly_{user_id}_{record_country.lower()}_{suffix}"
             elif period_type == 'quarterly':
                 month_lower = month_name.lower()
                 for quarter, months in quarter_months.items():

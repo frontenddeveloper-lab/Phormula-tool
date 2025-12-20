@@ -22,6 +22,11 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import introJs from 'intro.js';
+import 'intro.js/introjs.css';
+
+
+
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend);
 
@@ -138,6 +143,7 @@ const MonthsforBI: React.FC = () => {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 };
 
+
   // Month/year form
   const [month1, setMonth1] = useState<string>('');
   const [year1, setYear1] = useState<string>('');
@@ -172,11 +178,15 @@ const [activeTab, setActiveTab] = useState<TabKey>('all_skus');
   const [fbText, setFbText] = useState<string>('');
   const [fbSubmitting, setFbSubmitting] = useState<boolean>(false);
   const [fbSuccess, setFbSuccess] = useState<boolean>(false);
-  const [autoCompared, setAutoCompared] = useState(false);
 const [expandAllSkusOthers, setExpandAllSkusOthers] = useState(true);
 const [reimbursementTotals, setReimbursementTotals] = useState<{month1:number; month2:number} | null>(null);
 const [advertisingTotals, setAdvertisingTotals] = useState<{month1:number; month2:number} | null>(null);
 const [expenseTotals, setExpenseTotals] = useState<{month1:number; month2:number} | null>(null);
+const [autoCompared, setAutoCompared] = useState(false);
+const [introReady, setIntroReady] = useState(false);
+
+
+
 
   // ✅ NEW: available periods from backend (['YYYY-MM'])
   const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
@@ -190,6 +200,55 @@ const [selectedTotals, setSelectedTotals] = useState<Record<string, boolean>>({
   reimbursement: true,
 });
 
+const year1Ref = React.useRef<HTMLSelectElement | null>(null);
+const month1Ref = React.useRef<HTMLDivElement | null>(null);
+const compareBtnRef = React.useRef<HTMLButtonElement | null>(null);
+
+
+
+useEffect(() => {
+  if (!introReady) return;
+
+  const done = localStorage.getItem('bi_intro_done');
+  if (done) return;
+
+  // 🔥 SAFETY: agar koi purana instance ho
+  introJs().exit();
+
+  const intro = introJs();
+  intro.setOptions({
+    showProgress: true,
+    showBullets: false,
+    exitOnOverlayClick: false,
+    scrollToElement: false, // 🔥 IMPORTANT
+    steps: [
+  {
+    element: '#intro-year1',
+    intro: 'Select the year you want to analyze.',
+  },
+  {
+    element: '#intro-month1',
+    intro: 'Choose the corresponding month for that year.',
+  },
+  {
+    element: '#intro-compare',
+    intro: 'Click Compare to view insights and performance trends.',
+  },
+],
+
+  });
+
+  intro.oncomplete(() => localStorage.setItem('bi_intro_done', '1'));
+  intro.onexit(() => localStorage.setItem('bi_intro_done', '1'));
+
+  intro.start();
+}, [introReady]);
+
+
+
+
+
+
 const toggleTotalsMetric = (key: string) => {
   const selectedCount = Object.values(selectedTotals).filter(Boolean).length;
   const isChecked = !!selectedTotals[key];
@@ -202,6 +261,9 @@ const toggleTotalsMetric = (key: string) => {
 
   setSelectedTotals((prev) => ({ ...prev, [key]: !isChecked }));
 };
+
+
+
 
 
   const chartRef = React.useRef<HTMLDivElement | null>(null);
@@ -245,8 +307,6 @@ const pickDefaultComparePeriods = (periods: string[]) => {
   return { newer: sorted[0], older: sorted[1] }; // month2=newer, month1=older
 };
 
-const sumField = (rows: any[], key: string) =>
-  (rows || []).reduce((a, r) => a + Number(r?.[key] ?? 0), 0);
 
 const buildCompareSeries = (
   metricKeyBase: 'net_sales' | 'profit' | 'quantity' | 'rembursement_fee' | 'asp'
@@ -317,6 +377,7 @@ const getAllRows = () => ([
 
 const totalOf = (key: string) =>
   getAllRows().reduce((a, r) => a + Number(r?.[key] ?? 0), 0);
+
 
 
 
@@ -1143,8 +1204,6 @@ useEffect(() => {
   const years = Array.from({ length: 2 }, (_, i) => String(currentYear - i));
   const pad2 = (m: string | number) => String(m).padStart(2, '0');
   const getAbbr = (m: string | number) => months.find(x => x.value === pad2(m))?.label.slice(0, 3) || '';
-  const y1 = String(year1 || '');
-  const y2 = String(year2 || '');
 
   const isGlobalData = () => (countryName || '').toLowerCase() === 'global';
   const getTabLabel = (key: TabKey): string =>
@@ -1324,6 +1383,8 @@ clone.rembursement_fee_month2 = row.rembursement_fee_month2 ?? row.rembursement_
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+ 
+
   // ✅ NEW: fetch available periods from backend
   useEffect(() => {
     if (!countryName) return;
@@ -1376,7 +1437,7 @@ clone.rembursement_fee_month2 = row.rembursement_fee_month2 ?? row.rembursement_
   setMonth2(m2);
 
   setAutoCompared(false);
-
+ setTimeout(() => setIntroReady(true), 0);
   // optional: auto compare on load
   // handleSubmit(); // (If you want auto fetch immediately)
 }, [availablePeriods]);
@@ -2407,7 +2468,6 @@ const highlightInsightText = (text: string) => {
   ];
 };
 
-  const fullCurrent = categorizedGrowth[activeTab] || [];
 
 const currentTabData = React.useMemo(() => {
   // ✅ full dataset for active tab (your real source)
@@ -2473,17 +2533,6 @@ const currentTabData = React.useMemo(() => {
 }, [categorizedGrowth, activeTab, expandAllSkusOthers]);
 
 
-
- const totalRow =
-  activeTab === "top_80_skus"
-    ? categorizedGrowth.top_80_total
-    : activeTab === "new_or_reviving_skus"
-    ? categorizedGrowth.new_or_reviving_total
-    : activeTab === "other_skus"
-    ? categorizedGrowth.other_total
-    : categorizedGrowth.all_skus_total; // ✅ all_skus
-
-
     const formatCountryLabel = (country: string) => {
   const lower = country.toLowerCase();
   if (lower === "global") return "Global"; // special case
@@ -2500,6 +2549,13 @@ const isLockedCurrent = (year: string, month: string) => {
   if (!year || !month) return false;
   // Lock ONLY if backend has current month AND the option is current month
   return isCurrentPeriodAvailable && `${year}-${month}` === currentPeriodKey;
+
+useEffect(() => {
+  if (year1 && year2 && year1 === year2 && month1 && month2 && month1 === month2) {
+    // keep Month 1, reset Month 2
+    setMonth2('');
+  }
+}, [year1, year2, month1, month2]);
 };
 
 
@@ -2558,7 +2614,14 @@ const isLockedCurrent = (year: string, month: string) => {
     border-radius:50%;
     margin-bottom:4px;
   }
+
   .month-dot.selected .dot{ background:#5EA68E; }
+
+  /* ✅ NEW: selected month label */
+  .month-dot.selected .month-label{
+    color:#16a34a;
+    font-weight:600;
+  }
 
   /* ✅ NEW: disabled months styling */
   .month-dot.disabled{
@@ -2622,12 +2685,35 @@ const isLockedCurrent = (year: string, month: string) => {
 
   .compare-button-container{ margin-top:20px; text-align:right; }
   .theadc{ background:#5EA68E; color:#f8edcf; }
-  .tablec{ width:100%; border-collapse:collapse; }
-  .tablec td, .tablec th{ border:1px solid #414042; padding:10px 8px; text-align:center; }
+  .tablec{ width:100%; border-collapse:collapse;  table-layout: fixed; }
+  .tablec td, .tablec th{ border:1px solid #414042; padding:10px 8px; text-align:center;  white-space: nowrap;  text-overflow: ellipsis; vertical-align: middle; }
   .insight-section-title{ font-size:15px; color:#414042; }
   .insight-list{ margin: 6px 0 10px 20px; padding:0; }
   .insight-list-item{ line-height:1.6; }
   .insight-paragraphs p{ margin:4px 0; line-height:1.6; }
+
+  .table-wrapper{
+  width:100%;
+  overflow-x:auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1440px){
+  .tablec th,
+  .tablec td{
+    padding:6px 6px;       /* 🔥 tighter */
+    font-size:12px;
+  }
+
+  
+
+@media (max-width: 1024px){
+  .tablec{
+    min-width: 1200px; /* 🔥 force scroll instead of squash */
+  }
+}
+
+
 
   .sku-zero-wrap{
   position: relative;
@@ -2658,7 +2744,107 @@ const isLockedCurrent = (year: string, month: string) => {
 .sku-zero-wrap:hover .sku-zero-tooltip{
   opacity: 1;
 }
+
+.tour-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  z-index: 9998;        /* 🔥 sidebar se upar */
+}
+
+.tour-box{
+  position: fixed;     /* 🔥 absolute ❌ → fixed ✅ */
+  background: #ffffff;
+  padding: 14px 16px;
+  border-radius: 10px;
+  width: 260px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.3);
+  z-index: 9999;       /* 🔥 overlay se bhi upar */
+}
+
+.tour-actions{
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.tour-actions button{
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: #5EA68E;
+  color: #fff;
+  font-size: 13px;
+}
+
+.month-dot.selected .dot {
+  background: #16a34a;
+  box-shadow: 0 0 0 6px rgba(22,163,74,0.25);
+}
+
 `}</style>
+
+
+{/* {tourStep === 1 && (
+  <>
+    <div className="tour-overlay" />
+    <div
+  className="tour-box"
+  style={{
+    top: tourPos.top,
+    left: tourPos.left,
+  }}
+>
+      <b>Select Year</b>
+      <p>First Select Year</p>
+
+      <div className="tour-actions">
+        <button onClick={finishTour}>Skip</button>
+        <button onClick={() => setTourStep(2)}>Next</button>
+      </div>
+    </div>
+  </>
+)}
+{tourStep === 2 && (
+  <>
+    <div className="tour-overlay" />
+   <div
+  className="tour-box"
+  style={{
+    top: tourPos.top,
+    left: tourPos.left,
+  }}
+>
+      <b>Select Month</b>
+      <p>Click on Highlighted Month</p>
+
+      <div className="tour-actions">
+        <button onClick={finishTour}>Skip</button>
+        <button onClick={() => setTourStep(3)}>Next</button>
+      </div>
+    </div>
+  </>
+)}
+{tourStep === 3 && (
+  <>
+    <div className="tour-overlay" />
+    <div
+  className="tour-box"
+  style={{
+    top: tourPos.top,
+    left: tourPos.left,
+  }}
+>
+      <b>Compare</b>
+      <p>Then Click Compare Button to Compare</p>
+
+      <div className="tour-actions">
+        <button onClick={finishTour}>Got it</button>
+      </div>
+    </div>
+  </>
+)} */}
 <div className='w-full'>
       {/* Month selectors */}
       <h2 className="text-2xl font-bold text-[#414042] mb-2">
@@ -2723,21 +2909,23 @@ const isLockedCurrent = (year: string, month: string) => {
       <form onSubmit={handleSubmit} className="month-form ">
         {/* Row 1 */}
         <div className="month-row">
-          <select value={year1} onChange={(e)=>setYear1(e.target.value)} className="year-dropdown">
+          <select id="intro-year1" value={year1}   ref={year1Ref}  onChange={(e)=>setYear1(e.target.value)} className="year-dropdown">
             <option value="">Year 1</option>
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-       <div className={`month-slider ${year1 && !month1 ? 'needs-pick' : ''}`}>
+       <div  id="intro-month1" ref={month1Ref} className={`month-slider ${year1 && !month1 ? 'needs-pick' : ''}`}>
             {months.map(m => {
 const disabled =
   !year1 ||
   !isPeriodAvailable(year1, m.value) ||
-  isLockedCurrent(year1, m.value);
+  isLockedCurrent(year1, m.value) ||
+  (year2 && year1 === year2 && month2 === m.value);
               const selected = month1 === m.value;
               return (
                 <div
                   key={m.value}
-                  className={`month-dot ${selected ? 'selected':''} ${disabled ? 'disabled' : ''}`}
+                
+                  className={`month-dot  ${selected ? 'selected':''} ${disabled ? 'disabled' : ''}`}
                   onClick={() => {
                     if (disabled) return;
                     setMonth1(m.value);
@@ -2768,7 +2956,8 @@ const disabled =
             const disabled =
   !year2 ||
   !isPeriodAvailable(year2, m.value) ||
-  isLockedCurrent(year2, m.value);
+  isLockedCurrent(year2, m.value) ||
+  (year1 && year1 === year2 && month1 === m.value);
               const selected = month2 === m.value;
               return (
                 <div
@@ -2794,7 +2983,17 @@ const disabled =
        
 
       <div className="compare-button-container">
-        <button type="submit" onClick={handleSubmit} className="compare-button">Compare</button>
+       <button
+        id="intro-compare"
+  type="submit"
+  onClick={(e) => {  
+    handleSubmit(e);
+  }}
+  className="compare-button"
+    ref={compareBtnRef}
+>
+  Compare
+</button>
       </div>
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
@@ -2913,7 +3112,7 @@ const disabled =
           <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start '>
             <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start w-full'>
 <h2 className="xl:text-2xl text-xl font-bold text-[#414042] mb-4">Performance-based SKU split</h2>
-            <div className='flex justify-center gap-3'>
+            <div className='flex flex-col md:flex-row justify-center gap-3'>
 
   <div
               style={{
@@ -2929,7 +3128,7 @@ const disabled =
                 <button
                   key={key}
 onClick={() => setActiveTab(key)}
-                  className="text-sm font-normal"
+                  className="md:text-sm text-xs font-normal"
                   style={{
                     padding: '3px 12px',
                     backgroundColor: activeTab === key ? '#5EA68E80' : '#ffffff',
@@ -2985,21 +3184,21 @@ exportToExcel(allRows, file);
           
           </div>
 
-          <div className="overflow-x-auto pt-4 ">
+          <div className="table-wrapper pt-4">
 <table className="tablec w-full border-collapse md:text-sm text-xs 2xl:min-w-full xl:min-w-[1000px]">
   <thead className="theadc">
-    <tr>
-      <th>S.No.</th>
-      <th className="text-left" style={{ textAlign: 'left' }}>Product Name</th>
-      <th>Sales Mix ({month2Label || 'Month 2'})</th>
+    <tr >
+      <th className='px-1 !w-[50px]'>S.No.</th>
+      <th className="text-left px-1" style={{ textAlign: 'left' }}>Product Name</th>
+      <th className='px-1'>Sales Mix ({month2Label || 'Month 2'})</th>
 
       {activeTab !== 'new_or_reviving_skus' && <th>Sales Mix Change (%)</th>}
 
-      <th>Unit Growth (%)</th>
-      <th>ASP Growth (%)</th>
-      <th>Net Sales Growth (%)</th>
+      <th className='px-1'>Unit Growth (%)</th>
+      <th className='px-1'>ASP Growth (%)</th>
+      <th className='px-1'>Net Sales Growth (%)</th>
 
-      <th>CM1 Profit Impact (%)</th>
+      <th className='px-1'>CM1 Profit Impact (%)</th>
       <th>CM1 Profit Per Unit (%)</th>
 
       {Object.keys(skuInsights).length > 0 && <th>AI Insight</th>}
@@ -3086,7 +3285,7 @@ exportToExcel(allRows, file);
             }
 
             const val = Number(growth.value);
-            const sign = val >= 0 ? '+' : '';
+const sign = val > 0 ? '+' : '';
             const text = `${sign}${val.toFixed(2)}%`;
 
             if (growth.category === 'High Growth') {
@@ -3096,12 +3295,12 @@ exportToExcel(allRows, file);
                   className="border border-[#414042] px-2 py-2.5 text-center"
                   style={{ fontWeight: 600 }}
                 >
-                  <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#5EA68E]">
-  <span className="w-4 flex justify-center">
+                  <span className="flex items-center justify-center gap-2 w-full font-semibold text-[#5EA68E]">
+  <span className="w-4 flex justify-center shrink-0">
     <FaArrowUp size={12} />
   </span>
 
-  <span className="tabular-nums inline-block w-[10px] text-right">
+  <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
     {text}
   </span>
 </span>
@@ -3117,12 +3316,12 @@ exportToExcel(allRows, file);
                   className="border border-[#414042] px-2 py-2.5 text-center"
                   style={{ fontWeight: 600 }}
                 >
-                 <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#FF5C5C]">
-  <span className="w-4 flex justify-center">
+                 <span className="flex items-center justify-center gap-2 w-full font-semibold text-[#FF5C5C]">
+  <span className="w-4 flex justify-center shrink-0">
     <FaArrowDown size={12} />
   </span>
 
-  <span className="tabular-nums inline-block w-[10px] text-right">
+  <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
     {text}
   </span>
 </span>
@@ -3138,12 +3337,12 @@ exportToExcel(allRows, file);
                 className="border border-[#414042] px-2 py-2.5 text-center text-[#414042]"
                 style={{ fontWeight: 600, color: '#414042' }}
               >
-                <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#414042]">
-  <span className="w-4 flex justify-center">
+                <span className="flex items-center justify-center gap-2 w-full font-semibold text-[#414042]">
+  <span className="w-4 flex justify-center shrink-0">
     {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
   </span>
 
-  <span className="tabular-nums inline-block w-[10px] text-right">
+  <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
     {text}
   </span>
 </span>
@@ -3252,7 +3451,7 @@ exportToExcel(allRows, file);
 
       return cells.map((v, i) => {
         const val = Number(v);
-        const sign = val >= 0 ? '+' : '';
+       const sign = val > 0 ? '+' : '';
         const text = `${sign}${val.toFixed(2)}%`;
 
         // ✅ Total row classification:
@@ -3266,11 +3465,11 @@ exportToExcel(allRows, file);
               className="border border-[#414042] px-2 py-2.5 text-center font-bold"
               style={{ fontWeight: 600 }}
             >
-              <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#5EA68E]">
-                <span className="w-4 flex justify-center">
+              <span className="flex items-center justify-center gap-2 w-full font-semibold text-[#5EA68E]">
+                <span className="w-4 flex justify-center shrink-0">
                   <FaArrowUp size={12} />
                 </span>
-                <span className="tabular-nums inline-block w-[10px] text-right">
+                <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
                   {text}
                 </span>
               </span>
@@ -3285,11 +3484,11 @@ exportToExcel(allRows, file);
               className="border border-[#414042] px-2 py-2.5 text-center font-bold"
               style={{ fontWeight: 600 }}
             >
-              <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#FF5C5C]">
-                <span className="w-4 flex justify-center">
+              <span className="flex items-center justify-center gap-2 w-full font-semibold text-[#FF5C5C]">
+                <span className="w-4 flex justify-center shrink-0">
                   <FaArrowDown size={12} />
                 </span>
-                <span className="tabular-nums inline-block w-[10px] text-right">
+                <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
                   {text}
                 </span>
               </span>
@@ -3303,11 +3502,11 @@ exportToExcel(allRows, file);
             className="border border-[#414042] px-2 py-2.5 text-center font-bold"
             style={{ fontWeight: 600, color: '#414042' }}
           >
-            <span className="inline-flex items-center justify-center gap-2 font-semibold text-[#414042]">
-              <span className="w-4 flex justify-center">
+            <span className="flex items-center justify-center gap-2 w-full font-semibold text-[#414042]">
+              <span className="w-4 flex justify-center shrink-0">
                 {val > 0 ? <FaArrowUp size={12} /> : val < 0 ? <FaArrowDown size={12} /> : null}
               </span>
-              <span className="tabular-nums inline-block w-[10px] text-right">
+              <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
                 {text}
               </span>
             </span>
