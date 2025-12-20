@@ -1664,31 +1664,27 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
       </div> */}
 
       {/* BOTTOM: centered legend + View Business Insights + download button */}
-    {/* BOTTOM: perfectly centered legend + actions on right */}
-<div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-  {/* left spacer */}
-  <div />
-
-  {/* centered legend */}
-  <div className="flex justify-center">
-    {activeTab === "sales_cm1" ? (
-      <div className="flex flex-wrap items-center justify-center gap-6 text-sm sm:text-base font-semibold text-gray-700">
-        <div className="flex items-center gap-2">
-          <span className="h-[2px] w-10 bg-gray-800" />
-          <span className="leading-none">Net Sales</span>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        {/* Centered legend */}
+        <div className="flex-1 flex justify-center">
+          {activeTab === "sales_cm1" ? (
+            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-gray-700">
+              <div className="flex items-center gap-2">
+                <span className="h-[2px] w-10 bg-gray-800" />
+                <span>Net Sales</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-10 border-t border-dashed border-gray-800" />
+                <span>CM1 Profit</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700">
+              <span className="h-[2px] w-10 bg-gray-800" />
+              <span>Units</span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="w-10 border-t border-dashed border-gray-800" />
-          <span className="leading-none">CM1 Profit</span>
-        </div>
-      </div>
-    ) : (
-      <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-gray-700">
-        <span className="h-[2px] w-10 bg-gray-800" />
-        <span className="leading-none">Units</span>
-      </div>
-    )}
-  </div>
 
   {/* right actions */}
   <div className="flex justify-end items-center gap-2">

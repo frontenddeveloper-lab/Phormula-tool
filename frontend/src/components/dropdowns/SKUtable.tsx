@@ -814,16 +814,17 @@ const SKUtable: React.FC<SKUtableProps> = ({
           )}
 
           <div className="w-full overflow-x-auto rounded-xl border border-gray-300">
-            <div className="min-w-full">
-              <table className="min-w-[800px] w-full table-auto border-collapse text-[#414042]">
+            <div className="min-w-[1024px] lg:min-w-0">
+              <table className="w-full table-fixed border-collapse text-[#414042]">
                 <thead className="sticky top-0 z-10 font-bold text-[#f8edcf]">
                   <tr className="bg-[#5EA68E]">
                     <th className="w-[60px] whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
                       Sno.
                     </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                    <th className="w-[220px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
                       Product Name
                     </th>
+
                     <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
                       Quantity Sold
                     </th>
@@ -976,17 +977,22 @@ const SKUtable: React.FC<SKUtableProps> = ({
                             return (
                               <td
                                 key={idx}
+<<<<<<< HEAD
                                 className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ${isProductName ? "text-left" : "text-center"
                                   }`}
+=======
+                                className={`border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ${isProductName ? "text-left" : "text-center tabular-nums"
+                                  }`}
+
+>>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
                               >
                                 {isProductName && !isLastRow ? (
                                   <span
                                     onClick={() => handleProductClick(String(cellContent || ""))}
-                                    className="inline-block max-w-[220px] cursor-pointer truncate align-middle text-[#60a68e] no-underline"
+                                    className="block w-[220px] max-w-[220px] cursor-pointer truncate text-[#60a68e]"
                                     title={String(cellContent || "")}
                                   >
                                     {String(cellContent || "-")}
-                                    {/* Keep info icon/modal (no red coloring) */}
                                     {isMissingName(row.product_name) && (
                                       <span className="ml-2 inline-flex items-center">
                                         <i
@@ -1000,8 +1006,9 @@ const SKUtable: React.FC<SKUtableProps> = ({
                                       </span>
                                     )}
                                   </span>
+
                                 ) : (
-                                  <span className="inline-block max-w-[220px] truncate">
+                                  <span className="block truncate">
                                     {cellContent}
                                   </span>
                                 )}
@@ -1114,8 +1121,13 @@ const SKUtable: React.FC<SKUtableProps> = ({
 
       {/* Top & Bottom tables */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
+<<<<<<< HEAD
         <div className="flex flex-col justify-between gap-7 md:gap-3 text-[#414042] md:flex-row min-w-0">
           <div className="flex-1 min-w-0">
+=======
+        <div className="flex flex-col justify-between gap-7 md:gap-3 text-[#414042] lg:flex-row">
+          <div className="flex-1">
+>>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
             <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
               <PageBreadcrumb pageTitle="Most 5 Profitable Products" variant="page" align="left" textSize="2xl" />
             </div>
