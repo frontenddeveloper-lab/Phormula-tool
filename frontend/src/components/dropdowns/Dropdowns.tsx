@@ -447,7 +447,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   };
 
   return (
-    <div ref={layoutRef} className="space-y-6 relative">
+    <div ref={layoutRef} className="space-y-5 relative">
       {/* Back / Title */}
       {/* <div className="flex flex-col leading-tight">
         <div className="flex gap-2">

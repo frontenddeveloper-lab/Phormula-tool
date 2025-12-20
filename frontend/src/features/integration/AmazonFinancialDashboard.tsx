@@ -1497,7 +1497,6 @@ import {
 } from "react-icons/fa";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import Button from "@/components/ui/button/Button";
-import { IoMdInfinite } from "react-icons/io";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
@@ -1615,6 +1614,170 @@ function updateLatestFetchedPeriod(monthSlug: string, yearStr: string) {
   }
 }
 
+/** ---------------- JSON API helper ---------------- */
+async function apiJson(path: string, options: RequestInit = {}) {
+  const token = getAuthToken();
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  const text = await res.text().catch(() => "");
+  let data: any = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    // non-json response
+    data = { raw: text };
+  }
+
+  if (!res.ok) {
+    const msg = data?.error || data?.message || text || `Request failed: ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
+
+/** ---------------- localStorage run-once guards ---------------- */
+function lsKeyFees(country: string, year: number, month: number) {
+  return `feesSynced:${country}:${year}:${month}`;
+}
+function lsKeyFeeUpload(country: string) {
+  return `feeUploadReady:${country}`;
+}
+function wasDone(key: string) {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(key) === "1";
+}
+function markDone(key: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, "1");
+}
+
+/**
+ * Ensure we hit:
+ * 1) /amazon_api/fees/sync_and_upload   (one-time per country)
+ * 2) /fetch_fees                       (one-time per country+year+month)
+ */
+async function ensureFeesPrimedOnce(params: {
+  country: string;
+  regionUsed?: string;
+  marketplaceId: string;
+  year: number;
+  month: number; // 1-12
+}) {
+  const { country, regionUsed, marketplaceId, year, month } = params;
+
+  // 1) fee upload table (usually one-time per country)
+  const uploadKey = lsKeyFeeUpload(country);
+  if (!wasDone(uploadKey)) {
+    await apiJson(`/amazon_api/fees/sync_and_upload`, {
+      method: "POST",
+      body: JSON.stringify({
+        country,
+        marketplace_id: marketplaceId,
+        region: regionUsed, // optional
+        transit_time: 0,
+        stock_unit: 0,
+      }),
+    });
+
+    markDone(uploadKey);
+  }
+
+  // 2) fetch_fees (month-specific)
+  const feesKey = lsKeyFees(country, year, month);
+  if (!wasDone(feesKey)) {
+    const monthParam = `${year}-${two(month)}`; // e.g. 2025-01
+
+    await apiJson(`/fetch_fees`, {
+      method: "POST",
+      body: JSON.stringify({
+        region: regionUsed, // optional if backend supports; kept for compatibility
+        marketplace_id: marketplaceId,
+        month: monthParam,
+        year: String(year),
+        country,
+      }),
+    });
+
+    markDone(feesKey);
+  }
+}
+
+/** ---------------- Monthly transactions Excel fetch (no download) ---------------- */
+async function fetchMonthlyTransactionsExcel(params: {
+  year: number;
+  month: number;
+  marketplace_id: string;
+  country: string;
+  run_upload_pipeline: boolean;
+  store_in_db: boolean;
+}) {
+  const token = getAuthToken();
+  const qs = new URLSearchParams({
+    year: String(params.year),
+    month: String(params.month),
+    marketplace_id: params.marketplace_id,
+    run_upload_pipeline: String(params.run_upload_pipeline),
+    country: params.country,
+    format: "excel",
+    store_in_db: String(params.store_in_db),
+  });
+
+  const url = `${API_BASE}/amazon_api/finances/monthly_transactions?${qs.toString()}`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!res.ok) {
+    const ct = res.headers.get("content-type") || "";
+    const raw = await res.text().catch(() => "");
+    let msg = raw;
+
+    if (ct.includes("application/json")) {
+      try {
+        const j = JSON.parse(raw);
+        msg = j?.error || j?.message || JSON.stringify(j, null, 2);
+      } catch {}
+    }
+
+    throw new Error(`API ${res.status} ${res.statusText}\nURL: ${url}\n\n${msg}`);
+  }
+
+  // ✅ IMPORTANT: consume body so request completes, but do NOT download
+  await res.arrayBuffer();
+
+  return { ok: true, url };
+}
+
+/** Build a month range ending at previous month (not current ongoing month) */
+function buildMonthRange(count: number) {
+  const now = new Date();
+
+  // Anchor = previous month
+  const anchor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+
+  const out: { y: number; mIdx: number; mNum: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - i, 1));
+    const y = d.getUTCFullYear();
+    const mIdx = d.getUTCMonth();
+    out.push({ y, mIdx, mNum: mIdx + 1 });
+  }
+
+  return out.reverse(); // oldest -> newest
+}
+
 type Props = {
   region?: string; // not sent to monthly_transactions API anymore, but used for fee priming
   country?: string;
@@ -1657,18 +1820,7 @@ const AmazonFinancialDashboard: React.FC<Props> = ({ region, country, onClose })
   const [selYear, setSelYear] = useState(String(defaultYear));
 
   const [busy, setBusy] = useState(false);
-
-  // 1 / 3 / 6 / 12 months
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(12);
-
-  const daysBetween = (a: Date, b: Date) =>
-    Math.floor((+a - +b) / (24 * 3600 * 1000));
-  const isOlderThan90Days = (year: number, month01: string) => {
-    const m = Math.max(1, Math.min(12, parseInt(month01, 10)));
-    const monthStart = new Date(year, m - 1, 1);
-    const now = new Date();
-    return daysBetween(now, monthStart) > 90;
-  };
 
   const wrap = async (fn: () => Promise<void>) => {
     try {
@@ -1685,212 +1837,61 @@ const AmazonFinancialDashboard: React.FC<Props> = ({ region, country, onClose })
 
   const handleFetchByMonth = () =>
     wrap(async () => {
-      const useFinances = isOlderThan90Days(parseInt(selYear, 10), selMonth);
+      const y = parseInt(selYear, 10);
+      const mNum = parseInt(selMonth, 10);
 
-      const monthIndex = Math.max(
-        0,
-        Math.min(11, parseInt(selMonth, 10) - 1)
-      );
-      const monthParam = useFinances
-        ? `${selYear}-${monthNamesLower[monthIndex]}` // e.g. 2025-january
-        : `${selYear}-${selMonth}`; // e.g. 2025-01
-
-      // ------------------ 1) /fetch_fees (existing) ------------------
-      let feesMsg = "";
-      try {
-        const feesResp = await api(`/fetch_fees`, {
-          method: "POST",
-          body: JSON.stringify({
-            region: regionUsed,
-            marketplace_id: marketplaceIdUsed,
-            month: monthParam,
-            year: selYear,
-            country: countryUsed,
-          }),
-        });
-        if (feesResp && typeof feesResp === "object") {
-          const { ok, skipped, stored, failures } = feesResp as any;
-          const failCount = Array.isArray(failures) ? failures.length : 0;
-          feesMsg = `Fees sync: ${ok ? "ok" : "not ok"} · stored ${
-            stored ?? 0
-          } · skipped ${skipped ?? 0} · failures ${failCount}`;
-        } else {
-          feesMsg = "Fees sync: completed.";
-        }
-      } catch (err: any) {
-        feesMsg = `Fees sync error: ${err?.message || "unknown error"}`;
-      }
-
-      // ------------------ 2) /amazon_api/fees/sync_and_upload (NEW) ------------------
-      let feesUploadMsg = "";
-      try {
-        const syncResp = await api(`/amazon_api/fees/sync_and_upload`, {
-          method: "POST",
-          body: JSON.stringify({
-            country: countryUsed,
-            marketplace_id: marketplaceIdUsed,
-            region: regionUsed, // optional
-            transit_time: 0,
-            stock_unit: 0,
-          }),
-        });
-
-        if (syncResp?.skipped) {
-          feesUploadMsg = `Fee upload table already exists for ${countryUsed}.`;
-        } else {
-          const count = syncResp?.count_in_file ?? 0;
-          feesUploadMsg = `Fee upload table ready for ${countryUsed} (${count} fee rows processed).`;
-        }
-      } catch (err: any) {
-        feesUploadMsg = `Fee upload sync error: ${
-          err?.message || "unknown error"
-        }`;
-      }
-
-      // ------------------ 3) Now settlements/finances (existing) ------------------
-      const path = useFinances
-        ? "/amazon_api/settlements_finances"
-        : "/amazon_api/settlements";
-      const qs = new URLSearchParams({
-        region: regionUsed,
-        marketplace_id: marketplaceIdUsed,
-        month: monthParam,
-        format: "csv",
-        store_in_db: "false",
-        limit: "all",
-        run_upload_pipeline: "true",
+      // ✅ Prime fees ONCE (per country + month)
+      await ensureFeesPrimedOnce({
         country: countryUsed,
-        year: selYear,
-        allow_report_created_fallback: "true",
+        regionUsed,
+        marketplaceId: marketplaceIdUsed,
+        year: y,
+        month: mNum,
       });
 
-      const data = await api(`${path}?${qs}`);
+      // ✅ Now run your monthly transactions pipeline
+      await fetchMonthlyTransactionsExcel({
+        year: y,
+        month: mNum,
+        marketplace_id: marketplaceIdUsed,
+        country: countryUsed,
+        run_upload_pipeline: true,
+        store_in_db: true,
+      });
 
-      const preview = (data as any).items || [];
-      const cols = preview.length
-        ? Object.keys(preview[0])
-        : [
-            "date/time",
-            "settlement id",
-            "type",
-            "order id",
-            "sku",
-            "description",
-            "quantity",
-            "marketplace",
-            "fulfilment",
-            "order city",
-            "order state",
-            "order postal",
-            "tax collection model",
-            "product sales",
-            "product sales tax",
-            "postage credits",
-            "shipping credits tax",
-            "gift wrap credits",
-            "giftwrap credits tax",
-            "promotional rebates",
-            "promotional rebates tax",
-            "marketplace withheld tax",
-            "selling fees",
-            "fba fees",
-            "other transaction fees",
-            "other",
-            "total",
-            "currency",
-          ];
+      const monthSlug = fullMonthNames[mNum - 1].toLowerCase();
+      updateLatestFetchedPeriod(monthSlug, String(y));
 
-      setSettlementCols(cols);
-      setSettlementRows(preview);
+      setMessage(`Fetched ${countryUsed}: ${y}-${two(mNum)} (fees primed, no download)`);
 
-      let settlementsMsg = "";
-      if ((data as any)?.stored?.inserted >= 0) {
-        settlementsMsg = `Saved ${
-          (data as any).stored.inserted || 0
-        } rows (replaced ${(data as any).stored.deleted || 0}) for ${monthParam}.`;
-      } else if ((data as any)?.stored?.skipped) {
-        settlementsMsg = `Fetched preview for ${monthParam} (DB save skipped).`;
-      } else {
-        settlementsMsg = `Fetched ${
-          useFinances ? "finances" : "settlements"
-        } for ${monthParam}.`;
-      }
-
-      // Combine all messages
-      setMessage(
-        [feesMsg, feesUploadMsg, settlementsMsg].filter(Boolean).join(" • ")
-      );
-
-      const idxForNav = Math.max(
-        0,
-        Math.min(11, parseInt(selMonth, 10) - 1)
-      );
-      const monthSlug = fullMonthNames[idxForNav].toLowerCase();
-
-      // Store latest fetched month/year in localStorage (only if newer)
-      updateLatestFetchedPeriod(monthSlug, String(selYear));
-
-      if (onClose) {
-        onClose();
-      }
-      router.push(`/country/MTD/${countryUsed}/${monthSlug}/${selYear}`);
+      if (onClose) onClose();
+      router.push(`/country/MTD/${countryUsed}/${monthSlug}/${y}`);
     });
 
   const handleFetchRange = () =>
     wrap(async () => {
-      const isLifetime = selectedPeriod === "lifetime";
-
-      const months = isLifetime
-        ? buildLifetimeRange()
-        : buildMonthRange(selectedPeriod || 0);
-
-      if (!months.length) {
-        setMessage("No months available to fetch.");
+      const n = selectedPeriod || 0;
+      if (![3, 6, 12].includes(n)) {
+        setMessage("Please select 3, 6, or 12 months.");
         return;
       }
 
-      const now = new Date();
-      const months: { y: number; mIdx: number }[] = [];
-      for (let i = 0; i < n; i++) {
-        const d = new Date(
-          Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1)
-        );
-        months.push({ y: d.getUTCFullYear(), mIdx: d.getUTCMonth() });
-      }
-      // Oldest first, newest last
-      months.reverse();
+      const months = buildMonthRange(n); // ends at current-1 month
+      const first = months[0];
 
-      // -------- ensure fee upload table exists once --------
-      let feesUploadMsg = "";
-      try {
-        const syncResp = await api(`/amazon_api/fees/sync_and_upload`, {
-          method: "POST",
-          body: JSON.stringify({
-            country: countryUsed,
-            marketplace_id: marketplaceIdUsed,
-            region: regionUsed,
-            transit_time: 0,
-            stock_unit: 0,
-          }),
-        });
+      // ✅ Prime fees ONCE for this run:
+      // - sync_and_upload (one-time per country)
+      // - fetch_fees (one-time for the first month in this range)
+      await ensureFeesPrimedOnce({
+        country: countryUsed,
+        regionUsed,
+        marketplaceId: marketplaceIdUsed,
+        year: first.y,
+        month: first.mNum,
+      });
 
-        if (syncResp?.skipped) {
-          feesUploadMsg = `Fee upload table already exists for ${countryUsed}.`;
-        } else {
-          const count = syncResp?.count_in_file ?? 0;
-          feesUploadMsg = `Fee upload table ready for ${countryUsed} (${count} fee rows processed).`;
-        }
-      } catch (err: any) {
-        feesUploadMsg = `Fee upload sync error: ${
-          err?.message || "unknown error"
-        }`;
-      }
-
-      // -------- then continue with existing range logic --------
-      let combinedRows: any[] = [];
-      let combinedCols: string[] | null = null;
-      let okCount = 0;
-      let csvFallbackCount = 0;
+      let ok = 0;
+      let fail = 0;
 
       for (const { y, mNum } of months) {
         try {
@@ -1914,23 +1915,12 @@ const AmazonFinancialDashboard: React.FC<Props> = ({ region, country, onClose })
       updateLatestFetchedPeriod(latestMonthSlug, String(last.y));
 
       setMessage(
-        [feesUploadMsg, `${modeLabel} fetch complete for ${countryUsed}. ${details}`]
-          .filter(Boolean)
-          .join(" • ")
+        `Fetch complete for ${countryUsed}: requested ${n}, ok ${ok}, failed ${fail} (fees primed once, no downloads)`
       );
-
-      // Latest month in the fetched range (months is oldest -> newest)
-      const lastMonth = months[months.length - 1]; // { y, mIdx }
-      const latestYear = lastMonth.y;
-      const latestMonthSlug = fullMonthNames[lastMonth.mIdx].toLowerCase();
-
-      // Store only if this month/year is newer than what we have
-      updateLatestFetchedPeriod(latestMonthSlug, String(latestYear));
 
       if (onClose) onClose();
       router.push(`/country/MTD/${countryUsed}/${latestMonthSlug}/${last.y}`);
     });
-
 
   return (
     <div className="w-full">
@@ -1954,7 +1944,7 @@ const AmazonFinancialDashboard: React.FC<Props> = ({ region, country, onClose })
         </p>
 
         {/* Period Buttons */}
-        {/* <div
+        <div
           className="
             mt-2 
             grid grid-cols-4 gap-2
@@ -2004,66 +1994,7 @@ const AmazonFinancialDashboard: React.FC<Props> = ({ region, country, onClose })
               </div>
             );
           })}
-        </div> */}
-
-        <div
-          className="
-    mt-2
-    grid grid-cols-5 gap-2
-    sm:grid-cols-5 sm:gap-3
-    max-w-xl mx-auto
-  "
-        >
-          {[1, 3, 6, 12, "lifetime"].map((m) => {
-            const isActive = selectedPeriod === m;
-
-            return (
-              <div key={String(m)} className="relative w-full">
-                {m === 12 && (
-                  <div
-                    className={[
-                      "absolute -top-2 left-1/2 -translate-x-1/2",
-                      "text-[10px] px-2 py-0.5 rounded-full z-10",
-                      selectedPeriod !== 12
-                        ? "bg-green-500 text-yellow-200"
-                        : "bg-gray-200 text-gray-700",
-                    ].join(" ")}
-                  >
-                    Recommended
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedPeriod(m as any)}
-                  className={[
-                    `
-              w-full
-              rounded-lg border 
-              p-2 sm:p-3 
-              text-center transition
-            `,
-                    isActive
-                      ? "border-green-500 bg-green-500 text-yellow-200"
-                      : "border-slate-200 bg-slate-50 hover:bg-white text-charcoal-500",
-                  ].join(" ")}
-                >
-                  <div className="w-full text-base sm:text-lg font-semibold flex items-center justify-center tabular-nums">
-                    <span className="inline-flex w-[1.6em] justify-center">
-                      {m === "lifetime" ? <IoMdInfinite className="text-lg sm:text-xl" /> : m}
-                    </span>
-                  </div>
-
-
-                  <div className="text-[10px] sm:text-xs uppercase tracking-wide mt-1">
-                    {m === "lifetime" ? "Lifetime" : m === 1 ? "Month" : "Months"}
-                  </div>
-                </button>
-              </div>
-            );
-          })}
         </div>
-
 
         {/* Note Section */}
         <div
@@ -2170,8 +2101,7 @@ const AmazonFinancialDashboard: React.FC<Props> = ({ region, country, onClose })
         )}
 
         {/* >1 month controls */}
-        {/* {selectedPeriod && selectedPeriod > 1 && ( */}
-        {selectedPeriod && (selectedPeriod === "lifetime" || selectedPeriod > 1) && (
+        {selectedPeriod && selectedPeriod > 1 && (
           <div className="w-full flex justify-center gap-3 mt-4">
             <Button onClick={onClose} variant="outline" size="sm">
               Cancel

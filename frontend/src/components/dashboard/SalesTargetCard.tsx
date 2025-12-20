@@ -672,11 +672,7 @@ export default function SalesTargetCard({
       ? ((targetHome - lastMonthTotalHome) / lastMonthTotalHome) * 100
       : 0;
   return (
-<<<<<<< HEAD
-    <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
-=======
     <div className="rounded-2xl border bg-white p-5 shadow-sm h-full flex flex-col">
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
       {/* Header */}
       <div className="relative flex flex-col items-center gap-1">
         <PageBreadcrumb
@@ -806,11 +802,7 @@ export default function SalesTargetCard({
     ].map((t) => (
       <div
         key={t.title}
-<<<<<<< HEAD
-        className="rounded-xl p-3 text-center h-full flex flex-col items-center"
-=======
         className="rounded-xl bg-gray-50 p-3 text-center h-full flex flex-col items-center"
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
       >
         {/* Title: always one line */}
         <div className="text-charcoal-500 whitespace-nowrap leading-none">

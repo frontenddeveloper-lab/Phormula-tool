@@ -1066,9 +1066,9 @@ const fetchShopify = useCallback(async () => {
                   </span>
                 </div>
 
-                {/* <p className="text-sm text-charcoal-500 mt-1">
+                <p className="text-sm text-charcoal-500 mt-1">
                   Real-time data from Amazon
-                </p> */}
+                </p>
               </div>
 
               {/* RIGHT — Region pills */}

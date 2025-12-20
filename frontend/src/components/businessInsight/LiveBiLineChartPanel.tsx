@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 // "use client";
 
 // import React, { useEffect, useMemo, useState } from "react";
@@ -364,7 +362,6 @@
 
 
 
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
 "use client";
 
 import React, { useMemo, useState } from "react";
@@ -404,28 +401,7 @@ type Props = {
 // small helper
 const getShort = (label?: string) => (label ? label.split(" ")[0] || label : "");
 
-<<<<<<< HEAD
-const monthTickLabel = (p?: PeriodInfo) => {
-  // Prefer dates (more reliable than label text)
-  const src = p?.start_date || p?.end_date || "";
-  if (!src) return p?.label || "";
-
-  // src: "2025-10-01"
-  const [y, m] = src.split("-");
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const mi = Number(m) - 1;
-
-  if (!Number.isFinite(mi) || mi < 0 || mi > 11) return p?.label || "";
-  const yy = (y || "").slice(-2);
-
-  return `${monthNames[mi]}'${yy}`; // Oct'25
-};
-
-
-
-=======
 // chart renderer
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
 const LiveLineChart: React.FC<{
   dataPrev: DailyPoint[];
   dataCurr: DailyPoint[];
@@ -433,10 +409,6 @@ const LiveLineChart: React.FC<{
   prevLabel?: string;
   currLabel?: string;
 }> = ({ dataPrev, dataCurr, metric, prevLabel, currLabel }) => {
-<<<<<<< HEAD
-
-=======
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
   const getDay = (dateStr: string) => Number(dateStr?.split("-")?.[2]);
 
   const prevDays = dataPrev.map((d) => getDay(d.date)).filter((n) => Number.isFinite(n));
@@ -464,35 +436,7 @@ const LiveLineChart: React.FC<{
   const option = {
     color: ["#CECBC7", "#F47A00"],
     tooltip: { trigger: "axis" },
-<<<<<<< HEAD
-
-    legend: {
-      top: 4,                 // aligns nicely under title
-      left: "left",
-      orient: "horizontal",
-      align: "left",
-
-      icon: "rect",
-      itemWidth: 12,
-      itemHeight: 12,          // 👈 slightly larger than font
-      itemGap: 20,
-
-      textStyle: {
-        fontSize: 13,
-        lineHeight: 14,        // 👈 MUST be >= itemHeight
-        color: "#6B7280",
-        padding: [0, 6, 0, 6],
-      },
-
-      data: [prevLabel || "Previous", currLabel || "Current"],
-    },
-
-
-
-    grid: { left: 40, right: 16, top: 50, bottom: 40 }, // 👈 top increased to make room for legend
-=======
     grid: { left: 40, right: 16, top: 24, bottom: 40 },
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
     xAxis: {
       type: "category",
       data: allDays.map(String),
@@ -503,11 +447,7 @@ const LiveLineChart: React.FC<{
     },
     yAxis: {
       type: "value",
-<<<<<<< HEAD
-      name: metric === "net_sales" ? "Sales (₹)" : "Units", // optional
-=======
       name: metric === "net_sales" ? "Sales" : "Units",
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
       nameLocation: "middle",
       nameGap: 40,
     },
@@ -523,17 +463,8 @@ const LiveLineChart: React.FC<{
 export default function LiveBiLineGraph({ dailySeries, periods, loading, error }: Props) {
   const [chartMetric, setChartMetric] = useState<ChartMetric>("net_sales");
 
-<<<<<<< HEAD
-  // const prevShort = useMemo(() => getShort(periods?.previous?.label), [periods]);
-  // const currShort = useMemo(() => getShort(periods?.current_mtd?.label), [periods]);
-
-  const prevLegend = useMemo(() => monthTickLabel(periods?.previous), [periods]);
-  const currLegend = useMemo(() => monthTickLabel(periods?.current_mtd), [periods]);
-
-=======
   const prevShort = useMemo(() => getShort(periods?.previous?.label), [periods]);
   const currShort = useMemo(() => getShort(periods?.current_mtd?.label), [periods]);
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
 
   return (
     <div className="w-full">
@@ -541,15 +472,9 @@ export default function LiveBiLineGraph({ dailySeries, periods, loading, error }
         <div>
           <h2 className="text-xl font-bold text-[#414042]">
             Performance Trend{" "}
-<<<<<<< HEAD
-            {/* <span className="text-[#5EA68E]">
-              {prevShort && currShort ? `(${currShort} vs ${prevShort})` : ""}
-            </span> */}
-=======
             <span className="text-[#5EA68E]">
               {prevShort && currShort ? `(${currShort} vs ${prevShort})` : ""}
             </span>
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
           </h2>
         </div>
 
@@ -591,13 +516,8 @@ export default function LiveBiLineGraph({ dailySeries, periods, loading, error }
             dataPrev={dailySeries.previous || []}
             dataCurr={dailySeries.current_mtd || []}
             metric={chartMetric}
-<<<<<<< HEAD
-            prevLabel={prevLegend}
-            currLabel={currLegend}
-=======
             prevLabel={periods?.previous?.label}
             currLabel={periods?.current_mtd?.label}
->>>>>>> f98309c9d3d996c3781d8eeef5035c48606b6ffb
           />
         )}
 

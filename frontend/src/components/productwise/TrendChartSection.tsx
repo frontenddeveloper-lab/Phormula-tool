@@ -1668,7 +1668,7 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
         {/* Centered legend */}
         <div className="flex-1 flex justify-center">
           {activeTab === "sales_cm1" ? (
-            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-gray-700">
+            <div className="flex flex-wrap justify-center items-center gap-6 text-sm sm:text-base font-semibold text-gray-700">
               <div className="flex items-center gap-2">
                 <span className="h-[2px] w-10 bg-gray-800" />
                 <span>Net Sales</span>
@@ -1686,12 +1686,21 @@ const TrendChartSection: React.FC<TrendChartSectionProps> = ({
           )}
         </div>
 
-  {/* right actions */}
-  <div className="flex justify-end items-center gap-2">
-    <DownloadIconButton onClick={handleDownload} />
-  </div>
-</div>
+        {/* Actions on the right */}
+        <div className="flex items-center gap-2">
+          {/* {onViewBusinessInsights && (
+            <button
+              type="button"
+              onClick={onViewBusinessInsights}
+              className="inline-flex items-center rounded-md bg-slate-800 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-100 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400"
+            >
+              View Business Insights
+            </button>
+          )} */}
 
+          <DownloadIconButton onClick={handleDownload} />
+        </div>
+      </div>
 
     </div>
   );
