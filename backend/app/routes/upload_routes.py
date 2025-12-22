@@ -27,6 +27,8 @@ from app.utils.currency_utils import (  process_global_yearly_skuwise_data ,
 
 from dotenv import load_dotenv
 from sqlalchemy import MetaData
+from sqlalchemy import text
+
 
 
 load_dotenv()
@@ -389,10 +391,82 @@ def upload():
         raise ValueError("Unsupported country")
 
             
-    with engine.connect() as conn:
-        country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
+    # with engine.connect() as conn:
+    #     country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
 
-    df = df.merge(country_df, on='sku', how='left')
+    # df = df.merge(country_df, on='sku', how='left')
+
+    
+
+    MONTH_NUM = {
+        "january": 1, "february": 2, "march": 3, "april": 4,
+        "may": 5, "june": 6, "july": 7, "august": 8,
+        "september": 9, "october": 10, "november": 11, "december": 12
+    }
+
+    target_month_num = MONTH_NUM.get(month.lower())
+    if not target_month_num:
+        raise ValueError(f"Invalid month: {month}. Expected january..december")
+
+    target_year = int(year)  # form year string -> int
+
+    month_case_sql = """
+    CASE lower(month)
+        WHEN 'january' THEN 1
+        WHEN 'february' THEN 2
+        WHEN 'march' THEN 3
+        WHEN 'april' THEN 4
+        WHEN 'may' THEN 5
+        WHEN 'june' THEN 6
+        WHEN 'july' THEN 7
+        WHEN 'august' THEN 8
+        WHEN 'september' THEN 9
+        WHEN 'october' THEN 10
+        WHEN 'november' THEN 11
+        WHEN 'december' THEN 12
+        ELSE NULL
+    END
+    """
+
+    # year is string in DB, so cast it for comparisons
+    price_asof_query = text(f"""
+        SELECT sku, price, currency, product_name
+        FROM (
+            SELECT
+                {sku_column} AS sku,
+                price,
+                currency,
+                product_name,
+                CAST(year AS INTEGER) AS year_int,
+                {month_case_sql} AS month_num,
+                ROW_NUMBER() OVER (
+                    PARTITION BY {sku_column}
+                    ORDER BY CAST(year AS INTEGER) DESC, {month_case_sql} DESC
+                ) AS rn
+            FROM {country_table_name}
+            WHERE
+                year IS NOT NULL
+                AND trim(year) <> ''
+                AND {month_case_sql} IS NOT NULL
+                AND (
+                    CAST(year AS INTEGER) < :target_year
+                    OR (CAST(year AS INTEGER) = :target_year AND {month_case_sql} <= :target_month_num)
+                )
+        ) x
+        WHERE x.rn = 1
+    """)
+
+    with engine.connect() as conn:
+        country_df = pd.read_sql(
+            price_asof_query,
+            conn,
+            params={"target_year": target_year, "target_month_num": target_month_num}
+        )
+
+    df = df.merge(country_df, on="sku", how="left")
+
+
+    
 
     with engine.connect() as conn:
         countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)
@@ -711,10 +785,79 @@ def upload():
                 raise ValueError("Unsupported country")
 
             
-            with engine.connect() as conn:
-                country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
+            # with engine.connect() as conn:
+            #     country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
 
-            df = df.merge(country_df, on='sku', how='left')
+            # df = df.merge(country_df, on='sku', how='left')
+
+            
+            MONTH_NUM = {
+                "january": 1, "february": 2, "march": 3, "april": 4,
+                "may": 5, "june": 6, "july": 7, "august": 8,
+                "september": 9, "october": 10, "november": 11, "december": 12
+            }
+
+            target_month_num = MONTH_NUM.get(month.lower())
+            if not target_month_num:
+                raise ValueError(f"Invalid month: {month}. Expected january..december")
+
+            target_year = int(year)  # form year string -> int
+
+            month_case_sql = """
+            CASE lower(month)
+                WHEN 'january' THEN 1
+                WHEN 'february' THEN 2
+                WHEN 'march' THEN 3
+                WHEN 'april' THEN 4
+                WHEN 'may' THEN 5
+                WHEN 'june' THEN 6
+                WHEN 'july' THEN 7
+                WHEN 'august' THEN 8
+                WHEN 'september' THEN 9
+                WHEN 'october' THEN 10
+                WHEN 'november' THEN 11
+                WHEN 'december' THEN 12
+                ELSE NULL
+            END
+            """
+
+            # year is string in DB, so cast it for comparisons
+            price_asof_query = text(f"""
+                SELECT sku, price, currency, product_name
+                FROM (
+                    SELECT
+                        {sku_column} AS sku,
+                        price,
+                        currency,
+                        product_name,
+                        CAST(year AS INTEGER) AS year_int,
+                        {month_case_sql} AS month_num,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY {sku_column}
+                            ORDER BY CAST(year AS INTEGER) DESC, {month_case_sql} DESC
+                        ) AS rn
+                    FROM {country_table_name}
+                    WHERE
+                        year IS NOT NULL
+                        AND trim(year) <> ''
+                        AND {month_case_sql} IS NOT NULL
+                        AND (
+                            CAST(year AS INTEGER) < :target_year
+                            OR (CAST(year AS INTEGER) = :target_year AND {month_case_sql} <= :target_month_num)
+                        )
+                ) x
+                WHERE x.rn = 1
+            """)
+
+            with engine.connect() as conn:
+                country_df = pd.read_sql(
+                    price_asof_query,
+                    conn,
+                    params={"target_year": target_year, "target_month_num": target_month_num}
+                )
+
+            df = df.merge(country_df, on="sku", how="left")
+
 
             with engine.connect() as conn:
                 countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)
@@ -1061,6 +1204,9 @@ def multiCountry():
         Column('asin', String(255), nullable=True),
         Column('price', Float, nullable=True),
         Column('currency', String(255), nullable=True),
+        Column('month', String(20), nullable=True),
+        Column('year', String(20), nullable=True),
+
     )
 
     session = None
@@ -1122,6 +1268,21 @@ def multiCountry():
 
             currency = _pick(row, ['currency'])
 
+            month = _pick(row, ['month', 'Month', 'mon', 'mm'])
+            year  = _pick(row, ['year', 'Year', 'yyyy', 'yy'])
+
+            # int conversion (safe)
+            try:
+                month = str(month).strip().lower() if month not in (None, '') else None
+            except Exception:
+                month = None
+
+            try:
+                year = str(year) if year not in (None, '') else None
+            except Exception:
+                year = None
+
+
             # Skip fully empty lines
             if not any([s_no, product_name, product_barcode, asin, sku_uk, sku_us, price_value, currency]):
                 continue
@@ -1142,6 +1303,8 @@ def multiCountry():
                 'asin': _s(asin),
                 'price': price_value,
                 'currency': _s(currency),
+                'month': month,
+                'year': year,
             })
 
         if inserts:

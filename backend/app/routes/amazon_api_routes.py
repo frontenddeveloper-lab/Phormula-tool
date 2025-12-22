@@ -40,6 +40,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Tuple, Optional
 from flask import jsonify, request, send_file
 from sqlalchemy import and_, text, create_engine
+from sqlalchemy import text
 
 
 # ---------------------------------------------------------
@@ -1558,13 +1559,83 @@ def run_upload_pipeline_from_df(
         raise ValueError("Unsupported country")
 
     # Join SKU data
+    # with engine.connect() as conn:
+    #     country_df = pd.read_sql(
+    #         f"SELECT {sku_column} AS sku, price, currency, product_name FROM {country_table_name}",
+    #         conn
+    #     )
+
+    # df = df.merge(country_df, on="sku", how="left")
+
+    MONTH_NUM = {
+        "january": 1, "february": 2, "march": 3, "april": 4,
+        "may": 5, "june": 6, "july": 7, "august": 8,
+        "september": 9, "october": 10, "november": 11, "december": 12
+    }
+
+    target_month_num = MONTH_NUM.get(month.lower())
+    if not target_month_num:
+        raise ValueError(f"Invalid month: {month}. Expected january..december")
+
+    target_year = int(year)  # form year string -> int
+
+    month_case_sql = """
+    CASE lower(month)
+        WHEN 'january' THEN 1
+        WHEN 'february' THEN 2
+        WHEN 'march' THEN 3
+        WHEN 'april' THEN 4
+        WHEN 'may' THEN 5
+        WHEN 'june' THEN 6
+        WHEN 'july' THEN 7
+        WHEN 'august' THEN 8
+        WHEN 'september' THEN 9
+        WHEN 'october' THEN 10
+        WHEN 'november' THEN 11
+        WHEN 'december' THEN 12
+        ELSE NULL
+    END
+    """
+
+    # year is string in DB, so cast it for comparisons
+    price_asof_query = text(f"""
+        SELECT sku, price, currency, product_name
+        FROM (
+            SELECT
+                {sku_column} AS sku,
+                price,
+                currency,
+                product_name,
+                CAST(year AS INTEGER) AS year_int,
+                {month_case_sql} AS month_num,
+                ROW_NUMBER() OVER (
+                    PARTITION BY {sku_column}
+                    ORDER BY CAST(year AS INTEGER) DESC, {month_case_sql} DESC
+                ) AS rn
+            FROM {country_table_name}
+            WHERE
+                year IS NOT NULL
+                AND trim(year) <> ''
+                AND {month_case_sql} IS NOT NULL
+                AND (
+                    CAST(year AS INTEGER) < :target_year
+                    OR (CAST(year AS INTEGER) = :target_year AND {month_case_sql} <= :target_month_num)
+                )
+        ) x
+        WHERE x.rn = 1
+    """)
+
     with engine.connect() as conn:
         country_df = pd.read_sql(
-            f"SELECT {sku_column} AS sku, price, currency, product_name FROM {country_table_name}",
-            conn
+            price_asof_query,
+            conn,
+            params={"target_year": target_year, "target_month_num": target_month_num}
         )
 
     df = df.merge(country_df, on="sku", how="left")
+
+
+
 
     with engine.connect() as conn:
         countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)

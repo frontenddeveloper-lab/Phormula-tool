@@ -2269,11 +2269,174 @@ def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
 # FETCH DATA: PREVIOUS PERIOD (historical table) + CURRENT MTD (orders)
 # -----------------------------------------------------------------------------
 
+# def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: date):
+#     """
+#     Return:
+#       sku_metrics: list of per-SKU metrics (for growth calc)
+#       daily_series: list of {date, quantity, net_sales} for line chart
+#     """
+#     table_name = construct_prev_table_name(
+#         user_id=user_id,
+#         country=country,
+#         month=prev_start.month,
+#         year=prev_start.year,
+#     )
+
+#     # Debug: show constructed table name
+#     print(f"[DEBUG] Previous Period Table: {table_name}")
+
+#     # Safer approach:
+#     #  - build a subquery that casts date_time to date_ts
+#     #  - use NULLIF to avoid casting '0' / '' values
+#     query = text(f"""
+#         SELECT *
+#         FROM (
+#             SELECT
+#                 *,
+#                 NULLIF(NULLIF(date_time, '0'), '')::timestamp AS date_ts
+#             FROM {table_name}
+#         ) t
+#         WHERE date_ts >= :start_date
+#           AND date_ts < :end_date_plus_one
+#     """)
+
+#     params = {
+#         "start_date": datetime.combine(prev_start, datetime.min.time()),
+#         "end_date_plus_one": datetime.combine(prev_end + timedelta(days=1), datetime.min.time()),
+#     }
+
+#     # Debug: show SQL + params
+#     print("[DEBUG] SQL for previous period:")
+#     print(query)
+#     print("[DEBUG] Params:", params)
+
+#     with engine_hist.connect() as conn:
+#         result = conn.execute(query, params)
+#         rows = result.fetchall()
+
+#         # Debug: row count
+#         print(f"[DEBUG] Fetched {len(rows)} rows from {table_name}")
+
+#         if len(rows) > 0:
+#             # Show first 2 rows for sanity
+#             print("[DEBUG] First rows:", rows[:2])
+
+#         if not rows:
+#             print("[DEBUG] No previous period data found.")
+#             return [], []
+
+#         df = pd.DataFrame(rows, columns=result.keys())
+
+#     # Debug: DataFrame shape
+#     print(f"[DEBUG] DataFrame shape: {df.shape}")
+#     print(f"[DEBUG] DataFrame columns: {list(df.columns)}")
+
+#     # ---- per-SKU metrics (existing behaviour) ----
+#     sku_metrics = compute_sku_metrics_from_df(df)
+
+#     # Debug: Number of SKU items returned
+#     print(f"[DEBUG] SKU Metrics Count: {len(sku_metrics)}")
+
+#         # ---- daily series for line chart (quantity + net_sales + product_sales + profit) ----
+#     daily_series = []
+
+#     # Prefer using the parsed timestamp column if present
+#     date_col_for_series = None
+#     if "date_ts" in df.columns:
+#         date_col_for_series = "date_ts"
+#     elif "date_time" in df.columns:
+#         date_col_for_series = "date_time"
+
+#     if date_col_for_series:
+#         tmp = df.copy()
+#         tmp["date_only"] = pd.to_datetime(tmp[date_col_for_series], errors="coerce").dt.date
+#         tmp = tmp.dropna(subset=["date_only"])
+
+#         # 1) quantity/day (simple sum)
+#         if "quantity" in tmp.columns:
+#             tmp["quantity"] = safe_num(tmp["quantity"])
+#             daily_qty = tmp.groupby("date_only", as_index=False)["quantity"].sum()
+#             qty_map = {d: float(v) for d, v in zip(daily_qty["date_only"], daily_qty["quantity"])}
+#         else:
+#             qty_map = {}
+
+#         # 2) product_sales/day (gross sales)
+#         if "product_sales" in tmp.columns:
+#             tmp["product_sales"] = safe_num(tmp["product_sales"])
+#             daily_ps = tmp.groupby("date_only", as_index=False)["product_sales"].sum()
+#             ps_map = {d: float(v) for d, v in zip(daily_ps["date_only"], daily_ps["product_sales"])}
+#         else:
+#             ps_map = {}
+
+#         # 3) net_sales/day using uk_sales (needs sku + date_only)
+#         net_sales_map = {}
+#         try:
+#             df_sales = tmp.copy()
+#             df_sales["sku"] = df_sales.get("sku", "").astype(str).str.strip()
+#             sales_src, sales_by, _ = uk_sales(df_sales)   # sales_by: sku, __metric__
+#             if sales_src is not None and not sales_src.empty:
+#                 # sales_src is usually row-level; safest is to aggregate on (date_only, sku) if available
+#                 # If sales_src already has date column, use it; otherwise compute from df_sales alignment.
+#                 pass
+
+#             if sales_by is not None and not sales_by.empty:
+#                 # We need DAILY, so compute metric per row group.
+#                 # Best reliable way: recompute uk_sales on each day-slice is expensive.
+#                 # Instead: compute sales metric per row by building "sales_metric_row" if uk_sales returns it.
+#                 # If uk_sales does not return row-level, fallback to using product_sales as net_sales.
+#                 raise RuntimeError("uk_sales returned only sku-level; falling back to product_sales for daily net_sales.")
+#         except Exception:
+#             # fallback: daily net_sales = daily product_sales (matches your older behavior)
+#             net_sales_map = dict(ps_map)
+
+#         # 4) profit/day using uk_profit (same limitation as above; fallback if only sku-level)
+#         profit_map = {}
+#         try:
+#             df_profit = tmp.copy()
+#             df_profit["sku"] = df_profit.get("sku", "").astype(str).str.strip()
+#             profit_src, profit_by, _ = uk_profit(df_profit)
+#             if profit_src is not None and not profit_src.empty:
+#                 # If profit_src contains per-row metric, aggregate daily.
+#                 if "__metric__" in profit_src.columns:
+#                     profit_src = profit_src.copy()
+#                     # ensure date is present
+#                     if "date_only" not in profit_src.columns:
+#                         # align date_only from tmp if profit_src is same-row as input
+#                         profit_src["date_only"] = df_profit["date_only"].values
+#                     profit_src["__metric__"] = safe_num(profit_src["__metric__"])
+#                     daily_profit = profit_src.groupby("date_only", as_index=False)["__metric__"].sum()
+#                     profit_map = {d: float(v) for d, v in zip(daily_profit["date_only"], daily_profit["__metric__"])}
+#                 else:
+#                     raise RuntimeError("profit_src missing __metric__")
+#             else:
+#                 # if only sku-level, can't do daily without row-level; fallback to 0
+#                 profit_map = {}
+#         except Exception:
+#             profit_map = {}
+
+#         all_dates = sorted(set(qty_map.keys()) | set(ps_map.keys()) | set(net_sales_map.keys()) | set(profit_map.keys()))
+
+#         for d in all_dates:
+#             daily_series.append(
+#                 {
+#                     "date": d.isoformat(),
+#                     "quantity": qty_map.get(d, 0.0) if qty_map else None,
+#                     "net_sales": net_sales_map.get(d, 0.0) if net_sales_map else None,
+#                     "product_sales": ps_map.get(d, 0.0) if ps_map else None,
+#                     "profit": profit_map.get(d, 0.0) if profit_map else None,
+#                 }
+#             )
+
+#         print(f"[DEBUG] Daily series points: {len(daily_series)}")
+
+
+#     return sku_metrics, daily_series
+
 def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: date):
     """
     Return:
       sku_metrics: list of per-SKU metrics (for growth calc)
-      daily_series: list of {date, quantity, net_sales} for line chart
+      daily_series: list of {date, quantity, net_sales, product_sales, profit}
     """
     table_name = construct_prev_table_name(
         user_id=user_id,
@@ -2282,12 +2445,8 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
         year=prev_start.year,
     )
 
-    # Debug: show constructed table name
     print(f"[DEBUG] Previous Period Table: {table_name}")
 
-    # Safer approach:
-    #  - build a subquery that casts date_time to date_ts
-    #  - use NULLIF to avoid casting '0' / '' values
     query = text(f"""
         SELECT *
         FROM (
@@ -2305,7 +2464,6 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
         "end_date_plus_one": datetime.combine(prev_end + timedelta(days=1), datetime.min.time()),
     }
 
-    # Debug: show SQL + params
     print("[DEBUG] SQL for previous period:")
     print(query)
     print("[DEBUG] Params:", params)
@@ -2314,84 +2472,95 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
         result = conn.execute(query, params)
         rows = result.fetchall()
 
-        # Debug: row count
         print(f"[DEBUG] Fetched {len(rows)} rows from {table_name}")
 
-        if len(rows) > 0:
-            # Show first 2 rows for sanity
+        if rows:
             print("[DEBUG] First rows:", rows[:2])
-
-        if not rows:
+        else:
             print("[DEBUG] No previous period data found.")
             return [], []
 
         df = pd.DataFrame(rows, columns=result.keys())
 
-    # Debug: DataFrame shape
     print(f"[DEBUG] DataFrame shape: {df.shape}")
     print(f"[DEBUG] DataFrame columns: {list(df.columns)}")
 
-    # ---- per-SKU metrics (existing behaviour) ----
+    # -------------------------------------------------
+    # 1) PER-SKU METRICS (UNCHANGED)
+    # -------------------------------------------------
     sku_metrics = compute_sku_metrics_from_df(df)
-
-    # Debug: Number of SKU items returned
     print(f"[DEBUG] SKU Metrics Count: {len(sku_metrics)}")
 
-    # ---- daily series for line chart (quantity + net_sales) ----
+    # -------------------------------------------------
+    # 2) DAILY SERIES (FORMULA UTILS DAY-WISE)
+    # -------------------------------------------------
     daily_series = []
 
-    # Prefer using the parsed timestamp column if present
-    date_col_for_series = None
-    if "date_ts" in df.columns:
-        date_col_for_series = "date_ts"
-    elif "date_time" in df.columns:
-        date_col_for_series = "date_time"
+    date_col = "date_ts" if "date_ts" in df.columns else "date_time"
 
-    if date_col_for_series:
+    if date_col in df.columns:
         tmp = df.copy()
-        tmp["date_only"] = pd.to_datetime(tmp[date_col_for_series]).dt.date
 
-        # quantity per day (agar column hai)
-        if "quantity" in tmp.columns:
-            tmp["quantity"] = safe_num(tmp["quantity"])
-            daily_qty = (
-                tmp.groupby("date_only", as_index=False)["quantity"]
-                   .sum()
-            )
-            qty_map = {
-                d: float(q)
-                for d, q in zip(daily_qty["date_only"], daily_qty["quantity"])
-            }
-        else:
-            qty_map = {}
+        # ✅ NEW: filter out rows with invalid / blank SKUs
+        if "sku" in tmp.columns:
+            tmp = tmp.loc[sku_mask(tmp)]
 
-        # net_sales per day (yahan simple approx: product_sales ka sum)
-        if "product_sales" in tmp.columns:
-            tmp["product_sales"] = safe_num(tmp["product_sales"])
-            daily_sales = (
-                tmp.groupby("date_only", as_index=False)["product_sales"]
-                   .sum()
-            )
-            sales_map = {
-                d: float(v)
-                for d, v in zip(daily_sales["date_only"], daily_sales["product_sales"])
-            }
-        else:
-            sales_map = {}
+        tmp["date_only"] = pd.to_datetime(tmp[date_col], errors="coerce").dt.date
+        tmp = tmp.dropna(subset=["date_only"])
 
-        all_dates = sorted(set(qty_map.keys()) | set(sales_map.keys()))
+        for d, day_df in tmp.groupby("date_only"):
 
-        for d in all_dates:
-            daily_series.append(
-                {
-                    "date": d.isoformat(),
-                    "quantity": qty_map.get(d, 0.0) if qty_map else None,
-                    "net_sales": sales_map.get(d, 0.0) if sales_map else None,
-                }
+            quantity = (
+                safe_num(day_df["quantity"]).sum()
+                if "quantity" in day_df.columns
+                else 0.0
             )
 
-        # Debug: line chart points
+            product_sales = (
+                safe_num(day_df["product_sales"]).sum()
+                if "product_sales" in day_df.columns
+                else 0.0
+            )
+
+            net_sales, _, _ = uk_sales(day_df)
+            profit, _, _ = uk_profit(day_df)
+
+            daily_series.append({
+                "date": d.isoformat(),
+                "quantity": float(quantity),
+                "product_sales": float(product_sales),
+                "net_sales": float(net_sales),
+                "profit": float(profit),
+            })
+
+        daily_series = sorted(daily_series, key=lambda x: x["date"])
         print(f"[DEBUG] Daily series points: {len(daily_series)}")
+
+    # -------------------------------------------------
+    # 3) DEBUG TOTALS FOR CROSS-CHECKING
+    # -------------------------------------------------
+    total_daily_qty = sum(d["quantity"] for d in daily_series)
+    total_daily_ps = sum(d["product_sales"] for d in daily_series)
+    total_daily_ns = sum(d["net_sales"] for d in daily_series)
+    total_daily_profit = sum(d["profit"] for d in daily_series)
+
+    full_ns, _, _ = uk_sales(df)
+    full_profit, _, _ = uk_profit(df)
+
+    print("\n================ DAILY SERIES CHECK =================")
+    print(f"Daily SUM → Quantity       : {total_daily_qty:.2f}")
+    print(f"Daily SUM → Product Sales  : {total_daily_ps:.2f}")
+    print(f"Daily SUM → Net Sales      : {total_daily_ns:.2f}")
+    print(f"Daily SUM → Profit         : {total_daily_profit:.2f}")
+
+    print("\n--------------- FULL PERIOD (formula_utils) ---------")
+    print(f"Full Period → Net Sales    : {full_ns:.2f}")
+    print(f"Full Period → Profit       : {full_profit:.2f}")
+
+    print("\n--------------- DIFFERENCE (Daily - Full) -----------")
+    print(f"Net Sales Diff  : {(total_daily_ns - full_ns):.2f}")
+    print(f"Profit Diff     : {(total_daily_profit - full_profit):.2f}")
+    print("====================================================\n")
 
     return sku_metrics, daily_series
 
@@ -2550,7 +2719,7 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
     sku_metrics = sku_agg.to_dict(orient="records")
 
     # ----------------------------
-    # ---- daily series for line chart (quantity + net_sales) ----
+    # ---- daily series for line chart (quantity + net_sales + product_sales + profit) ----
     # ----------------------------
     daily_series = []
     if "purchase_date" in df.columns:
@@ -2560,24 +2729,33 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
         daily_qty = tmp.groupby("date_only", as_index=False)["quantity"].sum()
         qty_map = {d: float(q) for d, q in zip(daily_qty["date_only"], daily_qty["quantity"])}
 
-        daily_sales = tmp.groupby("date_only", as_index=False)["net_sales"].sum()
-        sales_map = {d: float(v) for d, v in zip(daily_sales["date_only"], daily_sales["net_sales"])}
+        daily_ns = tmp.groupby("date_only", as_index=False)["net_sales"].sum()
+        ns_map = {d: float(v) for d, v in zip(daily_ns["date_only"], daily_ns["net_sales"])}
 
-        for d in sorted(set(qty_map.keys()) | set(sales_map.keys())):
+        daily_ps = tmp.groupby("date_only", as_index=False)["product_sales"].sum()
+        ps_map = {d: float(v) for d, v in zip(daily_ps["date_only"], daily_ps["product_sales"])}
+
+        daily_profit = tmp.groupby("date_only", as_index=False)["profit"].sum()
+        profit_map = {d: float(v) for d, v in zip(daily_profit["date_only"], daily_profit["profit"])}
+
+        for d in sorted(set(qty_map.keys()) | set(ns_map.keys()) | set(ps_map.keys()) | set(profit_map.keys())):
             daily_series.append(
                 {
                     "date": d.isoformat(),
                     "quantity": qty_map.get(d, 0.0),
-                    "net_sales": sales_map.get(d, 0.0),
+                    "net_sales": ns_map.get(d, 0.0),
+                    "product_sales": ps_map.get(d, 0.0),
+                    "profit": profit_map.get(d, 0.0),
                 }
             )
+
 
     return sku_metrics, daily_series
 
 
 
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # GROWTH METRIC CALCULATION (same formulas as Business Insights)
 # -----------------------------------------------------------------------------
 
