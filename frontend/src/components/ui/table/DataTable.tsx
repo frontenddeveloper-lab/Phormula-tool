@@ -581,13 +581,14 @@ export default function DataTable<T extends Row>({
           {hasData &&
             pageRows.map((row, ri) => (
               <tr
-                key={ri}
-                className={clsx(
-                  zebra && ri % 2 === 1 ? "bg-slate-50" : "bg-white",
-                  "transition-colors hover:bg-emerald-50/80",
-                  rowClassName?.(row, (page - 1) * pageSize + ri)
-                )}
-              >
+  key={ri}
+  className={clsx(
+    rowClassName?.(row, (page - 1) * pageSize + ri),
+    "transition-colors",
+    !row.__isTotal && "hover:bg-emerald-50/80",
+    !row.__isTotal && "bg-white"
+  )}
+>
                 {columns.map((col, ci) => {
                   const value = (row as Record<string, React.ReactNode>)[
                     String(col.key)

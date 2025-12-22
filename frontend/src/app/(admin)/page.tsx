@@ -1432,7 +1432,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSelector } from "react-redux";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import Loader from "@/components/loader/Loader";
 import DownloadIconButton from "@/components/ui/button/DownloadIconButton";
@@ -1441,7 +1440,6 @@ import DashboardBargraphCard from "@/components/dashboard/DashboardBargraphCard"
 import SalesTargetCard from "@/components/dashboard/SalesTargetCard";
 import AmazonStatCard from "@/components/dashboard/AmazonStatCard";
 import CurrentInventorySection from "@/components/dashboard/CurrentInventorySection";
-
 import { RootState } from "@/lib/store";
 import { useAmazonConnections } from "@/lib/utils/useAmazonConnections";
 
@@ -1518,7 +1516,11 @@ type DailyPoint = {
   date: string;
   quantity?: number;
   net_sales?: number;
+  product_sales?: number;
+  profit?: number;
+  cm2_profit?: number; // ✅ add
 };
+
 
 type DailySeries = {
   previous: DailyPoint[];
@@ -1697,6 +1699,25 @@ function RangePicker({
   );
 }
 
+
+
+const sliceByDayRange = (
+  points: DailyPoint[] = [],
+  startDay: number | null,
+  endDay: number | null
+) => {
+  if (startDay == null || endDay == null) return points;
+
+  const s = Math.min(startDay, endDay);
+  const e = Math.max(startDay, endDay);
+
+  return points.filter((p) => {
+    const day = Number(p.date?.slice(8, 10)); // "YYYY-MM-DD" -> DD
+    return day >= s && day <= e;
+  });
+};
+
+
 export default function DashboardPage() {
   const { platform } = usePlatform();
   const { data: userData } = useGetUserDataQuery();
@@ -1771,6 +1792,17 @@ export default function DashboardPage() {
 
   const chartRef = React.useRef<HTMLDivElement | null>(null);
   const prevLabel = useMemo(() => getPrevMonthShortLabel(), []);
+
+  // ✅ put near other helpers
+  const getDayOfMonthIST = () => {
+    const now = new Date();
+    const ist = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    return ist.getDate(); // 1..31
+  };
+
+  // ✅ add state to "lock" today's sales (in BI currency)
+  const [todaySalesRaw, setTodaySalesRaw] = useState<number>(0);
+
 
   /* ===================== ✅ SHARED RANGE STATE (PARENT) ===================== */
   const [selectedStartDay, setSelectedStartDay] = useState<number | null>(null);
@@ -2170,7 +2202,7 @@ export default function DashboardPage() {
   const fetchBiSeries = useCallback(
     async (startDay?: number | null, endDay?: number | null) => {
       if (!showLiveBI) return;
-      
+
       const normalized = (countryName || "").toLowerCase();
       if (!normalized || normalized === "global") return;
 
@@ -2276,6 +2308,8 @@ export default function DashboardPage() {
   const uk = useMemo(() => {
     const netSalesGBP = derived?.net_sales != null ? toNumberSafe(derived.net_sales) : null;
     const aspGBP = derived?.asp != null ? toNumberSafe(derived.asp) : null;
+    const cm2ProfitGBP =
+      derived?.cm2_profit != null ? toNumberSafe(derived.cm2_profit) : null;
 
     const cogsGBP = totals?.cogs != null ? toNumberSafe(totals.cogs) : 0;
     const fbaFeesGBP = totals?.fba_fees != null ? toNumberSafe(totals.fba_fees) : 0;
@@ -2291,10 +2325,16 @@ export default function DashboardPage() {
 
     const unitsGBP = totals?.quantity != null ? toNumberSafe(totals.quantity) : null;
 
+    // let profitPctGBP: number | null = null;
+    // if (profitGBP !== null && netSalesGBP && netSalesGBP !== 0) {
+    //   profitPctGBP = (profitGBP / netSalesGBP) * 100;
+    // }
+
     let profitPctGBP: number | null = null;
-    if (profitGBP !== null && netSalesGBP && netSalesGBP !== 0) {
-      profitPctGBP = (profitGBP / netSalesGBP) * 100;
+    if (cm2ProfitGBP !== null && netSalesGBP && netSalesGBP !== 0) {
+      profitPctGBP = (cm2ProfitGBP / netSalesGBP) * 100;
     }
+
 
     const grossSalesGBP =
       totals?.product_sales != null ? toNumberSafe(totals.product_sales) : null; // ✅ current gross
@@ -2312,6 +2352,7 @@ export default function DashboardPage() {
       grossSalesGBP,
       aspGBP,
       profitGBP,
+      cm2ProfitGBP,
       profitPctGBP,
       cogsGBP,
       amazonFeesGBP,
@@ -2339,6 +2380,7 @@ export default function DashboardPage() {
       grossSales: toNumberSafe(prevTotals?.gross_sales ?? 0), // ✅ add
       asp: toNumberSafe(prevTotals?.asp ?? 0),
       profit: toNumberSafe(prevTotals?.profit ?? 0),
+      cm2Profit: toNumberSafe(prevTotals?.cm2_profit ?? 0),
       profitPct: toNumberSafe(prevTotals?.profit_percentage ?? 0),
     };
   }, [prevTotals]);
@@ -2374,21 +2416,90 @@ export default function DashboardPage() {
 
 
   /* ===================== ✅ RANGE KPIs FOR CARDS (FROM SAME BI DATA AS GRAPH) ===================== */
-  const rangeKpis = useMemo(() => {
-    if (!biDailySeries?.current_mtd?.length) return { sales: 0, units: 0, asp: 0 };
+  // const rangeKpis = useMemo(() => {
+  //   if (!biDailySeries?.current_mtd?.length) return { sales: 0, units: 0, asp: 0 };
 
-    const sales = biDailySeries.current_mtd.reduce(
-      (a, d) => a + (Number(d.net_sales) || 0),
-      0
-    );
-    const units = biDailySeries.current_mtd.reduce(
-      (a, d) => a + (Number(d.quantity) || 0),
-      0
-    );
-    const asp = units > 0 ? sales / units : 0;
+  //   const sales = biDailySeries.current_mtd.reduce(
+  //     (a, d) => a + (Number(d.net_sales) || 0),
+  //     0
+  //   );
+  //   const units = biDailySeries.current_mtd.reduce(
+  //     (a, d) => a + (Number(d.quantity) || 0),
+  //     0
+  //   );
+  //   const asp = units > 0 ? sales / units : 0;
 
-    return { sales, units, asp };
+  //   return { sales, units, asp };
+  // }, [biDailySeries]);
+
+
+  useEffect(() => {
+    if (!biDailySeries?.current_mtd?.length) return;
+
+    const todayDay = getDayOfMonthIST();
+
+    // find the point for the real calendar day (e.g. 10th)
+    const todayPoint = biDailySeries.current_mtd.find((p) => {
+      const d = Number(p.date?.slice(8, 10));
+      return d === todayDay;
+    });
+
+    // ✅ only update if that day exists in series (prevents changing when you select a range not containing today)
+    if (todayPoint?.net_sales != null) {
+      setTodaySalesRaw(Number(todayPoint.net_sales) || 0);
+    }
   }, [biDailySeries]);
+
+
+  const biCardKpis = useMemo(() => {
+    const currAll = biDailySeries?.current_mtd || [];
+    const prevAll = biDailySeries?.previous || [];
+
+    // always slice both when range is active
+    const currPts = sliceByDayRange(currAll, selectedStartDay, selectedEndDay);
+    const prevPts = sliceByDayRange(prevAll, selectedStartDay, selectedEndDay);
+
+    const sum = (arr: DailyPoint[], key: keyof DailyPoint) =>
+      arr.reduce((a, d) => a + (Number(d[key]) || 0), 0);
+
+    const curr = {
+      units: sum(currPts, "quantity"),
+      netSales: sum(currPts, "net_sales"),
+      grossSales: sum(currPts, "product_sales"),
+      profit: sum(currPts, "profit"),
+      cm2Profit: sum(currPts, "cm2_profit"),
+    };
+
+    const prev = {
+      units: sum(prevPts, "quantity"),
+      netSales: sum(prevPts, "net_sales"),
+      grossSales: sum(prevPts, "product_sales"),
+      profit: sum(prevPts, "profit"),
+    };
+
+    const currAsp = curr.units > 0 ? curr.netSales / curr.units : 0;
+    const prevAsp = prev.units > 0 ? prev.netSales / prev.units : 0;
+
+    const currProfitPct = curr.netSales !== 0 ? (curr.cm2Profit / curr.netSales) * 100 : 0;
+    const prevProfitPct = prev.netSales !== 0 ? (prev.cm2Profit / prev.netSales) * 100 : 0;
+
+
+    const deltaPct = (c: number, p: number) => (p ? ((c - p) / p) * 100 : null);
+
+    return {
+      curr: { ...curr, asp: currAsp, profitPct: currProfitPct },
+      prev: { ...prev, asp: prevAsp, profitPct: prevProfitPct },
+      deltas: {
+        units: deltaPct(curr.units, prev.units),
+        netSales: deltaPct(curr.netSales, prev.netSales),
+        grossSales: deltaPct(curr.grossSales, prev.grossSales),
+        asp: deltaPct(currAsp, prevAsp),
+        profit: deltaPct(curr.profit, prev.profit),
+        profitPctPts: currProfitPct - prevProfitPct, // ✅ percentage-points
+      },
+    };
+  }, [biDailySeries, selectedStartDay, selectedEndDay]);
+
 
   const rangeActive = selectedStartDay != null && selectedEndDay != null;
 
@@ -2582,23 +2693,53 @@ export default function DashboardPage() {
 
   /* ===================== P&L ITEMS (DISPLAY CURRENCY OUTPUT) ===================== */
   const plItems = useMemo(() => {
+    // const ukPl = () => {
+    //   const sales = convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP");
+    //   const fees = convertToDisplayCurrency(uk.amazonFeesGBP ?? 0, "GBP");
+    //   const cogs = convertToDisplayCurrency(uk.cogsGBP ?? 0, "GBP");
+    //   const adv = convertToDisplayCurrency(uk.advertisingGBP ?? 0, "GBP");
+    //   const platformFee = convertToDisplayCurrency(uk.platformFeeGBP ?? 0, "GBP");
+    //   const profit = convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP");
+    //   const cm2 = convertToDisplayCurrency(uk.cm2ProfitGBP ?? 0, "GBP");
+    //   return [
+    //     { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
+    //     { label: "COGS", raw: cogs, display: formatDisplayAmount(cogs) },
+    //     { label: "Amazon Fees", raw: fees, display: formatDisplayAmount(fees) },
+    //     { label: "CM1 Profit", raw: profit, display: formatDisplayAmount(profit) },
+    //     { label: "Advertisements", raw: adv, display: formatDisplayAmount(adv) },
+    //     { label: "Others", raw: platformFee, display: formatDisplayAmount(platformFee) },
+    //     { label: "CM2 Profit", raw: cm2, display: formatDisplayAmount(cm2) },
+    //   ];
+    // };
+
     const ukPl = () => {
       const sales = convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP");
       const fees = convertToDisplayCurrency(uk.amazonFeesGBP ?? 0, "GBP");
       const cogs = convertToDisplayCurrency(uk.cogsGBP ?? 0, "GBP");
       const adv = convertToDisplayCurrency(uk.advertisingGBP ?? 0, "GBP");
-      const platformFee = convertToDisplayCurrency(uk.platformFeeGBP ?? 0, "GBP");
-      const profit = convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP");
+
+      const others = convertToDisplayCurrency(uk.platformFeeGBP ?? 0, "GBP"); // you renamed Platform Fees → Others
+      const cm1 = convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP");         // you renamed Profit → CM1 Profit
+      const cm2 = convertToDisplayCurrency(uk.cm2ProfitGBP ?? 0, "GBP");
+
+      // ✅ NEW: Tax & Credits from totals.tax_and_credits
+      const taxCredits = convertToDisplayCurrency(
+        toNumberSafe(totals?.tax_and_credits ?? 0),
+        "GBP"
+      );
 
       return [
         { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
-        { label: "Amazon Fees", raw: fees, display: formatDisplayAmount(fees) },
         { label: "COGS", raw: cogs, display: formatDisplayAmount(cogs) },
+        { label: "Amazon Fees", raw: fees, display: formatDisplayAmount(fees) },
+        { label: "Tax & Credits", raw: taxCredits, display: formatDisplayAmount(taxCredits) },
+        { label: "CM1 Profit", raw: cm1, display: formatDisplayAmount(cm1) },
         { label: "Advertisements", raw: adv, display: formatDisplayAmount(adv) },
-        { label: "Platform Fees", raw: platformFee, display: formatDisplayAmount(platformFee) },
-        { label: "Profit", raw: profit, display: formatDisplayAmount(profit) },
+        { label: "Others", raw: others, display: formatDisplayAmount(others) },
+        { label: "CM2 Profit", raw: cm2, display: formatDisplayAmount(cm2) },
       ];
     };
+
 
     if (graphRegionToUse === "Global") {
       if (onlyAmazon) return ukPl();
@@ -2642,6 +2783,7 @@ export default function DashboardPage() {
     onlyAmazon,
     onlyShopify,
     combinedUSD,
+    totals?.tax_and_credits,
     uk.netSalesGBP,
     uk.amazonFeesGBP,
     uk.cogsGBP,
@@ -2670,9 +2812,12 @@ export default function DashboardPage() {
     "Amazon Fees": "#ff5c5c",
     COGS: "#AB64B5",
     Advertisements: "#F47A00",
-    "Other Charges": "#00627D",
-    "Platform Fees": "#154B9B",
-    Profit: "#87AD12",
+    "Tax & Credits": "#FFBE26",
+    // "Other Charges": "#00627D",
+    Others: "#00627D",
+    "CM1 Profit": "#87AD12",
+    "CM2 Profit": "#5EA49B",
+
   };
 
   const colors = labels.map((label) => colorMapping[label] || "#2CA9E0");
@@ -2735,9 +2880,11 @@ export default function DashboardPage() {
         "Amazon Fees": "(-)",
         COGS: "(-)",
         Advertisements: "(-)",
+        "Tax & Credits": "(+/-)",
         "Other Charges": "(-)",
-        "Platform Fees": "(-)",
-        Profit: "",
+        Others: "(-)",
+        "CM1 Profit": "",
+        "CM2 Profit": "",
       };
 
       values.forEach((v, idx) => {
@@ -2777,6 +2924,24 @@ export default function DashboardPage() {
     labels,
     values,
   ]);
+
+  const todaySalesFromBI = useMemo(() => {
+    const points = biDailySeries?.current_mtd || [];
+    if (!points.length) return 0;
+
+    // if range active, use sliced series (so "today" = last day in range)
+    const pts = rangeActive
+      ? sliceByDayRange(points, selectedStartDay, selectedEndDay)
+      : points;
+
+    if (!pts.length) return 0;
+
+    // pick last point by date (safe even if API order changes)
+    const last = [...pts].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+
+    return Number(last?.net_sales) || 0;
+  }, [biDailySeries, rangeActive, selectedStartDay, selectedEndDay]);
+
 
 
   /* ===================== ✅ GLOBAL CARD: prev/current + deltas ===================== */
@@ -2937,9 +3102,9 @@ export default function DashboardPage() {
                     <div className="flex items-baseline gap-2">
                       <PageBreadcrumb pageTitle="Global" variant="page" align="left" />
                     </div>
-                    <p className="mt-1 text-sm text-charcoal-500">
+                    {/* <p className="mt-1 text-sm text-charcoal-500">
                       Real-time data from Amazon &amp; Shopify
-                    </p>
+                    </p> */}
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6 gap-3 auto-rows-fr">
@@ -2956,7 +3121,18 @@ export default function DashboardPage() {
                     />
 
                     <AmazonStatCard
-                      label="Sales"
+                      label="Gross Sales"
+                      current={globalCurrGrossDisp}
+                      previous={globalPrevGrossDisp}
+                      deltaPct={safeDeltaPct(combinedGrossUSD, prevGlobalGrossUSD)}
+                      loading={loading || shopifyLoading}
+                      formatter={formatDisplayAmount}
+                      bottomLabel={prevLabel}
+                      className="border-[#FFD54F] bg-[#FFD54F26]"
+                    />
+
+                    <AmazonStatCard
+                      label="Net Sales"
                       current={convertToDisplayCurrency(combinedUSD, "USD")}
                       previous={convertToDisplayCurrency(globalPrevTotalUSD, "USD")}
                       deltaPct={safeDeltaPct(
@@ -2970,17 +3146,6 @@ export default function DashboardPage() {
                     />
 
                     <AmazonStatCard
-                      label="Gross Sales"
-                      current={globalCurrGrossDisp}
-                      previous={globalPrevGrossDisp}
-                      deltaPct={safeDeltaPct(combinedGrossUSD, prevGlobalGrossUSD)}
-                      loading={loading || shopifyLoading}
-                      formatter={formatDisplayAmount}
-                      bottomLabel={prevLabel}
-                      className="border-[#5EA68E] bg-[#5EA68E26]"
-                    />
-
-                    <AmazonStatCard
                       label="ASP"
                       current={globalCurrAsp}
                       previous={globalPrevAsp}
@@ -2991,9 +3156,8 @@ export default function DashboardPage() {
                       className="border-[#2CA9E0] bg-[#2CA9E026]"
                     />
 
-
                     <AmazonStatCard
-                      label="Profit"
+                      label="CM2 Profit"
                       current={globalCurrProfit}
                       previous={globalPrevProfit}
                       deltaPct={globalDeltas.profit}
@@ -3004,7 +3168,7 @@ export default function DashboardPage() {
                     />
 
                     <AmazonStatCard
-                      label="Profit %"
+                      label="CM2 Profit %"
                       current={curr.profitPct}          // ✅ Amazon margin
                       previous={prev.profitPct}         // ✅ prev Amazon margin
                       deltaPct={deltas.profitMarginPctPts} // ✅ pp
@@ -3029,15 +3193,15 @@ export default function DashboardPage() {
                     <div className="flex flex-col flex-1 min-w-0">
                       <div className="flex flex-wrap items-baseline gap-2">
                         <PageBreadcrumb pageTitle="Amazon" variant="page" align="left" />
-                        {showLiveBI && (
+                        {/* {showLiveBI && (
                           <span className="text-xs text-gray-400">
                             {prevShort && currShort ? `(${currShort} vs ${prevShort})` : ""}
                           </span>
-                        )}
+                        )} */}
                       </div>
-                      <p className="mt-1 text-sm text-charcoal-500">
+                      {/* <p className="mt-1 text-sm text-charcoal-500">
                         Real-time data from Amazon
-                      </p>
+                      </p> */}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -3066,41 +3230,54 @@ export default function DashboardPage() {
 
                     <AmazonStatCard
                       label="Units"
-                      current={showLiveBI && rangeActive ? rangeKpis.units : (totals?.quantity ?? 0)}
-                      previous={prev.quantity}
-                      deltaPct={deltas.quantityPct}
+                      current={showLiveBI && rangeActive ? biCardKpis.curr.units : (totals?.quantity ?? 0)}
+                      previous={showLiveBI && rangeActive ? biCardKpis.prev.units : prev.quantity}
+                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.units : deltas.quantityPct}
                       loading={loading || biLoading}
                       formatter={fmtInt}
                       bottomLabel={prevLabel}
                       className="border-[#F47A00] bg-[#F47A0026]"
                     />
 
-
                     <AmazonStatCard
-                      label="Sales"
+                      label="Gross Sales"
                       current={
                         showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(rangeKpis.sales, rangeCurrency)
+                          ? convertToDisplayCurrency(biCardKpis.curr.grossSales, rangeCurrency)
+                          : convertToDisplayCurrency(uk.grossSalesGBP ?? 0, "GBP")
+                      }
+                      previous={
+                        showLiveBI && rangeActive
+                          ? convertToDisplayCurrency(biCardKpis.prev.grossSales, rangeCurrency)
+                          : convertToDisplayCurrency(prev.grossSales ?? 0, "GBP")
+                      }
+                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.grossSales : safeDeltaPct(uk.grossSalesGBP ?? 0, prev.grossSales ?? 0)}
+                      loading={loading || biLoading}
+                      formatter={formatDisplayAmount}
+                      bottomLabel={prevLabel}
+                      className="border-[#FFD54F] bg-[#FFD54F26]"
+                    />
+
+                    <AmazonStatCard
+                      label="Net Sales"
+                      current={
+                        showLiveBI && rangeActive
+                          ? convertToDisplayCurrency(biCardKpis.curr.netSales, rangeCurrency)
                           : convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP")
                       }
-                      previous={convertToDisplayCurrency(prev.netSales, "GBP")}
-                      deltaPct={deltas.netSalesPct}
+                      previous={
+                        showLiveBI && rangeActive
+                          ? convertToDisplayCurrency(biCardKpis.prev.netSales, rangeCurrency)
+                          : convertToDisplayCurrency(prev.netSales, "GBP")
+                      }
+                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.netSales : deltas.netSalesPct}
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
                       className="border-[#87AD12] bg-[#87AD1226]"
                     />
 
-                    <AmazonStatCard
-                      label="Gross Sales"
-                      current={convertToDisplayCurrency(uk.grossSalesGBP ?? 0, "GBP")}
-                      previous={convertToDisplayCurrency(prev.grossSales ?? 0, "GBP")}
-                      deltaPct={safeDeltaPct(uk.grossSalesGBP ?? 0, prev.grossSales ?? 0)}
-                      loading={loading}
-                      formatter={formatDisplayAmount}
-                      bottomLabel={prevLabel}
-                      className="border-[#5EA68E] bg-[#5EA68E26]"
-                    />
+
 
 
 
@@ -3109,39 +3286,59 @@ export default function DashboardPage() {
                       label="ASP"
                       current={
                         showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(rangeKpis.asp, rangeCurrency)
+                          ? convertToDisplayCurrency(biCardKpis.curr.asp, rangeCurrency)
                           : convertToDisplayCurrency(uk.aspGBP ?? 0, "GBP")
                       }
-                      previous={convertToDisplayCurrency(prev.asp, "GBP")}
-                      deltaPct={deltas.aspPct}
+                      previous={
+                        showLiveBI && rangeActive
+                          ? convertToDisplayCurrency(biCardKpis.prev.asp, rangeCurrency)
+                          : convertToDisplayCurrency(prev.asp, "GBP")
+                      }
+                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.asp : deltas.aspPct}
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
                       className="border-[#2CA9E0] bg-[#2CA9E026]"
                     />
 
+
                     <AmazonStatCard
-                      label="Profit"
-                      current={convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP")}
-                      previous={convertToDisplayCurrency(prev.profit, "GBP")}
-                      deltaPct={deltas.profitPct}
-                      loading={loading}
+                      label="CM2 Profit"
+                      current={
+                        showLiveBI && rangeActive
+                          ? convertToDisplayCurrency(biCardKpis.curr.profit, rangeCurrency)
+                          : convertToDisplayCurrency(uk.cm2ProfitGBP ?? 0, "GBP")
+                      }
+                      previous={
+                        showLiveBI && rangeActive
+                          ? convertToDisplayCurrency(biCardKpis.prev.profit, rangeCurrency) // BI profit = CM2? (if yes keep)
+                          : convertToDisplayCurrency(prev.cm2Profit ?? 0, "GBP")           // ✅ CHANGED
+                      }
+                      deltaPct={
+                        showLiveBI && rangeActive
+                          ? biCardKpis.deltas.profit
+                          : safeDeltaPct(uk.cm2ProfitGBP ?? 0, prev.cm2Profit ?? 0)        // ✅ CHANGED
+                      }
+                      loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
                       className="border-[#AB64B5] bg-[#AB64B526]"
                     />
 
 
+
+
                     <AmazonStatCard
-                      label="Profit %"
-                      current={curr.profitPct}
-                      previous={prev.profitPct}
-                      deltaPct={deltas.profitMarginPctPts}
-                      loading={loading}
+                      label="CM2 Profit %"
+                      current={showLiveBI && rangeActive ? biCardKpis.curr.profitPct : curr.profitPct}
+                      previous={showLiveBI && rangeActive ? biCardKpis.prev.profitPct : prev.profitPct}
+                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.profitPctPts : deltas.profitMarginPctPts}
+                      loading={loading || biLoading}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
                       className="border-[#00627B] bg-[#00627B26]"
                     />
+
 
                   </div>
                 </div>
@@ -3150,12 +3347,23 @@ export default function DashboardPage() {
                 {showLiveBI && (
                   <div className="w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
                     <div className="w-full max-w-full min-w-0">
+                      {/* <LiveBiLineGraph
+                        dailySeries={biDailySeries}
+                        periods={biPeriods}
+                        loading={biLoading}
+                        error={biError}
+                      /> */}
                       <LiveBiLineGraph
                         dailySeries={biDailySeries}
                         periods={biPeriods}
                         loading={biLoading}
                         error={biError}
+
+                        // ✅ add
+                        selectedStartDay={selectedStartDay}
+                        selectedEndDay={selectedEndDay}
                       />
+
                     </div>
                   </div>
                 )}
@@ -3176,9 +3384,9 @@ export default function DashboardPage() {
                           textSize="2xl"
                         />
                       </div>
-                      <p className="mt-1 text-sm text-charcoal-500">
+                      {/* <p className="mt-1 text-sm text-charcoal-500">
                         Real-time data from Shopify
-                      </p>
+                      </p> */}
                     </div>
                   </div>
 
@@ -3245,6 +3453,8 @@ export default function DashboardPage() {
                     homeCurrency={displayCurrency}
                     convertToHomeCurrency={(v, from) => convertToDisplayCurrency(v, from)}
                     formatHomeK={formatDisplayK}
+                    // ✅ stable "today"
+                    todaySales={convertToDisplayCurrency(todaySalesRaw, rangeCurrency)}
                   />
 
                 </div>
@@ -3281,10 +3491,10 @@ export default function DashboardPage() {
                     textSize="2xl"
                     variant="page"
                   />
-                  <p className="text-charcoal-500">
+                  {/* <p className="text-charcoal-500">
                     Real-time data{" "}
                     {graphRegionToUse === "Global" ? "Global" : graphRegionToUse}
-                  </p>
+                  </p> */}
                 </div>
 
                 {!isCountryMode && (

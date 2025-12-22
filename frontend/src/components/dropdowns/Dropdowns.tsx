@@ -25,7 +25,8 @@ import { useGetUserDataQuery } from "@/lib/api/profileApi";
 /* ---------------------- Types ---------------------- */
 type Summary = {
   unit_sold: number;
-  total_sales: number;
+  total_sales: number;      // (your current "Sales")
+  gross_sales?: number;     // ✅ ADD THIS
   total_expense: number;
   cm2_profit: number;
   total_cous?: number;
@@ -33,6 +34,7 @@ type Summary = {
   advertising_total?: number;
   total_amazon_fee?: number;
 };
+
 
 
 type SummaryComparisons = {
@@ -226,6 +228,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   const zeroData: Summary = {
     unit_sold: 0,
     total_sales: 0,
+    gross_sales: 0, // ✅ ADD THIS
     total_expense: 0,
     cm2_profit: 0,
     total_cous: 0,
@@ -234,10 +237,14 @@ const Dropdowns: React.FC<DropdownsProps> = ({
     total_amazon_fee: 0,
   };
 
+
   const displayData: Summary =
     allDropdownsSelected && uploadsData?.summary
       ? uploadsData.summary
       : zeroData;
+
+
+      console.log("🔍 displayData:", displayData);
 
   // range: "monthly" | "quarterly" | "yearly"
   const handleRangeChange = (v: "monthly" | "quarterly" | "yearly") => {
@@ -447,29 +454,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   };
 
   return (
-    <div ref={layoutRef} className="space-y-5 relative">
-      {/* Back / Title */}
-      {/* <div className="flex flex-col leading-tight">
-        <div className="flex gap-2">
-          <PageBreadcrumb
-            pageTitle="Financial Metrics -"
-            variant="page"
-            align="left"
-            textSize="2xl"
-          />
-
-          <span className="text-green-500 font-bold text-lg sm:text-2xl md:text-2xl">
-            {countryName?.toLowerCase() === "global"
-              ? "Global"
-              : countryName?.toUpperCase()}
-          </span>
-        </div>
-
-   
-        <p className="text-sm text-charcoal-500 mt-1">
-          Track your profitability and key metrics
-        </p>
-      </div> */}
+    <div ref={layoutRef} className="space-y-6 relative">
 
       <div className="w-full flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         {/* LEFT: Title + Subtitle */}
@@ -767,40 +752,6 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                       typeof item.diffPct === "number" && !isNaN(item.diffPct);
 
                     return (
-                      // <div
-                      //   key={item.label}
-                      //   className="flex items-center justify-between text-xs"
-                      // >
-                      //   {/* LEFT: label + value */}
-                      //   <div className="flex items-baseline gap-1">
-                      //     <span className="font-semibold text-gray-600">
-                      //       {item.label}:
-                      //     </span>
-                      //     <span className="font-semibold text-gray-700">
-                      //       {hasValue ? formatPercent(item.value) : "-"}
-                      //     </span>
-                      //   </div>
-
-                      //   {/* RIGHT: percentage */}
-                      //   <span
-                      //     className={`font-bold ${hasDiff
-                      //       ? item.diffPct! >= 0
-                      //         ? "text-emerald-600"
-                      //         : "text-red-600"
-                      //       : "text-gray-400"
-                      //       }`}
-                      //   >
-                      //     {hasDiff ? (
-                      //       <>
-                      //         {item.diffPct! >= 0 ? "▲" : "▼"}{" "}
-                      //         {Math.abs(item.diffPct!).toFixed(1)}%
-                      //       </>
-                      //     ) : (
-                      //       "-"
-                      //     )}
-                      //   </span>
-                      // </div>
-
                       <div
                         key={item.label}
                         className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums"
@@ -843,90 +794,11 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               );
             };
 
-
-            // return (
-            //   <div
-            //     className={[
-            //       "w-full flex flex-col gap-4",
-            //       "sm:flex-row sm:flex-wrap sm:gap-6",
-            //       "xl:flex-nowrap xl:gap-6", // ✅ single line on larger screens
-            //       isSummaryZero ? "opacity-30" : "opacity-100",
-            //     ].join(" ")}
-            //   >
-
-            //     {/* Units */}
-            //     <div className="w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[20%] rounded-2xl border border-[#87AD12] bg-[#87AD1226] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">Units</span>
-            //         <FaBoxArchive color="#87AD12" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatUnits(summary.unit_sold)}
-            //       </div>
-
-            //       {renderComparisons("unit_sold", formatUnits)}
-            //     </div>
-
-            //     {/* Sales */}
-            //     <div className="w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[20%] rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">Sales</span>
-            //         <FcSalesPerformance fill="000" color="#000" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatMoney(summary.total_sales)}
-            //       </div>
-
-            //       {renderComparisons("total_sales", formatMoney)}
-            //     </div>
-
-            //     {/* Expenses */}
-            //     <div className="w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[20%] rounded-2xl border border-[#FF5C5C] bg-[#FF5C5C26] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">Expenses</span>
-            //         <MdEditDocument color="#FF5C5C" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatMoney(summary.total_expense)}
-            //       </div>
-
-            //       {renderComparisons("total_expense", formatMoney)}
-            //     </div>
-
-            //     {/* CM2 Profit */}
-            //     <div className="flex-1 min-w-[180px] max-w-xs rounded-2xl border border-[#AB64B5] bg-[#AB64B526] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">CM2 Profit</span>
-            //         <TbMoneybag fill="#AB64B5" color="#AB64B5" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatMoney(summary.cm2_profit)}
-            //       </div>
-
-            //       {renderComparisons("cm2_profit", formatMoney)}
-            //     </div>
-
-            //     {/* CM2 Profit % */}
-            //     <div className="w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[20%] rounded-2xl border border-[#00627B] bg-[#00627B26] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">CM2 Profit %</span>
-            //         <FaMoneyBillTrendUp color="#00627B" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatPercent(cm2Percent)}
-            //       </div>
-
-            //       {renderCm2PercentComparisons()}
-            //     </div>
-            //   </div>
-            // );
-
-
             return (
               <div
                 className={[
                   "w-full grid gap-4",
-                  "grid-cols-2 xl:grid-cols-5", // ✅ 2 cols on small screens
+                  "grid-cols-2 xl:grid-cols-6", // ✅ now 6 cards
                   isSummaryZero ? "opacity-30" : "opacity-100",
                 ].join(" ")}
               >
@@ -945,6 +817,21 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
                   {renderComparisons("unit_sold", formatUnits)}
                 </div>
+
+                {/* Gross Sales */}
+                <div className="w-full rounded-2xl border border-[#FFD54F] bg-[#FFD54F26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-charcoal-500">Gross Sales</span>
+                    <FcSalesPerformance fill="000" color="#000" size={16} />
+                  </div>
+
+                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                    {formatMoney(summary.gross_sales ?? 0)}
+                  </div>
+
+                  {renderComparisons("gross_sales", formatMoney)}
+                </div>
+
 
                 {/* Sales */}
                 <div className="w-full rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">

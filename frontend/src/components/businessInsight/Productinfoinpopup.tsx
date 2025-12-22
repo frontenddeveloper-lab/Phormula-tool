@@ -368,7 +368,8 @@ return point;
         data: raw.map(item => item[country] || 0),
         borderColor: getCountryColor(country),
         backgroundColor: getCountryColor(country),
-        tension: 0.1,
+        
+tension: 0.35,
         pointRadius: 3,
         // pointHoverRadius: 5,
         fill: false,

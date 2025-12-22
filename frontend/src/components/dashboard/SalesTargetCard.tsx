@@ -562,6 +562,8 @@ type Props = {
   homeCurrency: CurrencyCode;
   convertToHomeCurrency: (value: number, from: CurrencyCode) => number;
   formatHomeK: (value: number) => string;
+  todaySales?: number;
+
 };
 
 export default function SalesTargetCard({
@@ -572,6 +574,7 @@ export default function SalesTargetCard({
   convertToHomeCurrency,
   formatHomeK,
   hideTabs,
+  todaySales
 }: Props) {
   const tab = value;
 
@@ -619,6 +622,16 @@ export default function SalesTargetCard({
 
   const { todayDay } = getISTDayInfo();
   const todayApproxHome = todayDay > 0 ? mtdHome / todayDay : 0;
+
+  // ✅ NEW: if Dashboard passes todaySales, use it
+  // const todayHome = useMemo(() => {
+  //   if (typeof todaySales === "number" && !Number.isNaN(todaySales)) {
+  //     return todaySales; // already in home currency from Dashboard
+  //   }
+  //   return todayApproxHome; // fallback
+  // }, [todaySales, todayApproxHome]);
+
+  const todayHome = typeof todaySales === "number" ? todaySales : todayApproxHome;
 
   const prevLabel = getPrevMonthShortLabel();
   const thisMonthLabel = getThisMonthShortLabel();
@@ -671,8 +684,9 @@ export default function SalesTargetCard({
     lastMonthTotalHome > 0
       ? ((targetHome - lastMonthTotalHome) / lastMonthTotalHome) * 100
       : 0;
+
   return (
-    <div className="rounded-2xl border bg-white p-5 shadow-sm h-full flex flex-col">
+    <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
       {/* Header */}
       <div className="relative flex flex-col items-center gap-1">
         <PageBreadcrumb
@@ -765,67 +779,61 @@ export default function SalesTargetCard({
         </div>
       </div>
 
-{/* Bottom section pinned lower to help "match height" */}
-<div className="mt-auto pt-6">
-  <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
-    {[
-      {
-        title: "Today",
-        value: formatHomeK(todayApproxHome),
-        helper: "\u00A0",
-      },
-      {
-        title: "MTD Sales",
-        value: formatHomeK(mtdHome),
-        helper: "\u00A0",
-      },
-      {
-        title: "Target",
-        value: formatHomeK(targetHome),
-        helper: "\u00A0",
-      },
-      {
-        title: prevLabel,
-        value: formatHomeK(lastMonthTotalHome),
-        helper: "\u00A0",
-      },
-      {
-        title: "Sales Trend",
-        value: `${salesTrendPct >= 0 ? "+" : ""}${salesTrendPct.toFixed(2)}%`,
-        helper: `vs ${prevLabel} MTD`,
-      },
-      {
-        title: "Target Trend",
-        value: `${targetTrendPct >= 0 ? "+" : ""}${targetTrendPct.toFixed(2)}%`,
-        helper: `target vs ${prevLabel} total`,
-      },
-    ].map((t) => (
-      <div
-        key={t.title}
-        className="rounded-xl bg-gray-50 p-3 text-center h-full flex flex-col items-center"
-      >
-        {/* Title: always one line */}
-        <div className="text-charcoal-500 whitespace-nowrap leading-none">
-          {t.title}
-        </div>
-
-        {/* Value: always one line */}
-        <div className="mt-2 font-semibold whitespace-nowrap leading-none">
-          {t.value}
-        </div>
-
-        {/* Helper text: always below, reserved space even when blank */}
-        <div
-          className={`mt-1 text-[11px] leading-none ${
-            t.helper === "\u00A0" ? "text-transparent select-none" : "text-gray-500"
-          }`}
-        >
-          {t.helper}
+      <div className="mt-auto pt-6">
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+          {[
+            {
+              title: "Today",
+              // ✅ CHANGE THIS LINE
+              value: formatHomeK(todayHome),
+              helper: "\u00A0",
+            },
+            {
+              title: "MTD Sales",
+              value: formatHomeK(mtdHome),
+              helper: "\u00A0",
+            },
+            {
+              title: "Target",
+              value: formatHomeK(targetHome),
+              helper: "\u00A0",
+            },
+            {
+              title: prevLabel,
+              value: formatHomeK(lastMonthTotalHome),
+              helper: "\u00A0",
+            },
+            {
+              title: "Sales Trend",
+              value: `${salesTrendPct >= 0 ? "+" : ""}${salesTrendPct.toFixed(2)}%`,
+              helper: `vs ${prevLabel} MTD`,
+            },
+            {
+              title: "Target Trend",
+              value: `${targetTrendPct >= 0 ? "+" : ""}${targetTrendPct.toFixed(2)}%`,
+              helper: `target vs ${prevLabel} total`,
+            },
+          ].map((t) => (
+            <div
+              key={t.title}
+              className="rounded-xl p-3 text-center h-full flex flex-col items-center"
+            >
+              <div className="text-charcoal-500 whitespace-nowrap leading-none">
+                {t.title}
+              </div>
+              <div className="mt-2 font-semibold whitespace-nowrap leading-none">
+                {t.value}
+              </div>
+              <div
+                className={`mt-1 text-[11px] leading-none ${t.helper === "\u00A0" ? "text-transparent select-none" : "text-gray-500"
+                  }`}
+              >
+                {t.helper}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-    ))}
-  </div>
-</div>
 
 
     </div>

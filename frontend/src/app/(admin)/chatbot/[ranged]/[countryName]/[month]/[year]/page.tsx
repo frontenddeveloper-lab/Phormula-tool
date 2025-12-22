@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation'
 import './style.css'
 import Delete from '@/components/chatbot/Delete'
 import RightArrow from '@/components/chatbot/RightArrow'
-import { Dot } from 'lucide-react'
+import { Copy, Share2, ThumbsDown, ThumbsUp, Dot } from 'lucide-react'
 import { useChatbotStore } from "@/lib/store/chatbotStore";
 
 // ---------- Types ----------
@@ -62,100 +62,28 @@ const cleanMarkdown = (s = '') =>
     .trim()
 
 
-function analyticsTextToMarkdown(raw = ''): string {
-  const text = raw.replace(/\r\n/g, '\n').trim()
-  if (!text) return ''
-
-  // Normalize spaces but keep newlines
-  const normalized = text
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-
-  // --- Split SUMMARY / ACTIONS even if they're in same line ---
-  const upper = normalized.toUpperCase()
-  const sIdx = upper.indexOf('SUMMARY')
-  const aIdx = upper.indexOf('ACTIONS')
-
-  const summaryPart =
-    sIdx >= 0 && aIdx > sIdx ? normalized.slice(sIdx + 'SUMMARY'.length, aIdx).trim() : ''
-  const actionsPart =
-    aIdx >= 0 ? normalized.slice(aIdx + 'ACTIONS'.length).trim() : normalized.trim()
-
-  const splitSentences = (s: string) =>
-    s
-      .replace(/\s+/g, ' ')
-      .split(/(?<=[.?!])\s+/)
-      .map((x) => x.trim())
-      .filter(Boolean)
-
-  let md = ''
-
-  // --- SUMMARY ---
-  if (sIdx >= 0) {
-    md += `## **SUMMARY**\n\n`
-    const bullets = splitSentences(summaryPart)
-    bullets.forEach((b) => {
-      md += `- ${b}\n`
-    })
-    md += `\n---\n\n`
-  }
-
-  // --- ACTIONS ---
-  md += `## **ACTIONS**\n\n`
-
-  // Handle both:
-  // 1) "Product name - Classic ..." (single line)
-  // 2) Multi-line blocks
-  const productChunks = actionsPart
-    .split(/Product\s*name\s*[-:]\s*/i)
-    .map((x) => x.trim())
-    .filter(Boolean)
-
-  // If "Product name -" not present, fallback to old newline-based logic (optional)
-  if (productChunks.length === 0) return md.trim()
-
-  let p = 0
-
-  for (const chunk of productChunks) {
-    p++
-
-    // Product name = text before first known sentence starter
-    const nameMatch = chunk.match(
-      /^(.*?)(?=\s+(There is|The increase|The ASP|Sales mix|The sales mix)\b)/i
-    )
-    const productName = (nameMatch?.[1] || chunk.split('. ')[0] || chunk).trim()
-
-    // Body = rest after productName
-    const body = chunk.slice(productName.length).trim()
-    const sentences = splitSentences(body)
-
-    const metric1 = sentences[0] || ''
-    const metric2 = sentences[1] || ''
-
-    // Remaining sentences -> action (often "Review..." / "Check...")
-    const rest = sentences.slice(2).join(' ').trim()
-    const actionText = rest.replace(/^Actions?\s*[:\-]\s*/i, '').trim()
-
-    // Outer numbered product
-    md += `${p}. **${productName}**\n`
-
-    // Inner points (2 only)
-    if (metric1) md += `    1. ${metric1}\n`
-    if (metric2) md += `    2. ${metric2}\n`
-
-    // Actions bold (no numeral)
-    if (actionText) md += `\n    **Actions: ${actionText}**\n\n`
-
-    md += `\n`
-  }
-
-  return md.trim()
+// ---- Timestamp helpers (WhatsApp-style) ----
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const formatTime = (ts?: number) => {
+  const d = new Date(ts || Date.now())
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
-
-
-
-
+const dayKey = (ts?: number) => {
+  const d = new Date(ts || Date.now())
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+const formatDayLabel = (ts?: number) => {
+  const d = new Date(ts || Date.now())
+  const now = new Date()
+  const todayKey = dayKey(now.getTime())
+  const y = new Date(now)
+  y.setDate(now.getDate() - 1)
+  const yKey = dayKey(y.getTime())
+  const k = dayKey(d.getTime())
+  if (k === todayKey) return 'Today'
+  if (k === yKey) return 'Yesterday'
+  return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
 function parseAIResponse(rawText: string): ParsedAI {
   const result: ParsedAI = { title: '', details: [], weeks: [] }
@@ -243,16 +171,16 @@ export default function ChatbotPage() {
   sendMessage,
   clearChat,
   loadFromStorage,
+  reactToMessage,
+  sendFeedback,
 } = useChatbotStore();
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   
   const [inputValue, setInputValue] = useState('')
   const [userData, setUserData] = useState<any>(null)
-  const [aliasOfInput, setAliasOfInput] = useState('')
   const [likeInProgress, setLikeInProgress] = useState<number | null>(null)
   const [dislikeInProgress, setDislikeInProgress] = useState<number | null>(null)
-const [dislikeInputFor, setDislikeInputFor] = useState<string | null>(null)
   const [actionMessage, setActionMessage] =
   useState<{ id: string; text: string } | null>(null)
 
@@ -304,53 +232,41 @@ const [dislikeInputFor, setDislikeInputFor] = useState<string | null>(null)
   scrollToBottom()
 }, [messages])
 
+  const flash = (id: string, text: string) => {
+    setActionMessage({ id, text })
+    setTimeout(() => setActionMessage(null), 1200)
+  }
+
+  const handleCopy = async (msg: any) => {
+    try {
+      await navigator.clipboard.writeText(msg.text || '')
+      flash(msg.id, 'Copied!')
+    } catch {
+      flash(msg.id, 'Copy failed')
+    }
+  }
+
+  const handleShare = async (msg: any) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: msg.text || '' })
+        flash(msg.id, 'Shared!')
+      } else {
+        await navigator.clipboard.writeText(msg.text || '')
+        flash(msg.id, 'Copied to share')
+      }
+    } catch {
+      // user cancelled share or it failed
+    }
+  }
+
   // Create message objects
 
  
 
   
 
-  const handleSaveDislike = async (feedbackText: string) => {
-const msgObj = messages.find((m) => m.id === dislikeInputFor)
-    if (!msgObj || !msgObj.serverId) return
-
-    try {
-      const resp = await fetch(`${API_BASE_URL}/chatbot/feedback`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message_id: msgObj.serverId,
-          feedback: 'dislike',
-          original_prompt: msgObj.promptText,
-          additional_feedback: feedbackText,
-        }),
-      })
-
-      if (!resp.ok) {
-        setActionMessage({ id: msgObj.id, text: 'Disliked!' })
-        setTimeout(() => setActionMessage(null), 1500)
-        setDislikeInputFor(null)
-        setAliasOfInput('')
-      } else { 
-        setActionMessage({ id: msgObj.id, text: 'Disliked!' })
-        setTimeout(() => setActionMessage(null), 1500)
-        setDislikeInputFor(null)
-        setAliasOfInput('')
-      }
-    } catch {
-      setActionMessage({ id: msgObj.id, text: 'Disliked!' })
-      setTimeout(() => setActionMessage(null), 1500)
-      setDislikeInputFor(null)
-      setAliasOfInput('')
-    }
-  }
-
-  const handleCancelDislike = () => {
-    handleSaveDislike('User provided negative feedback without additional comments')
-  }
+  // NOTE: Dislike should stay simple (no extra textbox/modal). We just send feedback.
 
 
 
@@ -473,7 +389,7 @@ function convertPlainTextToMarkdown(text: string): string {
         <h1 className="text-base sm:text-lg md:text-xl lg:text-[1.625rem] font-bold">
           Hi <i>{userData?.company_name?.split(' ')[0] || 'User'}!</i>
         </h1>
-        <p className="text-xs sm:text-sm md:text-base lg:text-[1rem] mt-1">
+        <p style={{ fontFamily: "Lato, sans-serif" }} className="text-xs sm:text-sm md:text-base  mt-1 ">
         I'm your Analytics Assistant, here to help you understand your business data, generate insights, and make informed decisions. What would you like to explore today?
         </p>
       </div>
@@ -487,8 +403,12 @@ function convertPlainTextToMarkdown(text: string): string {
               <>
                 {Array.from(
   new Map(validMessages.map((m) => [m.id, m])).values()
-).map((msg) => (
-  <div
+).map((msg, idx, arr) => (
+  <React.Fragment key={msg.id}>
+    {(idx === 0 || dayKey(msg.timestamp) !== dayKey(arr[idx - 1]?.timestamp)) && (
+      <div className="chat-date-separator"><span>{formatDayLabel(msg.timestamp)}</span></div>
+    )}
+    <div
     key={msg.id}
     className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
   >
@@ -572,15 +492,73 @@ return (
                         ) : (
                           msg.text
                         )}
+                      <div className={`chat-msg-meta ${msg.sender === 'user' ? 'chat-msg-meta-user' : 'chat-msg-meta-bot'}`}>{formatTime(msg.timestamp)}</div>
                       </div>
 
                       {msg.sender !== 'user' && (
-                        <div className="flex flex-col ml-2 mb-2">
-                          {/* action buttons placeholder */}
+                        <div className="chat-msg-actions ml-2 mb-2">
+                          <button
+                            type="button"
+                            className={`chat-action-btn ${msg.liked === 'like' ? 'is-active' : ''}`}
+                            onClick={() => {
+                              const next = msg.liked === 'like' ? undefined : 'like'
+                              reactToMessage(msg.id, next)
+                              if (next) {
+                                sendFeedback(msg.id, 'like')
+                                flash(msg.id, 'Liked!')
+                              }
+                            }}
+                            aria-label="Like"
+                            title="Like"
+                          >
+                            <ThumbsUp size={16} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className={`chat-action-btn ${msg.liked === 'dislike' ? 'is-active' : ''}`}
+                            onClick={() => {
+                              const next = msg.liked === 'dislike' ? undefined : 'dislike'
+                              reactToMessage(msg.id, next)
+                              if (next) {
+                                sendFeedback(msg.id, 'dislike')
+                                flash(msg.id, 'Disliked!')
+                              }
+                            }}
+                            aria-label="Dislike"
+                            title="Dislike"
+                          >
+                            <ThumbsDown size={16} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-action-btn"
+                            onClick={() => handleCopy(msg)}
+                            aria-label="Copy"
+                            title="Copy"
+                          >
+                            <Copy size={16} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-action-btn"
+                            onClick={() => handleShare(msg)}
+                            aria-label="Share"
+                            title="Share"
+                          >
+                            <Share2 size={16} />
+                          </button>
+
+                          {actionMessage?.id === msg.id && (
+                            <span className="chat-action-toast">{actionMessage.text}</span>
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
+  </React.Fragment>
                 ))}
 
                 {isLoading && (
@@ -608,34 +586,6 @@ return (
         {/* Input area */}
 
         <div className="border-t border-gray-200 p-2 sm:p-3 md:p-4 flex flex-col gap-2">
-          {dislikeInputFor && (
-            <div className="mb-2 p-2 border border-red-300 rounded-md bg-red-50">
-              <p className="text-xs sm:text-sm text-red-700 mb-1">
-                Please share what went wrong so we can improve:
-              </p>
-              <textarea
-                value={aliasOfInput}
-                onChange={(e) => setAliasOfInput(e.target.value)}
-                className="w-full border border-red-300 rounded-md p-1 text-xs sm:text-sm"
-                rows={2}
-              />
-              <div className="flex justify-end gap-2 mt-1">
-                <button
-                  onClick={() => handleSaveDislike(aliasOfInput)}
-                  className="px-2 py-1 text-xs sm:text-sm bg-red-600 text-white rounded-md"
-                >
-                  Submit
-                </button>
-                <button
-                  onClick={handleCancelDislike}
-                  className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded-md"
-                >
-                  Skip
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="flex items-center gap-4">
             <div className="flex-1 flex items-center bg-[#D9D9D9] rounded-full px-3 py-3">
               <input

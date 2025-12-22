@@ -21,6 +21,19 @@ type ChatStore = {
   loadFromStorage: () => void;
   sendMessage: (text: string) => Promise<void>;
   clearChat: () => void;
+  reactToMessage: (id: string, reaction: Message["liked"]) => void;
+  sendFeedback: (
+    id: string,
+    feedback: "like" | "dislike",
+    additional_feedback?: string
+  ) => Promise<void>;
+};
+
+const DEFAULT_BOT_MESSAGE = {
+  id: "welcome-message",
+  sender: "bot",
+  text: "Hey! 👋 I can help you analyze Amazon sales, fees, taxes, profit, and trends. What would you like to explore?",
+  timestamp: Date.now(),
 };
 
 const API_BASE_URL =
@@ -39,16 +52,28 @@ export const useChatbotStore = create<ChatStore>((set, get) => ({
 
   loadFromStorage: () => {
   const saved = localStorage.getItem("chatbot_history");
-  if (!saved) return;
 
-  const parsed = JSON.parse(saved);
-
+  // agar pehle se messages loaded hain → kuch mat karo
   set((state) => {
-    // already loaded → do nothing
     if (state.messages.length > 0) return state;
-    return { messages: parsed };
+
+    // Case 1: localStorage me data hai
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return { messages: parsed };
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+
+    // Case 2: first time / empty / no storage
+    return { messages: [DEFAULT_BOT_MESSAGE] };
   });
 },
+
 
   sendMessage: async (text) => {
     if (!text.trim()) return;
@@ -105,5 +130,41 @@ export const useChatbotStore = create<ChatStore>((set, get) => ({
   clearChat: () => {
     localStorage.removeItem("chatbot_history");
     set({ messages: [] });
+  },
+
+  reactToMessage: (id, reaction) => {
+    set((s) => {
+      const updated = s.messages.map((m) =>
+        m.id === id ? { ...m, liked: reaction } : m
+      );
+      // keep storage in sync for both page + window
+      if (typeof window !== "undefined") {
+        localStorage.setItem("chatbot_history", JSON.stringify(updated));
+      }
+      return { messages: updated };
+    });
+  },
+
+  sendFeedback: async (id, feedback, additional_feedback) => {
+    const msg = get().messages.find((m) => m.id === id);
+    if (!msg?.serverId) return;
+
+    try {
+      await fetch(`${API_BASE_URL}/chatbot/feedback`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message_id: msg.serverId,
+          feedback,
+          original_prompt: msg.promptText,
+          additional_feedback,
+        }),
+      });
+    } catch {
+      // ignore (UI should still feel responsive)
+    }
   },
 }));

@@ -1,19 +1,26 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect  } from "react";
 import ChatbotCore from "./ChatbotCore";
 import { RiExpandDiagonalSLine } from "react-icons/ri";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, usePathname } from "next/navigation";
+import { useGetUserDataQuery } from "@/lib/api/profileApi";
 
 export default function ChatbotWidget() {
   const [open, setOpen] = useState(false);
+ const { data: userData } = useGetUserDataQuery();
 
   const router = useRouter();
   const params = useParams();
+   const pathname = usePathname(); // 👈 important
   
   const ranged = params?.ranged;
   const countryName = params?.countryName;
   const month = params?.month;
   const year = params?.year;
+
+   if (pathname?.startsWith("/chatbot")) {
+    return null;
+  }
 
   return (
     <>
@@ -61,27 +68,29 @@ export default function ChatbotWidget() {
   "
 >
               <div>
-                <p className="font-semibold text-sm">Hi </p>
+                <p className="font-semibold text-base text-[#F8EDCE]">Hi {userData?.company_name || "there"} </p>
                 <p className="text-[11px] opacity-90">
                   Analytics Assistant
                 </p>
               </div>
               <div className='flex gap-4 items-center cursor-pointer'>
-                <RiExpandDiagonalSLine
+              <RiExpandDiagonalSLine
   size={20}
   onClick={() => {
-    if (!ranged || !countryName || !month || !year) {
-      console.warn("Chatbot route params missing");
-      return;
-    }
+    const now = new Date();
 
-    const newPath = `/chatbot/${ranged}/${countryName}/${month}/${year}`;
+    const finalRanged = ranged ?? "QTD";
+    const finalCountry = countryName ?? "uk";
+    const finalMonth = month ?? String(now.getMonth() + 1).padStart(2, "0");
+    const finalYear = year ?? String(now.getFullYear());
+
+    const newPath = `/chatbot/${finalRanged}/${finalCountry}/${finalMonth}/${finalYear}`;
     router.push(newPath);
   }}
 />
  <button
                 onClick={() => setOpen(false)}
-                className="text-xl leading-none hover:opacity-80"
+                className="text-xl leading-none hover:opacity-80 "
               >
                 ✕
               </button>

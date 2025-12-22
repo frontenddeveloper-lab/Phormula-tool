@@ -632,7 +632,6 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer)
 
-    # Make sure both are NOT NULL for the unique to behave properly
     sku = db.Column(db.String(255), nullable=False, index=True)
     asin = db.Column(db.String(255), index=True)
 
@@ -645,6 +644,9 @@ class Product(db.Model):
     category = db.Column(db.String(255))
     product_data = db.Column(JSONB)
 
+    # 🔥 Amazon listing creation date
+    open_date = db.Column(db.DateTime, index=True)
+
     synced_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -652,5 +654,4 @@ class Product(db.Model):
     __table_args__ = (
         UniqueConstraint('sku', 'marketplace_id', name='uq_products_sku_mkt'),
     )
-
 
