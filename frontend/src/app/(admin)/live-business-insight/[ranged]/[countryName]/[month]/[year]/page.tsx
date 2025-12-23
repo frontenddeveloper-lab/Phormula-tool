@@ -14,6 +14,7 @@ import { FaArrowUp, FaArrowDown } from 'react-icons/fa';
 import Loader from '@/components/loader/Loader';
 import DataTable, { ColumnDef } from '@/components/ui/table/DataTable';
 import DownloadIconButton from '@/components/ui/button/DownloadIconButton';
+import SegmentedToggle from '@/components/ui/SegmentedToggle';
 
 // import DataTable, { ColumnDef, Row as DataTableRow } from '@/components/DataTable'; 
 
@@ -184,8 +185,21 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
   );
 
   const [activeTab, setActiveTab] = useState<
-    'top_80_skus' | 'new_or_reviving_skus' | 'other_skus' | 'all_skus'
-  >('top_80_skus');
+    'all_skus' | 'top_80_skus' | 'new_or_reviving_skus' | 'other_skus'
+  >('all_skus');
+
+  const tabOptions = useMemo(
+    () => [
+      { value: "all_skus" as const, label: "All SKUs" },
+      { value: "top_80_skus" as const, label: "Top 80% SKUs" },
+      { value: "new_or_reviving_skus" as const, label: "New/Reviving SKUs" },
+      { value: "other_skus" as const, label: "Other SKUs" },
+    ],
+    []
+  );
+
+  const handleTabChange = (val: TabKey) => setActiveTab(val);
+
 
   const normalizedCountry = (countryName || '').toLowerCase();
   const [periods, setPeriods] = useState<ApiResponse['periods'] | null>(null);
@@ -559,13 +573,13 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
     return getInsightByProductName(item.product_name);
   };
 
-  
+
 
 
   // =========================
   // Export to Excel
   // =========================
-  
+
 
   const exportToExcel = (rows: SkuItem[], filename = 'export.xlsx') => {
     // ✅ IMPORTANT: backend fields are tied to month1(old) / month2(new). Keep fixed mapping.
@@ -1340,56 +1354,56 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
   };
 
   const renderAiActionLine = (line: string) => {
-  if (!line) return null;
+    if (!line) return null;
 
-  // Step 1: Remove "Product name -"
-  const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, '');
+    // Step 1: Remove "Product name -"
+    const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, '');
 
-  // Step 2: Product name = first word(s) before "The / Increase / Decrease"
-  const productSplit = cleaned.split(/\s+(The|Increase|Decrease|An increase|A decrease)/i);
+    // Step 2: Product name = first word(s) before "The / Increase / Decrease"
+    const productSplit = cleaned.split(/\s+(The|Increase|Decrease|An increase|A decrease)/i);
 
-  const productName = productSplit[0]?.trim();
+    const productName = productSplit[0]?.trim();
 
-  // Step 3: Remaining description
-  const remainingText = cleaned.replace(productName, '').trim();
+    // Step 3: Remaining description
+    const remainingText = cleaned.replace(productName, '').trim();
 
-  // Step 4: Split sentences
-  const sentences = remainingText
-    .split('.')
-    .map(s => s.trim())
-    .filter(Boolean);
+    // Step 4: Split sentences
+    const sentences = remainingText
+      .split('.')
+      .map(s => s.trim())
+      .filter(Boolean);
 
-  // Last sentence = action
-  const actionLine = sentences[sentences.length - 1];
+    // Last sentence = action
+    const actionLine = sentences[sentences.length - 1];
 
-  // Middle description
-  const description = sentences.slice(0, -1).join('. ');
+    // Middle description
+    const description = sentences.slice(0, -1).join('. ');
 
-  return (
-    <div className="space-y-1">
-      {/* Product Name */}
-      {productName && (
-        <div className="font-bold">
-          Product name - {productName}
-        </div>
-      )}
+    return (
+      <div className="space-y-1">
+        {/* Product Name */}
+        {productName && (
+          <div className="font-bold">
+            Product name - {productName}
+          </div>
+        )}
 
-      {/* Description */}
-      {description && (
-        <div className="text-sm">
-          {formatBulletLine(description)}
-        </div>
-      )}
+        {/* Description */}
+        {description && (
+          <div className="text-sm">
+            {formatBulletLine(description)}
+          </div>
+        )}
 
-      {/* Recommendation */}
-      {actionLine && (
-        <div className="font-bold">
-          {actionLine}.
-        </div>
-      )}
-    </div>
-  );
-};
+        {/* Recommendation */}
+        {actionLine && (
+          <div className="font-bold">
+            {actionLine}.
+          </div>
+        )}
+      </div>
+    );
+  };
 
 
 
@@ -1577,54 +1591,76 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
   };
 
   const calcGrowthValue = (prev: number, curr: number) => {
-  if (!prev || prev === 0 || curr == null) return null;
-  return ((curr - prev) / prev) * 100;
-};
+    if (!prev || prev === 0 || curr == null) return null;
+    return ((curr - prev) / prev) * 100;
+  };
 
-const safePct = (prev: number, curr: number) => {
-  if (!prev || prev === 0 || curr == null) return null;
-  return ((curr - prev) / prev) * 100;
-};
+  const safePct = (prev: number, curr: number) => {
+    if (!prev || prev === 0 || curr == null) return null;
+    return ((curr - prev) / prev) * 100;
+  };
 
-// 🔹 wrap into GrowthCategory for existing renderer
-const makeGrowth = (prev: number, curr: number): GrowthCategory | undefined => {
-  const v = calcGrowthValue(prev, curr);
-  if (v == null) return undefined;
-  return { value: v, category: '' };
-};
+  // 🔹 wrap into GrowthCategory for existing renderer
+  const makeGrowth = (prev: number, curr: number): GrowthCategory | undefined => {
+    const v = calcGrowthValue(prev, curr);
+    if (v == null) return undefined;
+    return { value: v, category: '' };
+  };
 
- const renderGrowthOrNA = (g?: GrowthCategory) => {
-  if (!g || g.value == null) return <span>N/A</span>;
+  const renderGrowthOrNA = (g?: GrowthCategory) => {
+    if (!g || g.value == null) return <span>N/A</span>;
 
-  const val = Number(g.value);
-  const text = `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`;
+    const val = Number(g.value);
+    const abs = Math.abs(val).toFixed(2);
 
-  if (val > 0) {
-  return (
-    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#16a34a', fontWeight: 600 }}>
-      <FaArrowUp size={12} />
-      {text}
-    </span>
-  );
-}
+    const baseStyle: React.CSSProperties = {
+      display: 'inline-flex',        // 🔑 NOT flex
+      alignItems: 'center',           // 🔑 vertical fix
+      justifyContent: 'center',
+      gap: 6,
+      width: '100%',
+      lineHeight: '1',                // 🔑 arrow/text same line
+      fontWeight: 600,
+      fontSize: 13,
+    };
 
-if (val < 0) {
-  return (
-    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#dc2626', fontWeight: 600 }}>
-      <FaArrowDown size={12} />
-      {text}
-    </span>
-  );
-}
+    // 0% → no arrow
+    if (val === 0) {
+      return (
+        <span style={{ ...baseStyle, color: '#414042' }}>
+          0.00%
+        </span>
+      );
+    }
 
-// val === 0 => black arrow
-return (
-  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#414042', fontWeight: 600 }}>
-    <FaArrowUp size={12} />
-    {text}
-  </span>
-);
-};
+    // > +5% (High positive)
+    if (val > 5) {
+      return (
+        <span style={{ ...baseStyle, color: '#16a34a' }}>
+          <FaArrowUp size={12} />
+          +{abs}%
+        </span>
+      );
+    }
+
+    // < -5% (High negative)
+    if (val < -5) {
+      return (
+        <span style={{ ...baseStyle, color: '#dc2626' }}>
+          <FaArrowDown size={12} />
+          -{abs}%
+        </span>
+      );
+    }
+
+    // -5% to +5% (Low growth → black)
+    return (
+      <span style={{ ...baseStyle, color: '#414042' }}>
+        {val > 0 ? <FaArrowUp size={12} /> : <FaArrowDown size={12} />}
+        {val > 0 ? `+${abs}%` : `-${abs}%`}
+      </span>
+    );
+  };
 
 
   const renderNewRevGrowthOrDash = (g?: GrowthCategory) => {
@@ -1670,87 +1706,75 @@ return (
     const isNewRev = activeTab === 'new_or_reviving_skus';
     const showAI = Object.keys(skuInsights).length > 0;
 
-const SNO_WIDTH = '70px';
-const COMMON_WIDTH = '160px';
+    const SNO_WIDTH = '70px';
+    const COMMON_WIDTH = '160px';
 
-const cols: ColumnDef<BIGridRow>[] = [
-  // S.No. → small
-  {
-    key: 'sNo',
-    header: 'S.No.',
-    width: SNO_WIDTH,
-  },
+    const cols: ColumnDef<BIGridRow>[] = [
+      {
+        key: 'sNo',
+        header: 'S.No.',
+        width: SNO_WIDTH,
+      },
+      {
+        key: 'product',
+        header: 'Product Name',
+        width: COMMON_WIDTH,
+        cellClassName: 'text-left',
+        headerClassName: 'text-left',
+      },
+      {
+        key: 'salesMix',
+        header: `Sales Mix (${month2Label.split(' ')[0] || 'Current'})`,
+        width: COMMON_WIDTH,
+      },
 
-  // Product → same width but text left
-  {
-    key: 'product',
-    header: 'Product Name',
-    width: COMMON_WIDTH,
-    cellClassName: 'text-left',
-    headerClassName: 'text-left',
-  },
+      ...(isNewRev
+        ? []
+        : [
+          {
+            key: 'mixChange',
+            header: 'Sales Mix Change (%)',
+            width: COMMON_WIDTH,
+          },
+        ]),
 
-  // All others → SAME width
-  {
-    key: 'salesMix',
-    header: `Sales Mix (${month2Label.split(' ')[0] || 'Current'})`,
-    width: COMMON_WIDTH,
-  },
+      {
+        key: 'unit',
+        header: isNewRev ? 'Units (%)' : 'Unit Growth (%)',
+        width: COMMON_WIDTH,
+      },
+      {
+        key: 'asp',
+        header: isNewRev ? 'ASP (%)' : 'ASP Growth (%)',
+        width: COMMON_WIDTH,
+      },
+      {
+        key: 'sales',
+        header: isNewRev ? 'Sales (%)' : 'Net Sales Growth (%)',
+        width: COMMON_WIDTH,
+      },
+      {
+        key: 'unitProfit',
+        header: isNewRev ? 'Unit Profit (%)' : 'CM1 Profit Per Unit (%)',
+        width: '190px',
+      },
+      {
+        key: 'profit',
+        header: isNewRev ? 'Profit (%)' : 'CM1 Profit Impact (%)',
+        width: '200px',
+      },
 
-  ...(isNewRev
-    ? []
-    : [
-        {
-          key: 'mixChange',
-          header: 'Sales Mix Change (%)',
-          width: COMMON_WIDTH,
-        },
-      ]),
-
-  {
-    key: 'unit',
-    header: isNewRev ? 'Units (%)' : 'Unit Growth (%)',
-    width: COMMON_WIDTH,
-  },
-  {
-    key: 'asp',
-    header: isNewRev ? 'ASP (%)' : 'ASP Growth (%)',
-    width: COMMON_WIDTH,
-  },
-  {
-    key: 'sales',
-    header: isNewRev ? 'Sales (%)' : 'Net Sales Growth (%)',
-    width: COMMON_WIDTH,
-  },
-  {
-    key: 'unitProfit',
-    header: isNewRev ? 'Unit Profit (%)' : 'CM1 Profit Per Unit (%)',
-    width: COMMON_WIDTH,
-  },
-  {
-    key: 'profit',
-    header: isNewRev ? 'Profit (%)' : 'CM1 Profit Impact (%)',
-    width: COMMON_WIDTH,
-  },
-
-  ...(showAI
-    ? [
-        {
-          key: 'ai',
-          header: 'AI Insight',
-          width: COMMON_WIDTH,
-        },
-      ]
-    : []),
-];
-
-
-    cols.push(
-      { key: 'unitProfit', header: isNewRev ? 'Unit Profit (%)' : 'CM1 Profit Per Unit (%)', width: '190px' },
-      { key: 'profit', header: isNewRev ? 'Profit (%)' : 'CM1 Profit Impact (%)', width: '200px' }
-    );
-
-    if (showAI) cols.push({ key: 'ai', header: 'AI Insight', width: '150px' });
+      // ✅ AI column ONLY ONCE and ALWAYS LAST
+      ...(showAI
+        ? [
+          {
+            key: 'ai',
+            header: 'AI Insight',
+            width: '150px',
+          },
+        ]
+        : []),
+    ];
 
     return cols;
   }, [activeTab, month2Label, skuInsights]);
@@ -1760,19 +1784,19 @@ const cols: ColumnDef<BIGridRow>[] = [
     const showAI = Object.keys(skuInsights).length > 0;
 
     const totalNetSalesMonth1 = allSkuRows.reduce(
-  (s, r: any) => s + Number(r?.net_sales_month1 ?? r?.net_sales_prev ?? 0),
-  0
-);
+      (s, r: any) => s + Number(r?.net_sales_month1 ?? r?.net_sales_prev ?? 0),
+      0
+    );
 
 
     const totalNetSalesMonth2 =
-  activeTab === 'all_skus'
-    ? allSkuRows.reduce(
-        (s, r: any) =>
-          s + Number(r?.net_sales_month2 ?? r?.net_sales_curr ?? r?.net_sales ?? 0),
-        0
-      )
-    : 0;
+      activeTab === 'all_skus'
+        ? allSkuRows.reduce(
+          (s, r: any) =>
+            s + Number(r?.net_sales_month2 ?? r?.net_sales_curr ?? r?.net_sales ?? 0),
+          0
+        )
+        : 0;
 
     const rows: BIGridRow[] = (rowsToRender || []).map((item, idx) => {
 
@@ -1796,103 +1820,19 @@ const cols: ColumnDef<BIGridRow>[] = [
       };
     });
 
-if (activeTab === 'all_skus' && allSkuRows.length > 5) {
-  const others = allSkuRows.slice(5);
+    const hasAIInsights = Object.keys(skuInsights).length > 0;
 
-  const sum = (keyPrev: string, keyCurr: string) => {
-    let prev = 0;
-    let curr = 0;
-    others.forEach((r) => {
-      prev += Number((r as any)[keyPrev] ?? 0);
-      curr += Number((r as any)[keyCurr] ?? 0);
-    });
-    return { prev, curr };
-  };
-
-  const qty = sum('quantity_month1', 'quantity_month2');
-  const sales = sum('net_sales_month1', 'net_sales_month2');
-  const profit = sum('profit_month1', 'profit_month2');
-
-  const aspPrev = qty.prev ? sales.prev / qty.prev : 0;
-  const aspCurr = qty.curr ? sales.curr / qty.curr : 0;
-
- const othersNetSales = others.reduce(
-  (s, r: any) =>
-    s + Number(r?.net_sales_month2 ?? r?.net_sales_curr ?? r?.net_sales ?? 0),
-  0
-);
-
-// ✅ month1 totals (for mix change)
-const totalNetSalesMonth1 = allSkuRows.reduce(
-  (s, r: any) => s + Number(r?.net_sales_month1 ?? r?.net_sales_prev ?? 0),
-  0
-);
-
-const othersNetSalesMonth1 = others.reduce(
-  (s, r: any) => s + Number(r?.net_sales_month1 ?? r?.net_sales_prev ?? 0),
-  0
-);
-
-const othersMix1 =
-  totalNetSalesMonth1 > 0 ? (othersNetSalesMonth1 / totalNetSalesMonth1) * 100 : 0;
-
-const othersMix2 =
-  totalNetSalesMonth2 > 0 ? (othersNetSales / totalNetSalesMonth2) * 100 : 0;
-
-rows.push({
-  sNo: 6,
-  product: 'Others',
-
-  // ✅ CORRECT Sales Mix
-  salesMix:
-    totalNetSalesMonth2 > 0
-      ? `${((othersNetSales / totalNetSalesMonth2) * 100).toFixed(2)}%`
-      : '0.00%',
-
-  unit: renderGrowthOrNA(makeGrowth(qty.prev, qty.curr)),
-  asp: renderGrowthOrNA(makeGrowth(aspPrev, aspCurr)),
-  sales: renderGrowthOrNA(makeGrowth(sales.prev, sales.curr)),
-  
-  mixChange: `${(othersMix2 - othersMix1).toFixed(2)}%`,
-  unitProfit: renderGrowthOrNA(
-    makeGrowth(
-      profit.prev / (qty.prev || 1),
-      profit.curr / (qty.curr || 1)
-    )
-  ),
-  profit: renderGrowthOrNA(makeGrowth(profit.prev, profit.curr)),
-});
-
-}
-
-
-    // TOTAL row appended
-    const isAll = activeTab === 'all_skus';
-
-const totalSalesMix = isAll
-  ? totalNetSalesMonth2 > 0
-    ? '100.00%'
-    : '0.00%'
-  : segmentTotal && (segmentTotal as any)['Sales Mix (Month2)'] != null
-    ? `${Number((segmentTotal as any)['Sales Mix (Month2)']).toFixed(2)}%`
-    : activeTab === 'new_or_reviving_skus'
-      ? `${manualTotalsForNewRev.salesMix.toFixed(2)}%`
-      : 'N/A';
-
-
-    const totalRow: BIGridRow = {
-      __isTotal: true,
-      sNo: '',
-      product: 'Total',
-      salesMix: totalSalesMix,
-...(activeTab === 'all_skus'
-  ? (() => {
-      const all = allSkuRows;
+    if (
+      activeTab === 'all_skus' &&
+      allSkuRows.length > 5 &&
+      !showAllSkus
+    ) {
+      const others = allSkuRows.slice(5);
 
       const sum = (keyPrev: string, keyCurr: string) => {
         let prev = 0;
         let curr = 0;
-        all.forEach((r) => {
+        others.forEach((r) => {
           prev += Number((r as any)[keyPrev] ?? 0);
           curr += Number((r as any)[keyCurr] ?? 0);
         });
@@ -1906,11 +1846,43 @@ const totalSalesMix = isAll
       const aspPrev = qty.prev ? sales.prev / qty.prev : 0;
       const aspCurr = qty.curr ? sales.curr / qty.curr : 0;
 
-      return {
+      const othersNetSales = others.reduce(
+        (s, r: any) =>
+          s + Number(r?.net_sales_month2 ?? r?.net_sales_curr ?? r?.net_sales ?? 0),
+        0
+      );
+
+      // ✅ month1 totals (for mix change)
+      const totalNetSalesMonth1 = allSkuRows.reduce(
+        (s, r: any) => s + Number(r?.net_sales_month1 ?? r?.net_sales_prev ?? 0),
+        0
+      );
+
+      const othersNetSalesMonth1 = others.reduce(
+        (s, r: any) => s + Number(r?.net_sales_month1 ?? r?.net_sales_prev ?? 0),
+        0
+      );
+
+      const othersMix1 =
+        totalNetSalesMonth1 > 0 ? (othersNetSalesMonth1 / totalNetSalesMonth1) * 100 : 0;
+
+      const othersMix2 =
+        totalNetSalesMonth2 > 0 ? (othersNetSales / totalNetSalesMonth2) * 100 : 0;
+
+      rows.push({
+        sNo: 6,
+        product: 'Others',
+        salesMix:
+          totalNetSalesMonth2 > 0
+            ? `${((othersNetSales / totalNetSalesMonth2) * 100).toFixed(2)}%`
+            : '0.00%',
         unit: renderGrowthOrNA(makeGrowth(qty.prev, qty.curr)),
         asp: renderGrowthOrNA(makeGrowth(aspPrev, aspCurr)),
         sales: renderGrowthOrNA(makeGrowth(sales.prev, sales.curr)),
-mixChange: '0.00%',
+        mixChange: renderGrowthOrNA({
+          value: othersMix2 - othersMix1,
+          category: '',
+        }),
         unitProfit: renderGrowthOrNA(
           makeGrowth(
             profit.prev / (qty.prev || 1),
@@ -1918,18 +1890,89 @@ mixChange: '0.00%',
           )
         ),
         profit: renderGrowthOrNA(makeGrowth(profit.prev, profit.curr)),
-      };
-    })()
 
-        :activeTab !== 'new_or_reviving_skus'
-  ? {
-      unit: renderGrowthOrNA(segmentTotal?.['Unit Growth']),
-      asp: renderGrowthOrNA(segmentTotal?.['ASP Growth']),
-      sales: renderGrowthOrNA(segmentTotal?.['Sales Growth']),
-      mixChange: renderGrowthOrNA(segmentTotal?.['Sales Mix Change']),
-      unitProfit: renderGrowthOrNA(segmentTotal?.['Profit Per Unit']),
-      profit: renderGrowthOrNA(segmentTotal?.['CM1 Profit Impact']),
+        // ✅ AI column
+        ...(hasAIInsights
+          ? {
+            ai: (
+              <button
+                className="font-semibold underline text-[#5EA68E]"
+                onClick={() => setShowAllSkus(true)}
+              >
+                Expand SKUs
+              </button>
+            ),
+          }
+          : {}),
+      });
+
     }
+
+
+    // TOTAL row appended
+    const isAll = activeTab === 'all_skus';
+
+    const totalSalesMix = isAll
+      ? totalNetSalesMonth2 > 0
+        ? '100.00%'
+        : '0.00%'
+      : segmentTotal && (segmentTotal as any)['Sales Mix (Month2)'] != null
+        ? `${Number((segmentTotal as any)['Sales Mix (Month2)']).toFixed(2)}%`
+        : activeTab === 'new_or_reviving_skus'
+          ? `${manualTotalsForNewRev.salesMix.toFixed(2)}%`
+          : 'N/A';
+
+
+    const totalRow: BIGridRow = {
+      __isTotal: true,
+      sNo: '',
+      product: 'Total',
+      salesMix: totalSalesMix,
+      ...(activeTab === 'all_skus'
+        ? (() => {
+          const all = allSkuRows;
+
+          const sum = (keyPrev: string, keyCurr: string) => {
+            let prev = 0;
+            let curr = 0;
+            all.forEach((r) => {
+              prev += Number((r as any)[keyPrev] ?? 0);
+              curr += Number((r as any)[keyCurr] ?? 0);
+            });
+            return { prev, curr };
+          };
+
+          const qty = sum('quantity_month1', 'quantity_month2');
+          const sales = sum('net_sales_month1', 'net_sales_month2');
+          const profit = sum('profit_month1', 'profit_month2');
+
+          const aspPrev = qty.prev ? sales.prev / qty.prev : 0;
+          const aspCurr = qty.curr ? sales.curr / qty.curr : 0;
+
+          return {
+            unit: renderGrowthOrNA(makeGrowth(qty.prev, qty.curr)),
+            asp: renderGrowthOrNA(makeGrowth(aspPrev, aspCurr)),
+            sales: renderGrowthOrNA(makeGrowth(sales.prev, sales.curr)),
+            mixChange: '0.00%',
+            unitProfit: renderGrowthOrNA(
+              makeGrowth(
+                profit.prev / (qty.prev || 1),
+                profit.curr / (qty.curr || 1)
+              )
+            ),
+            profit: renderGrowthOrNA(makeGrowth(profit.prev, profit.curr)),
+          };
+        })()
+
+        : activeTab !== 'new_or_reviving_skus'
+          ? {
+            unit: renderGrowthOrNA(segmentTotal?.['Unit Growth']),
+            asp: renderGrowthOrNA(segmentTotal?.['ASP Growth']),
+            sales: renderGrowthOrNA(segmentTotal?.['Sales Growth']),
+            mixChange: renderGrowthOrNA(segmentTotal?.['Sales Mix Change']),
+            unitProfit: renderGrowthOrNA(segmentTotal?.['Profit Per Unit']),
+            profit: renderGrowthOrNA(segmentTotal?.['CM1 Profit Impact']),
+          }
           : {
             unit: '',
             asp: '',
@@ -1952,11 +1995,11 @@ mixChange: '0.00%',
   ]);
 
   const rowClassNameForDataTable = (row: BIGridRow) => {
-  if (row.__isTotal) {
-    return 'bg-[#D9D9D9] font-bold';
-  }
-  return 'bg-white';
-};
+    if (row.__isTotal) {
+      return 'bg-[#D9D9D9] font-bold';
+    }
+    return 'bg-white';
+  };
 
   // =========================
   // Render
@@ -2019,49 +2062,43 @@ mixChange: '0.00%',
 
           <div>
             <div className="mt-6 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
-           
+
               <div className="flex flex-col 2xl:flex-row gap-4  xl:items-left xl:justify-between">
-                
+
                 <h2 className="text-2xl font-bold text-[#414042] whitespace-nowrap">
                   SKU Analysis MTD
                 </h2>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:justify-between">
-                  <div
-                    style={{
-                      border: "1px solid #D9D9D9E5",
-                      borderRadius: 8,
-                      display: "inline-flex",
-                      overflow: "hidden",
-                    }}
-                    className="p-1 w-fit"
-                  >
-                    {(
-                     ['all_skus', 'top_80_skus', 'new_or_reviving_skus', 'other_skus'] as TabKey[]
-                    ).map((key) => (
-                      <button
-                        key={key}
-                        onClick={() => setActiveTab(key)}
-                        className="text-sm font-normal"
-                        style={{
-                          padding: "3px 12px",
-                          backgroundColor: activeTab === key ? "#5EA68E80" : "#ffffff",
-                          color: "#414042",
-                          border: "none",
-                          borderRadius: 5,
-                          fontWeight: activeTab === key ? 600 : 400,
-                        }}
-                      >
-                        {getTabLabel(key)}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedToggle<TabKey>
+                    value={activeTab}
+                    options={tabOptions}
+                    onChange={handleTabChange}
+                    className="bg-white border border-[#D9D9D9E5] shadow-sm"
+                    textSizeClass="text-sm"
+                  />
+
 
                   <div className="flex gap-3">
                     <button
                       onClick={analyzeSkus}
                       disabled={!hasAnySkus}
-                      className="bg-custom-effect text-[#F8EDCE] rounded-sm px-4 flex items-center justify-end disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="
+    bg-custom-effect text-[#F8EDCE]
+    rounded-sm xl:px-4 px-3
+    text-nowrap flex items-center gap-1 justify-end
+
+    transition-all duration-200 ease-out
+    hover:-translate-y-[2px]
+    hover:shadow-lg
+    active:translate-y-0
+    active:shadow-md
+
+    disabled:opacity-50
+    disabled:cursor-not-allowed
+    disabled:transform-none
+    disabled:shadow-none
+  "
                       style={{ boxShadow: '0px 4px 4px 0px #00000040' }}
                     >
                       <BsStars style={{ fontSize: '12px', color: '#F8EDCE' }} />
@@ -2083,12 +2120,20 @@ mixChange: '0.00%',
                     </button> */}
 
                     <DownloadIconButton onClick={() => {
-                        const prevShortName = prevShort || 'Prev';
-                        const currShortName = currShort || 'Curr';
-                        const file = `AllSKUs-${prevShortName}vs${currShortName}.xlsx`;
-                        const allRows = getAllSkusForExport();
-                        exportToExcel(allRows, file);
-                      }} />
+                      const prevShortName = prevShort || 'Prev';
+                      const currShortName = currShort || 'Curr';
+                      const file = `AllSKUs-${prevShortName}vs${currShortName}.xlsx`;
+                      const allRows = getAllSkusForExport();
+                      exportToExcel(allRows, file);
+                    }}
+                      className="
+    
+    transition-all duration-200 ease-out
+    hover:-translate-y-[2px]
+    hover:shadow-lg
+    active:translate-y-0
+    active:shadow-md
+  "/>
                   </div>
                 </div>
               </div>
@@ -2111,7 +2156,38 @@ mixChange: '0.00%',
                 <div className="pt-6 text-sm text-gray-500">
                   No SKUs found for this period / country. Try changing the period or checking if orders exist.
                 </div>
+
               )}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: 24,
+                  marginTop: 12,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#414042',
+                }}
+              >
+                {/* High Growth */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <FaArrowUp size={12} color="#16a34a" />
+                  <span style={{ color: '#16a34a' }}>High Growth (&gt; +5%)</span>
+                </div>
+
+                {/* Negative Growth */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <FaArrowDown size={12} color="#dc2626" />
+                  <span style={{ color: '#dc2626' }}>Negative Growth (&lt; -5%)</span>
+                </div>
+
+                {/* Low Growth */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <FaArrowUp size={12} color="#414042" />
+                  <span>Low Growth (-5% to +5%)</span>
+                </div>
+
+              </div>
             </div>
           </div>
         </div>
@@ -2161,7 +2237,10 @@ mixChange: '0.00%',
               </div>
 
               <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8 }}>
-                <Productinfoinpopup productname={insightData.product_name} />
+                <Productinfoinpopup
+                  productname={insightData.product_name}
+                  countryName={countryName}   // ✅ PASS COUNTRY
+                />
               </div>
 
               <div style={{ flex: 1, overflowY: 'auto', marginTop: 8, paddingRight: 4 }}>

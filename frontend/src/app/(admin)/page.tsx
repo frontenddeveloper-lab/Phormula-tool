@@ -1541,12 +1541,21 @@ type BiApiResponse = {
   };
   daily_series?: DailySeries;
 
-  // 👇 add these for MonthsforBI
+  aligned_totals?: BiAlignedTotals;
+
   categorized_growth?: any;
   insights?: Record<string, any>;
   ai_insights?: Record<string, any>;
   overall_summary?: string[];
   overall_actions?: string[];
+};
+
+
+type BiAlignedTotals = {
+  current_cm2_profit?: number;
+  previous_cm2_profit?: number;
+  total_current_profit_percentage?: number;
+  total_previous_profit_percentage?: number;
 };
 
 
@@ -1813,6 +1822,7 @@ export default function DashboardPage() {
   const [biDailySeries, setBiDailySeries] = useState<DailySeries | null>(null);
   const [biPeriods, setBiPeriods] = useState<BiApiResponse["periods"] | null>(null);
   const [liveBiPayload, setLiveBiPayload] = useState<BiApiResponse | null>(null);
+  const [biAlignedTotals, setBiAlignedTotals] = useState<BiAlignedTotals | null>(null);
 
   /* ===================== FX RATES ===================== */
   const [gbpToUsd, setGbpToUsd] = useState(GBP_TO_USD_ENV);
@@ -2199,66 +2209,146 @@ export default function DashboardPage() {
 
   const lastBiKeyRef = useRef<string>("");
 
-  const fetchBiSeries = useCallback(
-    async (startDay?: number | null, endDay?: number | null) => {
-      if (!showLiveBI) return;
+  // const fetchBiSeries = useCallback(
+  //   async (startDay?: number | null, endDay?: number | null) => {
+  //     if (!showLiveBI) return;
 
-      const normalized = (countryName || "").toLowerCase();
-      if (!normalized || normalized === "global") return;
+  //     const normalized = (countryName || "").toLowerCase();
+  //     if (!normalized || normalized === "global") return;
 
 
-      const key = JSON.stringify({
-        country: normalized,
+  //     const key = JSON.stringify({
+  //       country: normalized,
+  //       ranged: "MTD",
+  //       month: currMonthName.toLowerCase(),
+  //       year: currYear,
+  //       startDay: startDay ?? null,
+  //       endDay: endDay ?? null,
+  //     });
+
+  //     if (lastBiKeyRef.current === key) return;
+  //     lastBiKeyRef.current = key;
+  //     // ✅ END ADD
+
+
+  //     setBiLoading(true);
+  //     setBiError(null);
+  //     // ✅ clear range-based totals so UI doesn't show previous values
+  //     setBiAlignedTotals(null);
+
+  //     try {
+  //       const token =
+  //         typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
+
+  //       const params = new URLSearchParams({
+  //         countryName: normalized,
+  //         ranged: "MTD",
+  //         month: currMonthName.toLowerCase(),
+  //         year: String(currYear),
+  //         generate_ai_insights: "false",
+  //       });
+
+  //       if (startDay != null) params.set("start_day", String(startDay));
+  //       if (endDay != null) params.set("end_day", String(endDay));
+
+  //       const res = await fetch(`${LIVE_MTD_BI_ENDPOINT}?${params.toString()}`, {
+  //         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  //       });
+
+  //       const json: BiApiResponse = await res.json();
+  //       if (!res.ok) throw new Error((json as any)?.error || "Failed to load BI series");
+
+  //       setLiveBiPayload(json);
+  //       setBiPeriods(json?.periods || null);
+  //       setBiDailySeries(json?.daily_series || null);
+  //       setBiAlignedTotals(json?.aligned_totals || null);
+  //     } catch (e: any) {
+  //       setBiPeriods(null);
+  //       setBiDailySeries(null);
+  //       setBiAlignedTotals(null);
+  //       setBiError(e?.message || "Failed to load BI series");
+  //     } finally {
+  //       setBiLoading(false);
+  //     }
+  //   },
+  //   [showLiveBI, countryName, currMonthName, currYear]
+  // );
+
+const fetchBiSeries = useCallback(
+  async (startDay?: number | null, endDay?: number | null) => {
+    if (!showLiveBI) return;
+
+    const normalized = (countryName || "").toLowerCase();
+    if (!normalized || normalized === "global") return;
+
+    // ✅ only treat it as "range mode" if BOTH exist
+    const rangeActive = startDay != null && endDay != null;
+
+    const key = JSON.stringify({
+      country: normalized,
+      ranged: "MTD",
+      month: currMonthName.toLowerCase(),
+      year: currYear,
+      startDay: rangeActive ? startDay : null,
+      endDay: rangeActive ? endDay : null,
+    });
+
+    if (lastBiKeyRef.current === key) return;
+    lastBiKeyRef.current = key;
+
+    setBiLoading(true);
+    setBiError(null);
+
+    // ✅ IMPORTANT:
+    // Clear BI aligned totals ONLY when a range is active.
+    // If you clear it always, your UI shows 0 CM2 even when no range is selected.
+    if (rangeActive) {
+      setBiAlignedTotals(null);
+    }
+
+    try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
+
+      const params = new URLSearchParams({
+        countryName: normalized,
         ranged: "MTD",
         month: currMonthName.toLowerCase(),
-        year: currYear,
-        startDay: startDay ?? null,
-        endDay: endDay ?? null,
+        year: String(currYear),
+        generate_ai_insights: "false",
       });
 
-      if (lastBiKeyRef.current === key) return;
-      lastBiKeyRef.current = key;
-      // ✅ END ADD
-
-
-      setBiLoading(true);
-      setBiError(null);
-
-      try {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
-
-        const params = new URLSearchParams({
-          countryName: normalized,
-          ranged: "MTD",
-          month: currMonthName.toLowerCase(),
-          year: String(currYear),
-          generate_ai_insights: "false",
-        });
-
-        if (startDay != null) params.set("start_day", String(startDay));
-        if (endDay != null) params.set("end_day", String(endDay));
-
-        const res = await fetch(`${LIVE_MTD_BI_ENDPOINT}?${params.toString()}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-
-        const json: BiApiResponse = await res.json();
-        if (!res.ok) throw new Error((json as any)?.error || "Failed to load BI series");
-
-        setLiveBiPayload(json);
-        setBiPeriods(json?.periods || null);
-        setBiDailySeries(json?.daily_series || null);
-      } catch (e: any) {
-        setBiPeriods(null);
-        setBiDailySeries(null);
-        setBiError(e?.message || "Failed to load BI series");
-      } finally {
-        setBiLoading(false);
+      // ✅ only send range params when rangeActive
+      if (rangeActive) {
+        params.set("start_day", String(startDay));
+        params.set("end_day", String(endDay));
       }
-    },
-    [showLiveBI, countryName, currMonthName, currYear]
-  );
+
+      const res = await fetch(`${LIVE_MTD_BI_ENDPOINT}?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      const json: BiApiResponse = await res.json();
+      if (!res.ok) throw new Error((json as any)?.error || "Failed to load BI series");
+
+      setLiveBiPayload(json);
+      setBiPeriods(json?.periods || null);
+      setBiDailySeries(json?.daily_series || null);
+
+      // ✅ store aligned totals (used ONLY when rangeActive in UI)
+      setBiAlignedTotals(json?.aligned_totals || null);
+    } catch (e: any) {
+      setBiPeriods(null);
+      setBiDailySeries(null);
+      setBiAlignedTotals(null);
+      setBiError(e?.message || "Failed to load BI series");
+    } finally {
+      setBiLoading(false);
+    }
+  },
+  [showLiveBI, countryName, currMonthName, currYear]
+);
+
 
   useEffect(() => {
     if (!showLiveBI) return;
@@ -2501,7 +2591,15 @@ export default function DashboardPage() {
   }, [biDailySeries, selectedStartDay, selectedEndDay]);
 
 
+  // const rangeActive = selectedStartDay != null && selectedEndDay != null;
   const rangeActive = selectedStartDay != null && selectedEndDay != null;
+
+  // use BI only when a range is active
+  const useBiCm2 = showLiveBI && rangeActive;
+
+  // BI values are usable only when rangeActive + finished loading + response present
+  const cm2Ready = useBiCm2 && !biLoading && !!biAlignedTotals;
+
 
   /* ===================== INTEGRATION FLAGS ===================== */
   const shopifyDeriv = useMemo(() => {
@@ -3036,6 +3134,7 @@ export default function DashboardPage() {
     return "GBP"; // amazon-uk OR global default
   }, [platform]);
 
+
   return (
     <div className="relative overflow-x-hidden">
       {(loading || shopifyLoading) && !data && !shopify && (
@@ -3301,45 +3400,63 @@ export default function DashboardPage() {
                       className="border-[#2CA9E0] bg-[#2CA9E026]"
                     />
 
-
                     <AmazonStatCard
                       label="CM2 Profit"
                       current={
-                        showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(biCardKpis.curr.profit, rangeCurrency)
-                          : convertToDisplayCurrency(uk.cm2ProfitGBP ?? 0, "GBP")
+                        useBiCm2
+                          ? (cm2Ready
+                            ? convertToDisplayCurrency(biAlignedTotals?.current_cm2_profit ?? 0, rangeCurrency)
+                            : 0)
+                          : convertToDisplayCurrency(uk.cm2ProfitGBP ?? 0, amazonDataCurrency) // ✅ MTD Transactions
                       }
                       previous={
-                        showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(biCardKpis.prev.profit, rangeCurrency) // BI profit = CM2? (if yes keep)
-                          : convertToDisplayCurrency(prev.cm2Profit ?? 0, "GBP")           // ✅ CHANGED
+                        useBiCm2
+                          ? (cm2Ready
+                            ? convertToDisplayCurrency(biAlignedTotals?.previous_cm2_profit ?? 0, rangeCurrency)
+                            : 0)
+                          : convertToDisplayCurrency(prev.cm2Profit ?? 0, amazonDataCurrency) // ✅ MTD Transactions prev
                       }
                       deltaPct={
-                        showLiveBI && rangeActive
-                          ? biCardKpis.deltas.profit
-                          : safeDeltaPct(uk.cm2ProfitGBP ?? 0, prev.cm2Profit ?? 0)        // ✅ CHANGED
+                        useBiCm2
+                          ? (cm2Ready
+                            ? safeDeltaPct(
+                              biAlignedTotals?.current_cm2_profit ?? 0,
+                              biAlignedTotals?.previous_cm2_profit ?? 0
+                            )
+                            : null)
+                          : safeDeltaPct(uk.cm2ProfitGBP ?? 0, prev.cm2Profit ?? 0) // ✅ MTD Transactions delta
                       }
-                      loading={loading || biLoading}
+                      loading={loading || (useBiCm2 ? biLoading : false)}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
                       className="border-[#AB64B5] bg-[#AB64B526]"
                     />
 
-
-
-
                     <AmazonStatCard
                       label="CM2 Profit %"
-                      current={showLiveBI && rangeActive ? biCardKpis.curr.profitPct : curr.profitPct}
-                      previous={showLiveBI && rangeActive ? biCardKpis.prev.profitPct : prev.profitPct}
-                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.profitPctPts : deltas.profitMarginPctPts}
-                      loading={loading || biLoading}
+                      current={
+                        useBiCm2
+                          ? (cm2Ready ? (biAlignedTotals?.total_current_profit_percentage ?? 0) : 0)
+                          : (curr.profitPct ?? 0) // ✅ MTD Transactions
+                      }
+                      previous={
+                        useBiCm2
+                          ? (cm2Ready ? (biAlignedTotals?.total_previous_profit_percentage ?? 0) : 0)
+                          : (prev.profitPct ?? 0) // ✅ MTD Transactions
+                      }
+                      deltaPct={
+                        useBiCm2
+                          ? (cm2Ready
+                            ? (biAlignedTotals?.total_current_profit_percentage ?? 0) -
+                            (biAlignedTotals?.total_previous_profit_percentage ?? 0)
+                            : null)
+                          : deltas.profitMarginPctPts // ✅ pp delta from MTD transactions
+                      }
+                      loading={loading || (useBiCm2 ? biLoading : false)}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
                       className="border-[#00627B] bg-[#00627B26]"
                     />
-
-
                   </div>
                 </div>
 

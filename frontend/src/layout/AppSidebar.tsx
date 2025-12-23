@@ -1038,13 +1038,13 @@ const AppSidebar: React.FC = () => {
       ),
       subItems: [
         {
-          name: "Input Cost",
+          name: "Current Inventory",
           path: `/inputCost/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
         },
-        {
-          name: "Month-Wise Inventory",
-          path: `/currentInventory/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-        },
+        // {
+        //   name: "Month-Wise Inventory",
+        //   path: `/currentInventory/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+        // },
         {
           name: "Dispatches",
           path: `/dispatch/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,

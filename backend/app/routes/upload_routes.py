@@ -996,7 +996,7 @@ def upload():
 
                 # Generate sales pie chart
                 if country.lower() == 'uk':
-                    total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold  = process_skuwise_data(user_id, country, month, year)
+                    total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold, total_product_sales = process_skuwise_data(user_id, country, month, year)
                     ytd_pie_chart = process_yearly_skuwise_data(user_id, country, year)
                     qtd_pie_chart = process_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
                     # sales_pie_chart, platform_fee, rembursement_fee = create_sales_pie_chart(df_modified)
@@ -1030,6 +1030,7 @@ def upload():
                     sales_chart_img=None,
                     expense_chart_img=None,
                     total_sales=float(total_sales),
+                    total_product_sales=float(total_product_sales),
                     total_profit=float(total_profit),
                     otherwplatform=float(platform_fee),
                     taxncredit = float(taxncredit) if taxncredit is not None else 0.0,
@@ -1062,7 +1063,7 @@ def upload():
                     print("Table exists! Running next month logic...")
     # Run for next month too
                     if country.lower() == 'uk':
-                        total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold = process_skuwise_data(user_id, country, next_month, next_year)
+                        total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold, total_product_sales = process_skuwise_data(user_id, country, next_month, next_year)
                     elif country.lower() == 'us':
                         platform_fee, rembursement_fee, total_cous, total_amazon_fee,  total_profit, total_expense, total_fba_fees, cm2_profit, cm2_margins, acos, rembursment_vs_cm2_margins, advertising_total, reimbursement_vs_sales, unit_sold, total_sales, otherwplatform,taxncredit = process_skuwise_us_data(user_id, country, next_month, next_year)
                         print("success run")
@@ -1077,6 +1078,7 @@ def upload():
                     # 'sales_chart_img': sales_pie_chart,
                     # 'expense_chart_img': expense_pie_chart,
                     'total_sales': total_sales,
+                    'total_product_sales': total_product_sales,
                     'total_profit': total_profit,
                     'otherwplatform': platform_fee,
                     'taxncredit': taxncredit,
@@ -1452,6 +1454,7 @@ def upload_history():
             'file_name': table_name,
 
             'total_sales': upload.total_sales,
+            'total_product_sales': upload.total_product_sales,
             'total_profit': upload.total_profit,
             'total_expense': upload.total_expense,
             'total_fba_fees': upload.total_fba_fees,
@@ -1562,6 +1565,7 @@ def upload_history2():
 
     def summarize_uploads(uploads):
         total_sales = sum(upload.total_sales or 0 for upload in uploads)
+        total_product_sales = sum(upload.total_product_sales or 0 for upload in uploads)
         total_profit = sum(upload.total_profit or 0 for upload in uploads)
         total_expense = sum(upload.total_expense or 0 for upload in uploads)
         advertising_total = sum(upload.advertising_total or 0 for upload in uploads)
@@ -1574,6 +1578,7 @@ def upload_history2():
 
         return {
             'total_sales': total_sales,
+            'total_product_sales': total_product_sales,
             'total_profit': total_profit,
             'total_expense': total_expense,
             'advertising_total': advertising_total,
@@ -1827,6 +1832,7 @@ def upload_historyforacos():
             'country': upload.country,
             'file_name': table_name,
             'total_sales': upload.total_sales,
+            'total_product_sales': upload.total_product_sales,
             'total_profit': upload.total_profit,
             'total_expense': upload.total_expense,
             'total_fba_fees': upload.total_fba_fees,

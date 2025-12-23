@@ -461,7 +461,7 @@ uiRows.push({
       header: "Product Name",
       cellClassName: "text-left",
       headerClassName: "text-left",
-      width: "220px",
+      // width: "220px",
     });
 
     cols.push({

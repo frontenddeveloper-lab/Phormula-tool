@@ -1230,7 +1230,7 @@ def run_upload_pipeline_from_df(
     quarter = quarter_mapping[month]
 
     if country == "uk":
-        total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold = \
+        total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold, total_product_sales = \
             process_skuwise_data(user_id, country, month, year)
         ytd_pie_chart = process_yearly_skuwise_data(user_id, country, year)
         qtd_pie_chart = process_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
@@ -1254,6 +1254,7 @@ def run_upload_pipeline_from_df(
         file_name=f"amazon_settlement_{month}{year}.tsv",
         sales_chart_img=None, expense_chart_img=None,
         total_sales=float(total_sales), total_profit=float(total_profit),
+        total_product_sales=float(total_product_sales),
         otherwplatform=platform_fee,
         taxncredit=float(taxncredit) if taxncredit is not None else 0.0,
         total_expense=float(total_expense),
@@ -1284,6 +1285,7 @@ def run_upload_pipeline_from_df(
     response_data = {
         "success": True,
         "total_sales": total_sales,
+        "total_product_sales": total_product_sales,
         "total_profit": total_profit,
         "otherwplatform": platform_fee,
         "taxncredit": taxncredit,

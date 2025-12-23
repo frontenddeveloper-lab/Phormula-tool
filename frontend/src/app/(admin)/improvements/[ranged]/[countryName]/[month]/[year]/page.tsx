@@ -3051,17 +3051,17 @@ const MonthsforBI: React.FC = () => {
           {/* Shared legend bottom center */}
           <div className="mt-3 flex flex-wrap justify-center gap-4 sm:text-sm text-xs font-semibold text-[#414042]">
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#F47A00]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#F47A00]" />
               Top 80%
             </span>
 
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#AB64B5]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#AB64B5]" />
               Other SKUs
             </span>
 
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#87AD12]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#87AD12]" />
               New/Reviving
             </span>
           </div>
@@ -3075,9 +3075,9 @@ const MonthsforBI: React.FC = () => {
         ) && (
             <div className='border border-gray-200 rounded-xl p-4 mt-6 w-full bg-white'>
               <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start '>
-                <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start w-full xl:gap-0 gap-3'>
-                  <h2 className="xl:text-2xl text-xl font-bold text-[#414042]">Performance-based SKU split</h2>
-                  <div className='flex flex-col md:flex-row justify-center gap-3'>
+                <div className='flex 2xl:flex-row flex-col lg:justify-between justify-start 2xl:items-center  items-start w-full xl:gap-0 gap-3'>
+                  <h2 className="xl:text-2xl text-xl font-bold text-[#414042]">SKU Analysis MTD</h2>
+                  <div className='flex flex-col md:flex-row 2xl:justify-center justify-between 2xl:gap-3 mt-2 2xl:mt-0 w-full'>
 
                     <div
                       style={{
@@ -3636,7 +3636,10 @@ const MonthsforBI: React.FC = () => {
 
               {/* Chart */}
               <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8 }}>
-                <Productinfoinpopup productname={insightData.product_name} />
+                <Productinfoinpopup
+                  productname={insightData.product_name}
+                  countryName={countryName}   // ✅ PASS COUNTRY
+                />
               </div>
 
               {/* Insights text with bullets & colors */}

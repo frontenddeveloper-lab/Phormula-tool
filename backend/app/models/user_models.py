@@ -103,6 +103,7 @@ class UploadHistory(db.Model):
     ytd_pie_chart = Column(db.Text)
     profit_chart_img = Column(db.Text)
     total_sales = Column(Float)
+    total_product_sales = Column(Float)
     total_profit = Column(Float)
     otherwplatform = Column(Float)
     taxncredit = Column(Float, nullable=True)
