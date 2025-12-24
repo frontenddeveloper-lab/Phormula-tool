@@ -1006,6 +1006,76 @@ def sync_inventory_aged():
     }), 200
 
 
+@inventory_bp.route("/amazon_api/inventory/aged/columns", methods=["GET"])
+def get_inventory_aged_selected_columns():
+    # --- auth ---
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Missing Authorization header"}), 401
+
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("user_id")
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Invalid token"}), 401
+
+    if not user_id:
+        return jsonify({"error": "Invalid token payload"}), 401
+
+    # --- filters ---
+    marketplace_id = request.args.get("marketplace_id")
+    snapshot_date = request.args.get("snapshot_date")  # YYYY-MM-DD
+    latest = request.args.get("latest", "0") == "1"
+
+    q = InventoryAged.query.filter(InventoryAged.user_id == user_id)
+
+    if marketplace_id:
+        q = q.filter(InventoryAged.marketplace == marketplace_id)
+
+    if latest:
+        latest_date = (
+            db.session.query(InventoryAged.snapshot_date)
+            .filter(InventoryAged.user_id == user_id)
+            .order_by(InventoryAged.snapshot_date.desc())
+            .limit(1)
+            .scalar()
+        )
+        if latest_date:
+            q = q.filter(InventoryAged.snapshot_date == latest_date)
+
+    elif snapshot_date:
+        q = q.filter(InventoryAged.snapshot_date == snapshot_date)
+
+    rows = q.order_by(InventoryAged.id.asc()).all()
+
+    # --- ONLY required fields ---
+    data = []
+    for r in rows:
+        data.append({
+            "fnsku": getattr(r, "fnsku", None),
+            "asin": getattr(r, "asin", None),
+            "product-name": getattr(r, "product_name", None),
+            "condition": getattr(r, "condition", None),
+            "available": getattr(r, "available", 0),
+            "pending-removal-quantity": getattr(r, "pending_removal_quantity", 0),
+            "inv-age-0-to-90-days": getattr(r, "inv_age_0_90", 0),
+            "inv-age-91-to-180-days": getattr(r, "inv_age_91_180", 0),
+            "inv-age-181-to-270-days": getattr(r, "inv_age_181_270", 0),
+            "inv-age-271-to-365-days": getattr(r, "inv_age_271_365", 0),
+            "inv-age-365-plus-days": getattr(r, "inv_age_365_plus", 0),
+            "currency": getattr(r, "currency", None),
+            "estimated-storage-cost-next-month": getattr(r, "estimated_storage_cost_next_month", 0.0),
+        })
+
+    return jsonify({
+        "success": True,
+        "count": len(data),
+        "data": data
+    }), 200
+
 
 @inventory_bp.route("/country-profile", methods=["POST"])
 def upsert_country_profile():
@@ -1093,7 +1163,7 @@ def upsert_country_profile():
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": "Database error", "detail": str(e)}), 500
-
+    
 #------------------------------------------------------------------------------ MonthwiseInventory upsert logic --------------------------------------
 
 def _upsert_monthwise_inventory_rows(

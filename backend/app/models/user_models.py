@@ -123,6 +123,20 @@ class UploadHistory(db.Model):
     pnl_email_sent = db.Column(db.Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class Email(db.Model):
+    __tablename__ = "email"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    country = Column(String(255), nullable=False, index=True)
+
+    # last time BI email was sent
+    sent_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "country", name="uq_email_user_country"),
+    )
+
 
 # -----------------------------  Chat History -----------------------------
 

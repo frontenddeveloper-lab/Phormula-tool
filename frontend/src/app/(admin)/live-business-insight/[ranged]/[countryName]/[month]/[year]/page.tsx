@@ -15,6 +15,7 @@ import Loader from '@/components/loader/Loader';
 import DataTable, { ColumnDef } from '@/components/ui/table/DataTable';
 import DownloadIconButton from '@/components/ui/button/DownloadIconButton';
 import SegmentedToggle from '@/components/ui/SegmentedToggle';
+import { AiButton } from '@/components/ui/button/AiButton';
 
 // import DataTable, { ColumnDef, Row as DataTableRow } from '@/components/DataTable'; 
 
@@ -1974,12 +1975,13 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
             profit: renderGrowthOrNA(segmentTotal?.['CM1 Profit Impact']),
           }
           : {
-            unit: '',
-            asp: '',
-            sales: '',
-            unitProfit: '',
-            profit: '',
-          }),
+            unit: '-',
+            asp: '-',
+            sales: '-',
+            unitProfit: '-',
+            profit: '-',
+          }
+      ),
       ...(Object.keys(skuInsights).length > 0 ? { ai: '' } : {}),
     };
 
@@ -2105,6 +2107,14 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                       {loadingInsight ? 'Generating...' : 'AI Insights'}
                     </button>
 
+                    {/* <AiButton
+                      onClick={analyzeSkus}
+                      disabled={!hasAnySkus}
+                      loading={loadingInsight}
+                    >
+                      AI Insights
+                    </AiButton> */}
+
                     {/* <button
                       onClick={() => {
                         const prevShortName = prevShort || 'Prev';
@@ -2158,35 +2168,51 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                 </div>
 
               )}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  gap: 24,
-                  marginTop: 12,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: '#414042',
-                }}
-              >
-                {/* High Growth */}
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <FaArrowUp size={12} color="#16a34a" />
-                  <span style={{ color: '#16a34a' }}>High Growth (&gt; +5%)</span>
-                </div>
+              < div className='flex justify-center mt-2'>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 28,              // ⬅️ increase this (was 14)
+                    flexWrap: 'wrap',
+                    fontSize: 14,
+                    color: '#414042',
+                    marginTop: 6,
+                  }}
+                >
 
-                {/* Negative Growth */}
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <FaArrowDown size={12} color="#dc2626" />
-                  <span style={{ color: '#dc2626' }}>Negative Growth (&lt; -5%)</span>
-                </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#5EA68E', fontWeight: 700 }}>
+                      <FaArrowUp size={12} /> High growth
+                    </span>
+                  </span>
 
-                {/* Low Growth */}
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <FaArrowUp size={12} color="#414042" />
-                  <span>Low Growth (-5% to +5%)</span>
-                </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#FF5C5C', fontWeight: 700 }}>
+                      <FaArrowDown size={12} /> Negative growth
+                    </span>
+                  </span>
 
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{ color: '#414042', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <FaArrowUp size={12} /> + / <FaArrowDown size={12} /> -
+                    </span>
+                    Low growth
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>-</span>
+                    Past data for SKU is not available
+                  </span>
+
+                </div>
               </div>
             </div>
           </div>

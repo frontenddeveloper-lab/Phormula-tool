@@ -268,7 +268,8 @@ export default function AmazonStatCard({
   const isUp = deltaToShow != null && deltaToShow >= 0;
 
   const isPercentLabel = label.toLowerCase().includes("%");
-  const suffix = deltaPct !== undefined && isPercentLabel ? "pp" : "%";
+  const suffix = "%";
+
 
   let deltaContent: React.ReactNode = "—";
   if (deltaToShow != null) {
@@ -285,8 +286,8 @@ export default function AmazonStatCard({
     deltaToShow == null
       ? "text-gray-400"
       : isUp
-      ? "text-emerald-600"
-      : "text-rose-600";
+        ? "text-emerald-600"
+        : "text-rose-600";
 
   return (
     <div

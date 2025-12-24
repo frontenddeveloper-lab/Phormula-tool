@@ -6,6 +6,8 @@ import '@/app/(admin)/pnlforecast/[countryName]/[month]/[year]/Styles.css';
 import Modalmsg from '@/components/ui/modal/Modalmsg';
 import SkuMultiuseCountryUpload from '@/components/ui/modal/SkuMultiCountryUpload';
 import { IoDownload } from "react-icons/io5";
+import { FaCaretLeft, FaCaretRight } from "react-icons/fa";
+
 
 /* ================= TYPES ================= */
 interface Params {
@@ -51,6 +53,8 @@ function getCurrencyForCountry(country: string): string {
   }
 }
 
+ 
+
 /* ================= COMPONENT ================= */
 export default function InputCostPage({ params }: Params) {
   const { countryName: countryNameRaw, month: monthRaw, year: yearRaw } = use(params);
@@ -74,10 +78,24 @@ export default function InputCostPage({ params }: Params) {
   /* ===== NEW AGEING STATE ===== */
   const [ageingMap, setAgeingMap] = useState<Record<string, any>>({});
   const [showAgeBreakup, setShowAgeBreakup] = useState(false);
+  const [showSkuExpand, setShowSkuExpand] = useState(false);
+
+  
+  const normalizeSku = (v: any) => String(v ?? '').trim().toUpperCase();
+
+
+  // ✅ Helper: match ageing row by SKU (most reliable for uploaded SKU table)
+const getAgeingForRow = (row: SkuRow) => {
+  const key = String(row.product_name || '').trim().toLowerCase();
+  return ageingMap[key] || {};
+};
+
 
   /* ================= COLUMN LOGIC ================= */
   const isColumnEmpty = (data: SkuRow[], columnName: string) =>
     data.every(r => !r[columnName]);
+
+  
 
   const getVisibleColumns = (data: SkuRow[]) => {
     const base = ['s_no', 'product_name'];
@@ -164,21 +182,30 @@ export default function InputCostPage({ params }: Params) {
   };
 
   // 🔥 AGEING INVENTORY (NEW)
-  const fetchAgeingInventory = async () => {
-    const token = localStorage.getItem('jwtToken');
-    if (!token) return;
+ // 🔥 AGEING INVENTORY (map by SKU)
+const fetchAgeingInventory = async () => {
+  const token = localStorage.getItem('jwtToken');
+  if (!token) return;
 
-    const res = await fetch(
-      'http://127.0.0.1:5000/amazon_api/inventory/aged',
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+  const res = await fetch(
+    'http://127.0.0.1:5000/amazon_api/inventory/aged/columns?latest=1',
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
 
-    const json = await res.json();
-    const rows = json?.rows || json?.data || [];
-    const map: Record<string, any> = {};
-    rows.forEach((r: any) => r.asin && (map[r.asin] = r));
-    setAgeingMap(map);
-  };
+  const json = await res.json();
+  const rows = Array.isArray(json?.data) ? json.data : [];
+
+  const map: Record<string, any> = {};
+  rows.forEach((r: any) => {
+    const key = String(r['product-name'] || '').trim().toLowerCase();
+    if (key) map[key] = r;
+  });
+
+  setAgeingMap(map);
+};
+
+
+
 
   /* ================= EFFECT ================= */
   useEffect(() => {
@@ -299,105 +326,260 @@ export default function InputCostPage({ params }: Params) {
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error: {error}</div>;
 
+  const totalAvailableUnits = skuData.reduce((sum, row) => {
+  const ageing = getAgeingForRow(row);
+  return sum + Number(ageing.available || 0);
+}, 0);
+
+const totalStorageCost = skuData.reduce((sum, row) => {
+  const ageing = getAgeingForRow(row);
+  return sum + Number(ageing['estimated-storage-cost-next-month'] || 0);
+}, 0);
+
+
+
   /* ================= RENDER ================= */
   return (
     <div>
-      <style>{`
-        div { font-family: 'Lato', sans-serif; }
-        .table-wrapper {
-          width: 100%; max-width: 100%; max-height: 80vh; overflow-x: auto; overflow-y: auto; margin-top: 20px;
-          scrollbar-width: thin; scrollbar-color: #5EA68E #f8edcf; -webkit-overflow-scrolling: touch;
-        }
-        .tablec { width: 100%; border-collapse: collapse; min-width: 900px; }
-        .tablec td, .tablec th { border: 1px solid #414042; padding: 8px; text-align: center;  font-size: clamp(12px, 0.729vw, 16px) !important; }
-       .theadc th {
-background-color: #5EA68E;
-color: #f8edcf;
-font-weight: bold;
-}
-        .tablec tbody tr:nth-child(even) { background-color: #5EA68E33; }
-        .tablec tbody tr:nth-child(odd) { background-color: #ffffff; }
-        .left-align { text-align: left !important; width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .gross-margin-positive { color: #28a745; font-weight: bold; }
-        .gross-margin-negative { color: #dc3545; font-weight: bold; }
-        .gross-margin-na { color: #6c757d; font-style: italic; }
-        .serial-no-col { max-width: 38px; width: 38px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      `}</style>
+<style>{`
+  div {
+    font-family: 'Lato', sans-serif;
+  }
 
-      <h2 className='text-2xl text-[#414042] font-bold '>
+  .table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    max-height: 80vh;
+    overflow-x: auto;
+    overflow-y: auto;
+    margin-top: 20px;
+    scrollbar-width: thin;
+    scrollbar-color: #5EA68E #f8edcf;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tablec {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1100px;
+  }
+
+  .tablec th,
+  .tablec td {
+    border: 1px solid #414042;
+    padding: 8px;
+    text-align: center;
+    font-size: clamp(12px, 0.729vw, 16px) !important;
+    width: 120px;
+  }
+
+  .theadc th {
+    background-color: #5EA68E;
+    color: #f8edcf;
+    font-weight: bold;
+  }
+
+  .tablec tbody tr:nth-child(even) {
+    background-color: #5EA68E33;
+  }
+
+  .tablec tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+  }
+
+  .left-align {
+    text-align: left !important;
+    width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .serial-no-col {
+    max-width: 38px;
+    width: 38px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .gross-margin-positive {
+    color: #28a745;
+    font-weight: bold;
+  }
+
+  .gross-margin-negative {
+    color: #dc3545;
+    font-weight: bold;
+  }
+
+  .gross-margin-na {
+    color: #6c757d;
+    font-style: italic;
+  }
+
+  /* 🔥 Expandable headers (SKU & 180+) */
+  .expandable {
+    background-color: #4f9b84;
+    cursor: pointer;
+  }
+`}</style>
+
+<h2 className='text-2xl text-[#414042] font-bold '>
         Uploaded SKU Price Data - <span style={{ color: '#60a68e' }}> {countryName?.toUpperCase()}</span>
       </h2>
-<div className="table-wrapper">
-      <table className="tablec">
-        <thead className="theadc">
-          <tr>
-           {visibleColumns.map(col => (
-  <th
-    key={col}
-    className={col === 'product_name' ? 'left-align' : ''}
-  >
-    {getColumnDisplayName(col)}
-  </th>
-))}
-            <th>Available</th>
-            <th
-              onClick={() => setShowAgeBreakup(p => !p)}
-              style={{ cursor: 'pointer' }}
-            >
-              271–365 {showAgeBreakup ? '▲' : '▼'}
-            </th>
-             {showAgeBreakup && (
-              <>
-                <th>0–90</th>
-                <th>91–180</th>
-                <th>181–270</th>
-              </>
-            )}
-            <th>Est. Storage</th>
-           
-          </tr>
-        </thead>
+      <div className="table-wrapper">
+        <table className="tablec">
+          <thead className="theadc">
+            <tr>
+              <th className="serial-no-col">Sno.</th>
+              <th>Product Name</th>
 
-        <tbody>
-          {skuData.map((row, i) => {
-            const ageing = ageingMap[row.asin ?? ''] || {};
-            return (
-              <tr key={i}>
-                {visibleColumns.map(col => (
-  <td
-    key={col}
-    className={col === 'product_name' ? 'left-align' : ''}
-  >
-    {col === 'price'
-      ? `${getCurrencySymbol(row.currency)} ${row.price}`
-      : col.startsWith('gross_margin_')
-      ? `${calculateGrossMargin(
-          row.price,
-          row.currency,
-          countryName,
-          row.product_name
-        )}%`
-      : row[col]
-    }
-  </td>
-))}
+             <th
+  onClick={() => setShowSkuExpand(p => !p)}
+  className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
+>
+  <span className="absolute left-2 top-1/2 -translate-y-1/2">
+    {showSkuExpand ? <FaCaretRight /> : <FaCaretLeft />}
+  </span>
 
-                <td>{ageing.available ?? '-'}</td>
-                <td>{ageing['inv-age-271-to-365-days'] ?? '-'}</td>
-                 {showAgeBreakup && (
-                  <>
-                    <td>{ageing['inv-age-0-to-90-days'] ?? '-'}</td>
-                    <td>{ageing['inv-age-91-to-180-days'] ?? '-'}</td>
-                    <td>{ageing['inv-age-181-to-270-days'] ?? '-'}</td>
-                  </>
-                )}
-                <td>{ageing['estimated-storage-cost-next-month'] ?? '-'}</td>
-               
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+  <span>SKU</span>
+
+  <span className="absolute right-2 top-1/2 -translate-y-1/2">
+    {showSkuExpand ? <FaCaretLeft /> : <FaCaretRight />}
+  </span>
+</th>
+
+              {showSkuExpand && (
+                <>
+                  <th>ASIN</th>
+                  <th>Product Barcode</th>
+                </>
+              )}
+
+              <th>Landing Cost</th>
+              <th>Gross Margin (%)</th>
+              <th>Available Unit</th>
+
+             <th
+  onClick={() => setShowAgeBreakup(p => !p)}
+  className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
+>
+  <span className="absolute left-2 top-1/2 -translate-y-1/2">
+    {showAgeBreakup ? <FaCaretRight /> : <FaCaretLeft />}
+  </span>
+
+  <span>180+</span>
+
+  <span className="absolute right-2 top-1/2 -translate-y-1/2">
+    {showAgeBreakup ? <FaCaretLeft /> : <FaCaretRight />}
+  </span>
+</th>
+
+
+              {showAgeBreakup && (
+                <>
+                  <th>0–90</th>
+                  <th>91–180</th>
+                </>
+              )}
+
+              <th>Est. Storage Cost</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {skuData.map((row, i) => {
+              const ageing = getAgeingForRow(row);
+              const age181_270 = Number(ageing['inv-age-181-to-270-days'] || 0);
+              const age271_365 = Number(ageing['inv-age-271-to-365-days'] || 0);
+
+              return (
+                <tr key={i}>
+                  <td className="serial-no-col">{row.s_no}</td>
+                  <td className="left-align">{row.product_name}</td>
+
+                  <td>{row[`sku_${countryName}`] ?? '-'}</td>
+
+                  {showSkuExpand && (
+                    <>
+                      <td>{row.asin ?? '-'}</td>
+                      <td>{row.product_barcode ?? '-'}</td>
+                    </>
+                  )}
+
+                  <td>{getCurrencySymbol(row.currency)} {row.price}</td>
+<td>
+  {renderGrossMarginCell(row, `gross_margin_${countryName}`)}
+</td>
+                  <td>{ageing.available ?? '-'}</td>
+
+                  <td>{age181_270 + age271_365 + Number(ageing['inv-age-365-plus-days'] || 0)}</td>
+
+                  {showAgeBreakup && (
+                    <>
+                      <td>{ageing['inv-age-0-to-90-days'] ?? '-'}</td>
+                      <td>{ageing['inv-age-91-to-180-days'] ?? '-'}</td>
+                    </>
+                  )}
+
+                  <td>{Number(ageing['estimated-storage-cost-next-month'] || 0).toFixed(2)}</td>
+                </tr>
+              );
+            })}
+            <tr style={{ backgroundColor: '#d9d9d9', fontWeight: 'bold' }}>
+  <td className="serial-no-col"></td>
+
+  {/* Product Name column */}
+  <td className="left-align">TOTAL</td>
+
+  {/* SKU */}
+  <td></td>
+
+  {showSkuExpand && (
+    <>
+      <td></td>
+      <td></td>
+    </>
+  )}
+
+  {/* Landing Cost */}
+  <td></td>
+
+  {/* Gross Margin */}
+  <td></td>
+
+  {/* ✅ Available Unit TOTAL */}
+  <td>{totalAvailableUnits}</td>
+
+  {/* 180+ */}
+  <td></td>
+
+  {showAgeBreakup && (
+    <>
+      <td></td>
+      <td></td>
+    </>
+  )}
+
+  {/* ✅ Est Storage Cost TOTAL */}
+  <td>{totalStorageCost.toFixed(2)}</td>
+</tr>
+
+
+          </tbody>
+        </table>
+      </div>
+
+
+
+
+
+
+
+
+
+
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <button className="styled-button" onClick={() => setIsEditing(!isEditing)}>
@@ -482,7 +664,7 @@ font-weight: bold;
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    zIndex: 3000, // 🔥 high z-index
+    zIndex: 2000, // 🔥 high z-index
   }}
 >
               <SkuMultiuseCountryUpload onClose={function (): void {
@@ -502,7 +684,7 @@ font-weight: bold;
         onCancel={() => setShowModal(false)}
       />
     </div>
-    </div>
+    
     
   );
 }

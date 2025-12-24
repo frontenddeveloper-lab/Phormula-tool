@@ -566,6 +566,8 @@ type Props = {
 
 };
 
+
+
 export default function SalesTargetCard({
   regions,
   value,
@@ -599,6 +601,11 @@ export default function SalesTargetCard({
 
   const data = regions[tab] || regions.Global;
 
+
+  // const clampRatio = (x: number) =>
+  //   Math.min(Math.max(x, 0), MAX_COMPLETION);
+
+
   // RegionMetrics are stored in USD in your current data model
   const mtdHome = convertToHomeCurrency(data.mtdUSD ?? 0, "USD");
   const lastMtdHome = convertToHomeCurrency(
@@ -611,27 +618,41 @@ export default function SalesTargetCard({
   );
   const targetHome = convertToHomeCurrency(data.targetUSD ?? 0, "USD");
 
-  const pct =
-    targetHome > 0 ? Math.min(mtdHome / targetHome, 1) : 0;
-  const pctLastMTD =
-    targetHome > 0
-      ? Math.min(lastMtdHome / targetHome, 1)
-      : 0;
+  // const pct =
+  //   targetHome > 0 ? Math.min(mtdHome / targetHome, 1) : 0;
+  // const pctLastMTD =
+  //   targetHome > 0
+  //     ? Math.min(lastMtdHome / targetHome, 1)
+  //     : 0;
 
-  const deltaPct = (pct - pctLastMTD) * 100;
+  // const deltaPct = (pct - pctLastMTD) * 100;
+
+  const MAX_COMPLETION = 2; // 200%
+
+  const ratio = targetHome > 0 ? mtdHome / targetHome : 0;
+  const ratioLast = targetHome > 0 ? lastMonthTotalHome / targetHome : 0;
+
+  const clampRatio = (x: number) => Math.min(Math.max(x, 0), MAX_COMPLETION);
+
+  // for drawing inside 180deg
+  const drawPct = clampRatio(ratio) / MAX_COMPLETION;
+  const drawPctLast = clampRatio(ratioLast) / MAX_COMPLETION;
+  // for text display (cap at 200%)
+  const pctDisplay = clampRatio(ratio) * 100;
+
+  // badge delta (also capped at 200%)
+  const deltaPct = (clampRatio(ratio) - clampRatio(ratioLast)) * 100;
+
+  const toDeg_MTD = 180 * drawPct;
+  const toDeg_LastMTD = 180 * drawPctLast;
+
 
   const { todayDay } = getISTDayInfo();
-  const todayApproxHome = todayDay > 0 ? mtdHome / todayDay : 0;
-
-  // ✅ NEW: if Dashboard passes todaySales, use it
-  // const todayHome = useMemo(() => {
-  //   if (typeof todaySales === "number" && !Number.isNaN(todaySales)) {
-  //     return todaySales; // already in home currency from Dashboard
-  //   }
-  //   return todayApproxHome; // fallback
-  // }, [todaySales, todayApproxHome]);
-
-  const todayHome = typeof todaySales === "number" ? todaySales : todayApproxHome;
+// if parent sent todaySales, trust it (it’s already in home currency)
+const todayHome =
+  typeof todaySales === "number" && !Number.isNaN(todaySales)
+    ? todaySales
+    : (todayDay > 0 ? mtdHome / todayDay : 0);
 
   const prevLabel = getPrevMonthShortLabel();
   const thisMonthLabel = getThisMonthShortLabel();
@@ -657,6 +678,11 @@ export default function SalesTargetCard({
     };
   };
 
+  const targetDeg = 180 * (1 / MAX_COMPLETION); // where 100% sits on the arc
+  const targetMarkOuter = toXYRadius(targetDeg, rTarget + 2);
+  const targetMarkInner = toXYRadius(targetDeg, rTarget - strokeMain - 2);
+
+
   const arcPath = (fromDeg: number, toDeg: number, radius: number) => {
     const start = toXYRadius(fromDeg, radius);
     const end = toXYRadius(toDeg, radius);
@@ -666,8 +692,7 @@ export default function SalesTargetCard({
 
   const fullFrom = 0;
   const fullTo = 180;
-  const toDeg_MTD = 180 * pct;
-  const toDeg_LastMTD = 180;
+
 
   const knobGreen = toXYRadius(toDeg_MTD, rCurrent);
   const knobYellow = toXYRadius(toDeg_LastMTD, rLastMTD);
@@ -684,6 +709,40 @@ export default function SalesTargetCard({
     lastMonthTotalHome > 0
       ? ((targetHome - lastMonthTotalHome) / lastMonthTotalHome) * 100
       : 0;
+
+  const [tip, setTip] = useState<{
+    show: boolean;
+    x: number;
+    y: number;
+    title: string;
+    lines: string[];
+  }>({ show: false, x: 0, y: 0, title: "", lines: [] });
+
+  const showTip = (
+    e: React.MouseEvent,
+    title: string,
+    lines: string[]
+  ) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTip({
+      show: true,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      title,
+      lines,
+    });
+  };
+
+  const moveTip = (e: React.MouseEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTip((t) =>
+      t.show
+        ? { ...t, x: e.clientX - rect.left, y: e.clientY - rect.top }
+        : t
+    );
+  };
+
+  const hideTip = () => setTip((t) => ({ ...t, show: false }));
 
   return (
     <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
@@ -710,7 +769,7 @@ export default function SalesTargetCard({
       <div className="mt-3 flex items-center justify-center gap-6 text-xs">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "#5EA68E" }} />
-          <span className="text-gray-600">MTD Sales</span>
+          <span className="text-gray-600">MTD Sale</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -720,56 +779,121 @@ export default function SalesTargetCard({
 
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "#FFBE25" }} />
-          <span className="text-gray-600">{prevLabel} MTD</span>
+          <span className="text-gray-600">{prevLabel} Sale</span>
         </div>
       </div>
 
       {/* Gauge */}
       <div className="mt-6 flex flex-col items-center justify-center">
-        <svg width={size} height={size / 2} viewBox={`0 0 ${size} ${size / 2}`}>
-          <path
-            d={arcPath(fullFrom, fullTo, rTarget)}
-            fill="none"
-            stroke="#e5e7eb"
-            strokeWidth={strokeMain}
-            strokeLinecap="round"
-          />
-          <path
-            d={arcPath(fullFrom, toDeg_LastMTD, rLastMTD)}
-            fill="none"
-            stroke="#f59e0b"
-            strokeWidth={strokeLast}
-            strokeLinecap="round"
-          />
-          <path
-            d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
-            fill="none"
-            stroke="#5EA68E"
-            strokeWidth={strokeMain}
-            strokeLinecap="round"
-          />
-          <circle
-            cx={knobYellow.x}
-            cy={knobYellow.y}
-            r={9}
-            fill="#f59e0b"
-            stroke="#fffbeb"
-            strokeWidth={3}
-          />
-          <circle
-            cx={knobGreen.x}
-            cy={knobGreen.y}
-            r={12}
-            fill="#5EA68E"
-            stroke="#ecfdf3"
-            strokeWidth={4}
-          />
-        </svg>
+        <div
+          className="relative"
+          style={{ width: size, height: size / 2 }}
+          onMouseMove={moveTip}
+          onMouseLeave={hideTip}
+        >
+          <svg width={size} height={size / 2} viewBox={`0 0 ${size} ${size / 2}`}>
+            {/* Target background */}
+            <path
+              d={arcPath(fullFrom, fullTo, rTarget)}
+              fill="none"
+              stroke="#e5e7eb"
+              strokeWidth={strokeMain}
+              strokeLinecap="round"
+            />
 
+            {/* 100% target marker */}
+            <line
+              x1={targetMarkInner.x}
+              y1={targetMarkInner.y}
+              x2={targetMarkOuter.x}
+              y2={targetMarkOuter.y}
+              stroke="#9ca3af"
+              strokeWidth={2}
+            />
+
+
+            {/* Last month MTD arc */}
+            <path
+              d={arcPath(fullFrom, toDeg_LastMTD, rLastMTD)}
+              fill="none"
+              stroke="#f59e0b"
+              strokeWidth={strokeLast}
+              strokeLinecap="round"
+              onMouseEnter={(e) =>
+                showTip(e, "Target / Last Month", [
+                  `Target: ${formatHomeK(targetHome)}`,
+                  `${prevLabel}: ${formatHomeK(lastMonthTotalHome)}`,
+                ])
+              }
+              onMouseLeave={hideTip}
+            />
+
+
+            {/* Current MTD arc */}
+            <path
+              d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
+              fill="none"
+              stroke="#5EA68E"
+              strokeWidth={strokeMain}
+              strokeLinecap="round"
+              onMouseEnter={(e) =>
+                showTip(e, "MTD Sale", [`MTD: ${formatHomeK(mtdHome)}`])
+              }
+              onMouseLeave={hideTip}
+            />
+
+
+            {/* Knobs (optional hover, nicer UX) */}
+            <circle
+              cx={knobYellow.x}
+              cy={knobYellow.y}
+              r={9}
+              fill="#f59e0b"
+              stroke="#fffbeb"
+              strokeWidth={3}
+              onMouseEnter={(e) =>
+                showTip(e, `${prevLabel}`, [`${formatHomeK(lastMonthTotalHome)}`])
+              }
+
+            />
+            <circle
+              cx={knobGreen.x}
+              cy={knobGreen.y}
+              r={12}
+              fill="#5EA68E"
+              stroke="#ecfdf3"
+              strokeWidth={4}
+              onMouseEnter={(e) =>
+                showTip(e, "MTD Sale", [`${formatHomeK(mtdHome)}`])
+              }
+            />
+          </svg>
+
+          {/* Tooltip */}
+          {tip.show && (
+            <div
+              className="pointer-events-none absolute z-10 rounded-lg border bg-white px-3 py-2 text-xs shadow-md"
+              style={{
+                left: tip.x + 12,
+                top: tip.y - 12,
+                maxWidth: 220,
+              }}
+            >
+              <div className="font-semibold text-gray-900">{tip.title}</div>
+              <div className="mt-1 space-y-0.5 text-gray-600">
+                {tip.lines.map((l, i) => (
+                  <div key={i}>{l}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* your existing percentage + badge UI below stays same */}
         <div className="mt-2 text-center">
-          <div className="text-3xl font-semibold">{(pct * 100).toFixed(1)}%</div>
-          <div className="text-xs text-gray-500 mt-1">Target Achieved</div>
+          <div className="text-3xl font-semibold">{pctDisplay.toFixed(1)}%</div>
 
+          <div className="text-xs text-gray-500 mt-1">Target Achieved</div>
           <div
             className={`mx-auto mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${badgeIsUp ? "bg-green-50 text-green-700" : "bg-rose-50 text-rose-700"
               }`}
@@ -778,6 +902,8 @@ export default function SalesTargetCard({
           </div>
         </div>
       </div>
+
+
 
       <div className="mt-auto pt-6">
         <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 text-sm">

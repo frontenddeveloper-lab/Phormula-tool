@@ -115,7 +115,7 @@ export default function DataTable({
                 rows?.map((row, idx) => (
                   <tr
                     key={idx}
-                    className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"}
+                    className={idx % 2 === 0 ? "bg-white" : ""}
                   >
                     {columns.map((col) => {
                       const v = row[col];

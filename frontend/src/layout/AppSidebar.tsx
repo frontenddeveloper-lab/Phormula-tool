@@ -759,6 +759,31 @@ const AppSidebar: React.FC = () => {
   const routeParams = useParams();
   const { setPlatform } = usePlatform();
 
+//   useEffect(() => {
+//   if (typeof window === "undefined") return;
+
+//   // 🔑 country URL se aayega (uk / us / global)
+//   const countryFromRoute = routeParams?.countryName as string | undefined;
+
+//   // ✅ CASE 1: URL me country present hai
+//   if (countryFromRoute) {
+//     let platformFromRoute = "global";
+
+//     if (countryFromRoute === "uk") platformFromRoute = "amazon_uk";
+//     if (countryFromRoute === "us") platformFromRoute = "amazon_us";
+
+//     setSelectedPlatform(platformFromRoute);
+//     localStorage.setItem("selectedPlatform", platformFromRoute);
+//     return;
+//   }
+
+//   // ✅ CASE 2: URL me kuch nahi → localStorage fallback
+//   const saved = localStorage.getItem("selectedPlatform");
+//   if (saved) {
+//     setSelectedPlatform(saved);
+//   }
+// }, [routeParams]);
+
   // ✅ Smaller / laptop friendly typography
   const textMain = "text-[11px] sm:text-[12px] lg:text-[12.5px] xl:text-[13px]";
   const textSection =
@@ -798,23 +823,53 @@ const AppSidebar: React.FC = () => {
 
   // ===== Platform data =====
   const connectedPlatforms = useConnectedPlatforms();
-  const regionOptions: RegionOption[] = buildPlatformOptions(connectedPlatforms);
+const rawOptions: RegionOption[] =
+  buildPlatformOptions(connectedPlatforms);
+
+const countryFromRoute = routeParams?.countryName as string | undefined;
+
+let regionOptions: RegionOption[] = rawOptions;
+
+// 🔥 FORCE add option based on URL
+if (countryFromRoute === "uk" && !rawOptions.some(o => o.value === "amazon_uk")) {
+  regionOptions = [
+    { label: "Amazon UK", value: "amazon_uk" },
+    ...rawOptions,
+  ];
+}
+
+if (countryFromRoute === "us" && !rawOptions.some(o => o.value === "amazon_us")) {
+  regionOptions = [
+    { label: "Amazon US", value: "amazon_us" },
+    ...rawOptions,
+  ];
+}
 
   // ===== Selected platform =====
-  const [selectedPlatform, setSelectedPlatform] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("selectedPlatform");
-      if (saved) return saved;
-    }
-    return "global";
-  });
+const [selectedPlatform, setSelectedPlatform] = useState<string>("global");
 
-  useEffect(() => {
-    if (!regionOptions.length) return;
-    if (!selectedPlatform || !regionOptions.find((o) => o.value === selectedPlatform)) {
-      setSelectedPlatform(regionOptions[0].value);
-    }
-  }, [regionOptions, selectedPlatform]);
+useEffect(() => {
+  // ⛔ jab tak options load na ho, kuch mat karo
+  if (!regionOptions.length) return;
+
+  const country = routeParams?.countryName as string | undefined;
+  if (!country) return;
+
+  let desired: PlatformId = "global";
+  if (country === "uk") desired = "amazon_uk";
+  if (country === "us") desired = "amazon_us";
+
+  // ✅ agar desired option available hai to use karo
+  const exists = regionOptions.some((o) => o.value === desired);
+
+  setSelectedPlatform(
+    exists ? desired : (regionOptions[0].value as PlatformId)
+  );
+}, [routeParams?.countryName, regionOptions]);
+
+
+
+  
 
   const monthNames = [
     "january","february","march","april","may","june",
@@ -842,18 +897,57 @@ const AppSidebar: React.FC = () => {
     return { ranged, month, year };
   });
 
-  const currentPlatform =
-    (routeParams?.platform as string) || selectedPlatform || "global";
-  const currentCountryName = platformToCountryName(currentPlatform as PlatformId);
+  
+
+const currentCountryName =
+  (routeParams?.countryName as string) || "global";
 
   const currentParams = {
-    ranged: (routeParams?.ranged as string) || initialPeriod.ranged,
-    countryName: currentCountryName,
-    month: (routeParams?.month as string) || initialPeriod.month,
-    year: (routeParams?.year as string) || initialPeriod.year,
-  };
+  ranged: (routeParams?.ranged as string) || initialPeriod.ranged,
+  countryName: currentCountryName,
+  month: (routeParams?.month as string) || initialPeriod.month,
+  year: (routeParams?.year as string) || initialPeriod.year,
+};
+
 
   const { setPlatform: setPlatformCtx } = usePlatform();
+
+  const handleFetchAgedInventory = async () => {
+  try {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("jwtToken")
+        : null;
+
+    if (!token) {
+      console.error("No auth token found");
+      return;
+    }
+
+    const res = await fetch(
+      "http://localhost:5000/amazon_api/inventory/aged",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(`API Error: ${res.status}`);
+    }
+
+    const data = await res.json();
+    console.log("Aged Inventory Response:", data);
+
+    // 👉 yahin se tum data ko store / context / redux me bhej sakte ho
+  } catch (err) {
+    console.error("Aged Inventory API Error:", err);
+  }
+};
+
 
   const onRegionChange = (val: string) => {
     const platform = val as PlatformId;
@@ -953,19 +1047,26 @@ const AppSidebar: React.FC = () => {
 
   const sections: NavSection[] = [
     {
-      key: "Live Analytics",
-      name: "LIVE ANALYTICS",
-      icon: (
-        <Image
-          src="/images/brand/business.png"
-          alt="Logo"
-          width={18}
-          height={18}
-          className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
-        />
-      ),
-      subItems: [{ name: "Real-Time Dashboard", path: `/` }],
+  key: "Live Analytics",
+  name: "LIVE ANALYTICS",
+  icon: (
+    <Image
+      src="/images/brand/business.png"
+      alt="Logo"
+      width={18}
+      height={18}
+      className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
+    />
+  ),
+  subItems: [
+    {
+      name: "Real-Time Dashboard",
+      path: `/`,
+      onClick: handleFetchAgedInventory, // 🔥 yahin API hit hogi
     },
+  ],
+},
+
     {
       key: "dashboard",
       name: "HISTORICAL DASHBOARD",
@@ -1104,6 +1205,11 @@ const AppSidebar: React.FC = () => {
 
   const showText = isExpanded || isHovered || isMobileOpen;
 
+  const safeSelectedPlatform =
+  regionOptions.find((o) => o.value === selectedPlatform)?.value ??
+  regionOptions[0]?.value ??
+  "global";
+
   return (
     <aside
       className={`fixed mt-16 flex flex-col lg:mt-0 top-0 left-0 bg-white text-gray-900 h-screen overflow-y-auto transition-all duration-300 ease-in-out z-[1100]
@@ -1178,16 +1284,16 @@ const AppSidebar: React.FC = () => {
       </div>
 
       {/* Platform Select */}
-      {showText && regionOptions.length > 0 && (
-        <RegionSelect
-          label="Platform"
-          selectedCountry={selectedPlatform}
-          options={regionOptions}
-          onChange={onRegionChange}
-          className={`mb-2 rounded bg-transparent text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#5EA68E]
-            px-2 py-1 ${textMain}`}
-        />
-      )}
+{showText && regionOptions.length > 0 && (
+  <RegionSelect
+    label="Platform"
+    selectedCountry={safeSelectedPlatform}   // ✅ yahin use
+    options={regionOptions}
+    onChange={onRegionChange}
+    className={`mb-2 rounded bg-transparent text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#5EA68E]
+      px-2 py-1 ${textMain}`}
+  />
+)}
 
       {/* Navigation Sections */}
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar px-2">

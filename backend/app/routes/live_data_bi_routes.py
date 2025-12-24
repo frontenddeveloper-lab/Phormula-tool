@@ -42,6 +42,9 @@ engine_live = create_engine(db_url2)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 oa_client = OpenAI(api_key=OPENAI_API_KEY)
+# simple process-level debounce (survives hot reload)
+_SENT_EMAIL_CACHE = set()
+
 
 live_data_bi_bp = Blueprint("live_data_bi_bp", __name__)
 
@@ -401,325 +404,6 @@ def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
         .to_dict(orient="records")
     )
 
-
-# def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: date):
-#     """
-#     Return:
-#       sku_metrics: list of per-SKU metrics (for growth calc)
-#       daily_series: list of {date, quantity, net_sales, product_sales, profit}
-#     """
-#     table_name = construct_prev_table_name(
-#         user_id=user_id,
-#         country=country,
-#         month=prev_start.month,
-#         year=prev_start.year,
-#     )
-
-#     print(f"[DEBUG] Previous Period Table: {table_name}")
-
-#     query = text(f"""
-#         SELECT *
-#         FROM (
-#             SELECT
-#                 *,
-#                 NULLIF(NULLIF(date_time, '0'), '')::timestamp AS date_ts
-#             FROM {table_name}
-#         ) t
-#         WHERE date_ts >= :start_date
-#           AND date_ts < :end_date_plus_one
-#     """)
-
-#     params = {
-#         "start_date": datetime.combine(prev_start, datetime.min.time()),
-#         "end_date_plus_one": datetime.combine(prev_end + timedelta(days=1), datetime.min.time()),
-#     }
-
-#     print("[DEBUG] SQL for previous period:")
-#     print(query)
-#     print("[DEBUG] Params:", params)
-
-#     with engine_hist.connect() as conn:
-#         result = conn.execute(query, params)
-#         rows = result.fetchall()
-
-#         print(f"[DEBUG] Fetched {len(rows)} rows from {table_name}")
-
-#         if rows:
-#             print("[DEBUG] First rows:", rows[:2])
-#         else:
-#             print("[DEBUG] No previous period data found.")
-#             return [], []
-
-#         df = pd.DataFrame(rows, columns=result.keys())
-
-#     print(f"[DEBUG] DataFrame shape: {df.shape}")
-#     print(f"[DEBUG] DataFrame columns: {list(df.columns)}")
-
-#     # -------------------------------------------------
-#     # 1) PER-SKU METRICS (UNCHANGED)
-#     # -------------------------------------------------
-#     sku_metrics = compute_sku_metrics_from_df(df)
-#     print(f"[DEBUG] SKU Metrics Count: {len(sku_metrics)}")
-
-#     # -------------------------------------------------
-#     # 2) DAILY SERIES (FORMULA UTILS DAY-WISE)
-#     # -------------------------------------------------
-#     daily_series = []
-
-#     date_col = "date_ts" if "date_ts" in df.columns else "date_time"
-
-#     if date_col in df.columns:
-#         tmp = df.copy()
-
-#         # ✅ NEW: filter out rows with invalid / blank SKUs
-#         if "sku" in tmp.columns:
-#             tmp = tmp.loc[sku_mask(tmp)]
-
-#         tmp["date_only"] = pd.to_datetime(tmp[date_col], errors="coerce").dt.date
-#         tmp = tmp.dropna(subset=["date_only"])
-
-#         for d, day_df in tmp.groupby("date_only"):
-
-#             quantity = (
-#                 safe_num(day_df["quantity"]).sum()
-#                 if "quantity" in day_df.columns
-#                 else 0.0
-#             )
-
-#             product_sales = (
-#                 safe_num(day_df["product_sales"]).sum()
-#                 if "product_sales" in day_df.columns
-#                 else 0.0
-#             )
-
-#             net_sales, _, _ = uk_sales(day_df)
-#             profit, _, _ = uk_profit(day_df)
-
-#             daily_series.append({
-#                 "date": d.isoformat(),
-#                 "quantity": float(quantity),
-#                 "product_sales": float(product_sales),
-#                 "net_sales": float(net_sales),
-#                 "profit": float(profit),
-#             })
-
-#         daily_series = sorted(daily_series, key=lambda x: x["date"])
-#         print(f"[DEBUG] Daily series points: {len(daily_series)}")
-
-#     # -------------------------------------------------
-#     # 3) DEBUG TOTALS FOR CROSS-CHECKING
-#     # -------------------------------------------------
-#     total_daily_qty = sum(d["quantity"] for d in daily_series)
-#     total_daily_ps = sum(d["product_sales"] for d in daily_series)
-#     total_daily_ns = sum(d["net_sales"] for d in daily_series)
-#     total_daily_profit = sum(d["profit"] for d in daily_series)
-
-#     full_ns, _, _ = uk_sales(df)
-#     full_profit, _, _ = uk_profit(df)
-
-#     print("\n================ DAILY SERIES CHECK =================")
-#     print(f"Daily SUM → Quantity       : {total_daily_qty:.2f}")
-#     print(f"Daily SUM → Product Sales  : {total_daily_ps:.2f}")
-#     print(f"Daily SUM → Net Sales      : {total_daily_ns:.2f}")
-#     print(f"Daily SUM → Profit         : {total_daily_profit:.2f}")
-
-#     print("\n--------------- FULL PERIOD (formula_utils) ---------")
-#     print(f"Full Period → Net Sales    : {full_ns:.2f}")
-#     print(f"Full Period → Profit       : {full_profit:.2f}")
-
-#     print("\n--------------- DIFFERENCE (Daily - Full) -----------")
-#     print(f"Net Sales Diff  : {(total_daily_ns - full_ns):.2f}")
-#     print(f"Profit Diff     : {(total_daily_profit - full_profit):.2f}")
-#     print("====================================================\n")
-
-#     return sku_metrics, daily_series
-
-# def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
-#     """
-#     Return:
-#       sku_metrics: list of per-SKU metrics (manual aggregation, no formula utils)
-#       daily_series: list of {date, quantity, net_sales} for line chart
-
-#     Notes:
-#       - country and is_global are not used (kept in signature to avoid breaking callers).
-#       - Liveorders table renamed to liveorders.
-#       - liveorders does NOT have product_name or country columns.
-#       - product_name in output is derived from sku (fallback) and optionally overridden via SKU mapping.
-#       - Uses profit and cogs directly (assumes cogs is TOTAL per row).
-#       - net_sales = product_sales + promotional_rebates
-#     """
-#     table_name = "liveorders"
-
-#     query = text(f"""
-#         SELECT
-#             sku,
-#             quantity,
-#             cogs,
-#             product_sales,
-#             promotional_rebates,
-#             profit,
-#             purchase_date,
-#             order_status
-#         FROM {table_name}
-#         WHERE user_id = :user_id
-#           AND purchase_date >= :start_date
-#           AND purchase_date < :end_date_plus_one
-#     """)
-
-#     params = {
-#         "user_id": user_id,
-#         "start_date": datetime.combine(curr_start, datetime.min.time()),
-#         "end_date_plus_one": datetime.combine(curr_end + timedelta(days=1), datetime.min.time()),
-#     }
-
-#     print("\n[DEBUG] CURRENT MTD QUERY")
-#     print(query)
-#     print("[DEBUG] Params:", params)
-
-#     with engine_live.connect() as conn:
-#         result = conn.execute(query, params)
-#         rows = result.fetchall()
-#         print(f"[DEBUG] Current MTD rows fetched (full filter): {len(rows)}")
-
-#         if not rows:
-#             print("[DEBUG] No current MTD data found in liveorders table.")
-
-#             diag1 = conn.execute(text(f"""
-#                 SELECT MIN(purchase_date), MAX(purchase_date), COUNT(*)
-#                 FROM {table_name}
-#                 WHERE user_id = :user_id
-#             """), {"user_id": user_id}).fetchone()
-#             print("[DEBUG] User-level date range in liveorders:", diag1)
-
-#             diag2 = conn.execute(text(f"""
-#                 SELECT DISTINCT order_status
-#                 FROM {table_name}
-#                 WHERE user_id = :user_id
-#             """), {"user_id": user_id}).fetchall()
-#             print("[DEBUG] Order statuses for this user in liveorders:", diag2)
-
-#             return [], []
-
-#         df = pd.DataFrame(rows, columns=result.keys())
-
-#     # ✅ fallback "product_name" = sku (so downstream/UI doesn't break)
-#     df["sku"] = df["sku"].astype(str).str.strip()
-#     df["product_name"] = df["sku"]
-
-#     # ✅ default assume "unmapped"
-#     df["__has_mapping__"] = False
-
-#     # 🔹 SKU mapping se product_name override + __has_mapping__ flag set
-#     try:
-#         sku_map_df = fetch_sku_product_mapping(user_id)  # only valid mappings
-#         if not sku_map_df.empty:
-#             print(f"[DEBUG] Merging SKU mapping for user_id={user_id}")
-
-#             sku_map_df = sku_map_df.copy()
-#             sku_map_df["sku"] = sku_map_df["sku"].astype(str).str.strip()
-
-#             mapped_skus = set(sku_map_df["sku"].dropna())
-#             df["__has_mapping__"] = df["sku"].isin(mapped_skus)
-
-#             df = df.merge(
-#                 sku_map_df,
-#                 on="sku",
-#                 how="left",
-#                 suffixes=("", "_from_sku_table"),
-#             )
-
-#             if "product_name_from_sku_table" in df.columns:
-#                 df["product_name"] = df["product_name_from_sku_table"].combine_first(df["product_name"])
-#                 df.drop(columns=["product_name_from_sku_table"], inplace=True)
-#         else:
-#             print("[DEBUG] SKU mapping DF empty, using SKU as product_name.")
-#     except Exception as e:
-#         print("[WARN] Failed to fetch/merge SKU product mapping:", e)
-
-#     # ----------------------------
-#     # ✅ Manual prep (no formula utils)
-#     # ----------------------------
-#     df["quantity"] = safe_num(df.get("quantity", 0))
-#     df["profit"] = safe_num(df.get("profit", 0))
-#     df["cogs"] = safe_num(df.get("cogs", 0))  # assumed TOTAL COGS per row
-
-#     df["product_sales"] = safe_num(df.get("product_sales", 0))
-#     df["promotional_rebates"] = safe_num(df.get("promotional_rebates", 0))
-
-#     # ✅ net_sales = product_sales + promotional_rebates
-#     df["net_sales"] = df["product_sales"] + df["promotional_rebates"]
-
-#     # ----------------------------
-#     # ---- per-SKU metrics (manual but compatible with growth pipeline) ----
-#     # ----------------------------
-#     sku_agg = (
-#         df.groupby("sku", as_index=False)
-#           .agg(
-#               product_name=("product_name", "first"),  # now sku fallback or mapped name
-#               quantity=("quantity", "sum"),
-#               net_sales=("net_sales", "sum"),
-#               product_sales=("product_sales", "sum"), 
-#               profit=("profit", "sum"),
-#               cogs=("cogs", "sum"),
-#               __has_mapping__=("__has_mapping__", "max"),
-#           )
-#     )
-
-#     qty_nonzero = sku_agg["quantity"].replace(0, np.nan)
-
-#     # Required by existing growth + AI logic
-#     sku_agg["asp"] = (sku_agg["net_sales"] / qty_nonzero).fillna(0.0)
-#     sku_agg["unit_wise_profitability"] = (sku_agg["profit"] / qty_nonzero).fillna(0.0)
-
-#     total_net_sales = float(sku_agg["net_sales"].sum())
-#     if total_net_sales:
-#         sku_agg["sales_mix"] = (sku_agg["net_sales"] / total_net_sales) * 100.0
-#     else:
-#         sku_agg["sales_mix"] = 0.0
-
-#     # ✅ force exact 100%
-#     sku_agg = normalize_sales_mix(sku_agg, "sales_mix", digits=2)
-
-
-#     # Your requested metric
-#     sku_agg["profit_per_unit"] = sku_agg["unit_wise_profitability"]
-
-#     sku_metrics = sku_agg.to_dict(orient="records")
-
-#     # ----------------------------
-#     # ---- daily series for line chart (quantity + net_sales + product_sales + profit) ----
-#     # ----------------------------
-#     daily_series = []
-#     if "purchase_date" in df.columns:
-#         tmp = df.copy()
-#         tmp["date_only"] = pd.to_datetime(tmp["purchase_date"]).dt.date
-
-#         daily_qty = tmp.groupby("date_only", as_index=False)["quantity"].sum()
-#         qty_map = {d: float(q) for d, q in zip(daily_qty["date_only"], daily_qty["quantity"])}
-
-#         daily_ns = tmp.groupby("date_only", as_index=False)["net_sales"].sum()
-#         ns_map = {d: float(v) for d, v in zip(daily_ns["date_only"], daily_ns["net_sales"])}
-
-#         daily_ps = tmp.groupby("date_only", as_index=False)["product_sales"].sum()
-#         ps_map = {d: float(v) for d, v in zip(daily_ps["date_only"], daily_ps["product_sales"])}
-
-#         daily_profit = tmp.groupby("date_only", as_index=False)["profit"].sum()
-#         profit_map = {d: float(v) for d, v in zip(daily_profit["date_only"], daily_profit["profit"])}
-
-#         for d in sorted(set(qty_map.keys()) | set(ns_map.keys()) | set(ps_map.keys()) | set(profit_map.keys())):
-#             daily_series.append(
-#                 {
-#                     "date": d.isoformat(),
-#                     "quantity": qty_map.get(d, 0.0),
-#                     "net_sales": ns_map.get(d, 0.0),
-#                     "product_sales": ps_map.get(d, 0.0),
-#                     "profit": profit_map.get(d, 0.0),
-#                 }
-#             )
-
-
-#     return sku_metrics, daily_series
-
 def totals_from_daily_series(daily_series):
     """
     daily_series: list[dict] with keys like profit/platform_fee/advertising etc.
@@ -825,9 +509,12 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
       sku_metrics: list of per-SKU metrics from liveorders
       daily_series: date-wise series with qty/net_sales/product_sales/profit + platform_fee/advertising
 
-    Current fees are computed from liveorders using:
-      - description (text)
-      - total (double precision)  ✅ confirmed in your pgAdmin screenshot
+    FIX:
+      - Compute fees directly from liveorders patterns (type/description),
+        because liveorders uses values like ProductAdsPayment / ServiceFee which
+        settlement-style parsers may not recognize.
+      - Fees returned as POSITIVE numbers (expense) to support:
+          CM2 = Profit - Advertising - Platform Fees
     """
 
     table_live = "liveorders"
@@ -840,11 +527,13 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
             product_sales,
             promotional_rebates,
             profit,
-            total,              -- ✅ needed for fee calculation
+            total,
             purchase_date,
             order_status,
-            description,        -- ✅ needed for fee calculation
-            type
+            description,
+            type,
+            other_transaction_fees,
+            other
         FROM {table_live}
         WHERE user_id = :user_id
           AND purchase_date >= :start_date
@@ -867,12 +556,14 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
         df = pd.DataFrame(rows, columns=res.keys())
 
     # ----------------------------
-    # SKU + mapping logic (unchanged)
+    # SKU + mapping logic
     # ----------------------------
     df["sku"] = df["sku"].astype(str).str.strip()
-    df["product_name"] = df["sku"]
-    df["__has_mapping__"] = False
+    df.loc[df["sku"].str.lower().isin(["none", "nan", "null", ""]), "sku"] = None
 
+    df["product_name"] = df["sku"].fillna("")
+
+    df["__has_mapping__"] = False
     try:
         sku_map_df = fetch_sku_product_mapping(user_id)
         if not sku_map_df.empty:
@@ -880,7 +571,7 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
             sku_map_df["sku"] = sku_map_df["sku"].astype(str).str.strip()
 
             mapped_skus = set(sku_map_df["sku"].dropna())
-            df["__has_mapping__"] = df["sku"].isin(mapped_skus)
+            df["__has_mapping__"] = df["sku"].astype(str).str.strip().isin(mapped_skus)
 
             df = df.merge(
                 sku_map_df,
@@ -905,18 +596,80 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
     df["cogs"] = safe_num(df.get("cogs", 0))
     df["product_sales"] = safe_num(df.get("product_sales", 0))
     df["promotional_rebates"] = safe_num(df.get("promotional_rebates", 0))
-
-    # ✅ net_sales definition (your existing logic)
     df["net_sales"] = df["product_sales"] + df["promotional_rebates"]
 
-    # ✅ IMPORTANT: total is the amount column for fee helpers
+    # total is what your table shows as the signed amount
     df["total"] = safe_num(df.get("total", 0))
 
+    # normalize text cols
+    df["description"] = df.get("description", "").fillna("").astype(str)
+    df["type"] = df.get("type", "").fillna("").astype(str)
+
     # ----------------------------
-    # Per-SKU metrics (same as your pipeline expects)
+    # ✅ Fee extraction (LIVEORDERS-SPECIFIC)
     # ----------------------------
+    def _fee_amount_col(xdf: pd.DataFrame) -> pd.Series:
+        """
+        Prefer other_transaction_fees if populated, else fallback to total.
+        In your sample, both match for fee rows (e.g., -386.59).
+        """
+        if "other_transaction_fees" in xdf.columns:
+            s = safe_num(xdf["other_transaction_fees"])
+            # if it's all zeros, use total
+            if float(np.nansum(s.values)) != 0.0:
+                return s
+        return safe_num(xdf["total"])
+
+    def _calc_fees_from_liveorders(day_df: pd.DataFrame) -> tuple[float, float]:
+        """
+        Returns (platform_fee, advertising) as POSITIVE numbers.
+        Uses type/description patterns visible in your sample:
+          - ProductAdsPayment -> advertising
+          - ServiceFee / disposal / storage / fee -> platform_fee bucket
+        Excludes Transfer/Disbursement (cash movement) and Order Payment (sales).
+        """
+        if day_df is None or day_df.empty:
+            return 0.0, 0.0
+
+        t = day_df["type"].fillna("").astype(str).str.lower()
+        d = day_df["description"].fillna("").astype(str).str.lower()
+        amt = _fee_amount_col(day_df)
+
+        # ignore cash movement + normal order payments
+        ignore = (
+            t.str.contains("transfer|disbursement", na=False)
+            | d.str.contains("disbursement", na=False)
+            | d.str.contains("order payment", na=False)
+        )
+
+        # advertising patterns (your sample: ProductAdsPayment)
+        is_ads = (
+            t.str.contains("productadspayment|ads|advert", na=False)
+            | d.str.contains("productadspayment|ads|advert", na=False)
+            | t.str.contains("sponsored", na=False)
+            | d.str.contains("sponsored", na=False)
+        ) & (~ignore)
+
+        # platform fee patterns (your sample: ServiceFee + FBADisposal)
+        is_platform_fee = (
+            t.str.contains("servicefee|fee", na=False)
+            | d.str.contains("fee|fba|disposal|storage|commission|referral", na=False)
+        ) & (~ignore) & (~is_ads)
+
+        # sum signed amounts, return as positive expense
+        ads_total = float(np.nansum(amt[is_ads].values))
+        pf_total = float(np.nansum(amt[is_platform_fee].values))
+
+        return abs(pf_total), abs(ads_total)
+
+    # ----------------------------
+    # Per-SKU metrics (same as before)
+    # ----------------------------
+    # Only real SKUs here (exclude NULL sku fee rows from sku table)
+    df_sku = df.dropna(subset=["sku"]).copy()
+
     sku_agg = (
-        df.groupby("sku", as_index=False)
+        df_sku.groupby("sku", as_index=False)
           .agg(
               product_name=("product_name", "first"),
               quantity=("quantity", "sum"),
@@ -933,13 +686,8 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
     sku_agg["unit_wise_profitability"] = (sku_agg["profit"] / qty_nonzero).fillna(0.0)
 
     total_net_sales = float(sku_agg["net_sales"].sum())
-    if total_net_sales:
-        sku_agg["sales_mix"] = (sku_agg["net_sales"] / total_net_sales) * 100.0
-    else:
-        sku_agg["sales_mix"] = 0.0
-
+    sku_agg["sales_mix"] = (sku_agg["net_sales"] / total_net_sales) * 100.0 if total_net_sales else 0.0
     sku_agg = normalize_sales_mix(sku_agg, "sales_mix", digits=2)
-    sku_agg["profit_per_unit"] = sku_agg["unit_wise_profitability"]
 
     sku_metrics = sku_agg.to_dict(orient="records")
 
@@ -951,7 +699,7 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
     df["date_only"] = pd.to_datetime(df["purchase_date"], errors="coerce").dt.date
     df = df.dropna(subset=["date_only"])
 
-    # sales/profit per day
+    # sales/profit per day (includes fee rows too, but they usually have 0 qty/net_sales/profit)
     daily_qty = df.groupby("date_only", as_index=False)["quantity"].sum()
     qty_map = {d: float(v) for d, v in zip(daily_qty["date_only"], daily_qty["quantity"])}
 
@@ -964,11 +712,10 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
     daily_profit = df.groupby("date_only", as_index=False)["profit"].sum()
     profit_map = {d: float(v) for d, v in zip(daily_profit["date_only"], daily_profit["profit"])}
 
-    # ✅ fees per day (use ALL rows; fee rows can have sku NULL)
+    # ✅ fees per day
     pf_map, ad_map = {}, {}
     for d, day_df in df.groupby("date_only"):
-        pf, _, _ = uk_platform_fee(day_df, desc_col="description", amount_col="total")
-        ad, _, _ = uk_advertising(day_df, desc_col="description", amount_col="total")
+        pf, ad = _calc_fees_from_liveorders(day_df)
         pf_map[d] = float(pf)
         ad_map[d] = float(ad)
 
@@ -985,7 +732,6 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
         })
 
     return sku_metrics, daily_series
-
 
 
 # ----------------------------------------------------------------------------
@@ -1945,7 +1691,7 @@ def live_mtd_vs_previous():
         if not user_id:
             return jsonify({"error": "Invalid token payload: user_id missing"}), 401
 
-        country = request.args.get("countryName", "uk")
+        country = (request.args.get("countryName", "uk") or "uk").strip().lower()
         as_of = request.args.get("as_of")
 
         # optional custom day range
@@ -1994,6 +1740,12 @@ def live_mtd_vs_previous():
         _, prev_daily_full = fetch_previous_period_data(
             user_id, country, prev_full_start, prev_full_end
         )
+        # ✅ FULL previous month net sales total (30-day series)
+        prev_full_totals = totals_from_daily_series(prev_daily_full)
+        total_previous_net_sales_full_month = float(
+            prev_full_totals.get("net_sales", 0) or 0
+        )
+
 
         # 2) fetch current MTD (✅ now includes __has_mapping__ in each row)
         curr_data, curr_daily = fetch_current_mtd_data(
@@ -2145,44 +1897,51 @@ def live_mtd_vs_previous():
         # SEND EMAIL WITH AI SUMMARY
         # ============================
 
-        # 1) Try to read email from JWT payload, else from query param
         user_email = payload.get("email") or request.args.get("email")
         if not user_email:
             user_email = get_user_email_by_id(user_id)
 
-
         if user_email:
-            # 3) Throttle: only once in 24 hours per user+country
-            if has_recent_bi_email(user_id, country, hours=24):
-                print(f"[INFO] BI email already sent in last 24h for user_id={user_id}, country={country}; skipping.")
+            cache_key = (user_id, country)
+
+            # ✅ dev reload/double hit protection
+            if cache_key in _SENT_EMAIL_CACHE:
+                print("[INFO] Email already sent in this process, skipping.")
             else:
-                # 4) Generate a fresh token for this user for deep-link
-                email_token_payload = {
-                    "user_id": user_id,
-                    "email": user_email,
-                    "scope": "live_mtd_bi",
-                    "exp": datetime.utcnow() + timedelta(hours=24),
-                }
-                email_token = jwt.encode(email_token_payload, SECRET_KEY, algorithm="HS256")
+                # ✅ DB throttle: only once per 24h per user+country
+                if has_recent_bi_email(user_id, country, hours=24):
+                    print(f"[INFO] BI email already sent in last 24h for user_id={user_id}, country={country}; skipping.")
+                    _SENT_EMAIL_CACHE.add(cache_key)  # optional: prevents repeated DB hits in same process
+                else:
+                    email_token_payload = {
+                        "user_id": user_id,
+                        "email": user_email,
+                        "scope": "live_mtd_bi",
+                        "exp": datetime.utcnow() + timedelta(hours=24),
+                    }
+                    email_token = jwt.encode(email_token_payload, SECRET_KEY, algorithm="HS256")
 
-                try:
-                    send_live_bi_email(
-                        to_email=user_email,
-                        overall_summary=overall_summary,
-                        overall_actions=overall_actions,  # ✅ now valid
-                        sku_actions=None,                 # or pass structured list when you have it
-                        country=country,
-                        prev_label=prev_label,
-                        curr_label=curr_label,
-                        deep_link_token=email_token,
-                    )
+                    try:
+                        send_live_bi_email(
+                            to_email=user_email,
+                            overall_summary=overall_summary,
+                            overall_actions=overall_actions,
+                            sku_actions=None,
+                            country=country,
+                            prev_label=prev_label,
+                            curr_label=curr_label,
+                            deep_link_token=email_token,
+                        )
 
-                    mark_bi_email_sent(user_id, country)
-                except Exception as e:
-                    # Don't break the API if email fails
-                    print(f"[WARN] Error sending live BI email: {e}")
+                        mark_bi_email_sent(user_id, country)
+                        _SENT_EMAIL_CACHE.add(cache_key)
+
+                    except Exception as e:
+                        print(f"[WARN] Error sending live BI email: {e}")
+                        # ✅ DO NOT mark as sent on send failure
         else:
             print("[WARN] No user email found in token, query params, or DB; skipping BI email.")
+
 
 
 
@@ -2266,15 +2025,11 @@ def live_mtd_vs_previous():
             if aligned_totals_payload.get("total_previous_net_sales", 0)
             else 0.0
         )
+        
+
+        aligned_totals_payload["total_previous_net_sales_full_month"] = total_previous_net_sales_full_month
 
 
-
-
-        # (optional) if you also want net sales totals
-        # aligned_totals_payload.update({
-        #     "total_current_net_sales": curr_aligned_totals["net_sales"],
-        #     "total_previous_net_sales": prev_aligned_totals["net_sales"],
-        # })
 
         # ============================
         # ✅ RESPONSE PAYLOAD (complete)

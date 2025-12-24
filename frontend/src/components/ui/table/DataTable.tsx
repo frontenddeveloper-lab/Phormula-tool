@@ -886,14 +886,14 @@ export default function DataTable<T extends Row>({
       <table
         className={clsx(
           // ✅ table-fixed makes widths and wrapping behave predictably
-          "w-full table-fixed border-collapse text-xs sm:text-sm text-slate-700",
+          "w-full table-fixed border-collapse text-xs  text-slate-700",
           tableClassName
         )}
       >
         <thead
           className={clsx(
             "bg-[#5EA68E] text-yellow-200",
-            "text-xs sm:text-sm font-semibold",
+            "text-xs font-semibold",
             stickyHeader && "sticky top-0 z-10"
           )}
         >
@@ -922,7 +922,7 @@ export default function DataTable<T extends Row>({
           {!hasData && (
             <tr>
               <td
-                className="px-3 py-8 text-center text-xs sm:text-sm text-slate-400"
+                className="px-3 py-8 text-center text-xs  text-slate-400"
                 colSpan={columns.length}
               >
                 {emptyMessage}
@@ -939,7 +939,7 @@ export default function DataTable<T extends Row>({
                   "transition-colors",
                   // @ts-expect-error: your rows may include __isTotal
                   !(row as any).__isTotal ,
-                  zebra && ri % 2 === 1 && "bg-slate-50/40"
+                  zebra && ri % 2 === 1 && ""
                 )}
               >
                 {columns.map((col, ci) => {
@@ -949,7 +949,7 @@ export default function DataTable<T extends Row>({
                     <td
                       key={String(col.key) + ci}
                       className={clsx(
-                        "border border-[#e1e5ea] px-2 sm:px-3 py-2 align-middle text-center text-xs sm:text-sm",
+                        "border border-[#e1e5ea] px-2 sm:px-3 py-2 align-middle text-center text-xs ",
                         // ✅ default: don’t wrap numbers; wrap text only if you want per-column
                         // If you want wrapping in a specific column, pass: cellClassName="whitespace-normal break-words"
                         "whitespace-nowrap",
@@ -970,7 +970,7 @@ export default function DataTable<T extends Row>({
 
       {paginate && totalPages > 1 && (
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="flex items-center justify-between gap-4 text-xs sm:text-sm">
+          <div className="flex items-center justify-between gap-4 text-xs">
             <button
               onClick={onPrev}
               disabled={page <= 1}
@@ -993,7 +993,7 @@ export default function DataTable<T extends Row>({
                     key={item}
                     onClick={() => goToPage(item)}
                     className={clsx(
-                      "h-7 w-7 sm:h-8 sm:w-8 rounded-full text-xs sm:text-sm",
+                      "h-7 w-7 sm:h-8 sm:w-8 rounded-full text-xs ",
                       "flex items-center justify-center",
                       "transition-colors",
                       item === page

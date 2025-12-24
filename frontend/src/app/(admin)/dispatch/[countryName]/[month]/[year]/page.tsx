@@ -177,7 +177,7 @@ export default function DispatchPage() {
         'Sno.',
         'Product Name',
         'Inventory at Month End',
-        'Inventory Projection',
+        'Projected Sales Total',
         'Dispatch',
         'Current Inventory + Dispatch',
         'Inventory Coverage Ratio Before Dispatch',
@@ -187,7 +187,7 @@ export default function DispatchPage() {
         'sku',
         'Product Name',
         'Inventory at Month End',
-        'Inventory Projection',
+        'Projected Sales Total',
         'Dispatch',
         'Current Inventory + Dispatch',
         'Inventory Coverage Ratio Before Dispatch',
@@ -204,7 +204,7 @@ export default function DispatchPage() {
             isTotalRow(row) &&
             [
               'Inventory at Month End',
-              'Inventory Projection',
+              'Projected Sales Total',
               'Dispatch',
               'Current Inventory + Dispatch',
               'Inventory Coverage Ratio Before Dispatch',
@@ -225,7 +225,7 @@ export default function DispatchPage() {
     // Number formatting
     const numericColumns = [
       'Inventory at Month End',
-      'Inventory Projection',
+      'Projected Sales Total',
       'Dispatch',
       'Current Inventory + Dispatch',
       'Inventory Coverage Ratio Before Dispatch',
@@ -629,7 +629,7 @@ export default function DispatchPage() {
                           : isTotalRow(row) &&
                             [
                               'Inventory at Month End',
-                              'Inventory Projection',
+                              'Projected Sales Total',
                               'Dispatch',
                               'Current Inventory + Dispatch',
                               'Inventory Coverage Ratio Before Dispatch',
