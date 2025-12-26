@@ -1325,7 +1325,19 @@ def get_table_data(file_name):
 
         df = df[df["sku"].ne("") & df["sku"].ne("0")]
 
+
         print("🔍 DEBUG: After SKU cleanup:", len(df))
+
+        # ✅ RAW ROW-LEVEL split (after SKU cleanup)
+        df["errorstatus"] = df["errorstatus"].astype(str).str.strip().str.lower()
+
+        raw_ok_df    = df[df["errorstatus"] == "ok"]
+        raw_under_df = df[df["errorstatus"] == "undercharged"]
+        raw_over_df  = df[df["errorstatus"] == "overcharged"]
+
+        # jo ok/under/over me nahi aata, use no ref fee bucket me daal do
+        raw_ref_df   = df[~df["errorstatus"].isin(["ok", "undercharged", "overcharged"])]
+
 
         numeric_cols = [
             "product_sales", "promotional_rebates", "other",
@@ -1462,11 +1474,19 @@ def get_table_data(file_name):
 
         import numpy as np
         final_df = final_df.replace({np.nan: 0})
+        accurate_df = accurate_df.replace({np.nan: 0})
+        under_df    = under_df.replace({np.nan: 0})
+        over_df     = over_df.replace({np.nan: 0})
+        ref_df      = ref_df.replace({np.nan: 0})
 
         return jsonify({
             "success": True,
             "message": "SKU wise table generated successfully.",
             "table": final_df.to_dict(orient="records"),
+            "accurate_data": raw_ok_df.to_dict(orient="records"),
+            "undercharged_data": raw_under_df.to_dict(orient="records"),
+            "overcharged_data": raw_over_df.to_dict(orient="records"),
+            "no_ref_fee_data": raw_ref_df.to_dict(orient="records"),
             "created_table_name": skutable,
             "raw_table": raw_table_data,
             "table_name": file_name,    

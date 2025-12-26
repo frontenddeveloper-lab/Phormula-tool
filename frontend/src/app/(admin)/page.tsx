@@ -54,7 +54,7 @@ const baseURL =
 // const API_URL = `${baseURL}/amazon_api/orders`;
 const FIN_MTD_TX_ENDPOINT = `${baseURL}/amazon_api/finances/mtd_transactions`;
 const SHOPIFY_DROPDOWN_ENDPOINT = `${baseURL}/shopify/dropdown`;
-const FX_ENDPOINT = `${baseURL}/currency-rate`;
+// const FX_ENDPOINT = `${baseURL}/currency-rate`;
 
 // ✅ BI endpoint (same one your graph uses)
 const LIVE_MTD_BI_ENDPOINT = `${baseURL}/live_mtd_bi`;

@@ -2787,12 +2787,13 @@ def fetch_conversion_rate(country: str, year: int, month_name: str,
 
     with ADMIN_ENGINE.connect() as conn:
         row = conn.execute(sql, {
-            "country": (country or "").lower(),
+            "country": (country or "").strip().lower(),
             "year": int(year),
-            "month": (month_name or "").lower(),
-            "user_currency": (user_currency or "").upper(),
-            "selected_currency": (selected_currency or "").upper(),
+            "month": (month_name or "").strip().lower(),
+            "user_currency": (user_currency or "").strip().lower(),
+            "selected_currency": (selected_currency or "").strip().lower(),
         }).fetchone()
+
 
     try:
         return float(row[0]) if row and row[0] is not None else 1.0
