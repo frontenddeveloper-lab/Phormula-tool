@@ -40,7 +40,7 @@ export default function InventoryChoicePage() {
   );
   const [transitTime, setTransitTime] = useState('');
   const [stockUnit, setStockUnit] = useState('');
-  const marketplace = 'amazon';
+  const marketplace = 'A1F83G8C2ARO7P';
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [apiError, setApiError] = useState('');

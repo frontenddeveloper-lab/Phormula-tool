@@ -381,9 +381,11 @@ def process_skuwise_data(user_id, country, month, year):
                 sku_grouped[_col] = pd.to_numeric(sku_grouped[_col], errors="coerce").fillna(0.0)
 
         print("Columns in sku_grouped before profit calculation:", sku_grouped.columns)
+        total_product_sales = sku_grouped["product_sales"].sum()
 
         total_profit_final = sku_grouped["profit"].sum()
         print("Total Profit:", total_profit_final)
+        print("product_sales sum:", total_product_sales)
 
         sku_grouped["profit%"] = abs((sku_grouped["profit"] / abs(sku_grouped["Net Sales"])) * 100)
         sku_grouped["profit%"] = sku_grouped["profit%"].replace([float('inf'), -float('inf')], 0).fillna(0)
@@ -1591,6 +1593,7 @@ def process_skuwise_data(user_id, country, month, year):
                 unit_sold_usd              = convert_value(total_row_usd.get("quantity", 0))
                 total_cous_usd             = convert_value(total_row_usd.get("cost_of_unit_sold", 0))
                 total_amazon_fee_val_usd   = convert_value(total_row_usd.get("amazon_fee", 0))
+                total_product_sales_usd    = convert_value(total_row_usd.get("product_sales", 0))
                 total_credits_usd          = convert_value(total_row_usd.get("net_credits", 0))
                 total_tax_usd              = convert_value(total_row_usd.get("net_taxes", 0))
 
@@ -1642,6 +1645,7 @@ def process_skuwise_data(user_id, country, month, year):
                     total_cous=total_cous_usd,
                     total_amazon_fee=total_amazon_fee_val_usd,
                     pnl_email_sent=False,
+                    total_product_sales=total_product_sales_usd
                 )
 
                 session.add(upload_history_entry)
@@ -1681,7 +1685,7 @@ def process_skuwise_data(user_id, country, month, year):
 
         return (total_cous, total_amazon_fee, cm2_profit, abs(rembursement_fee), abs(platform_fee),
                 total_expense, total_profit_final, total_fba_fees, total_advertising, texncredit,
-                reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, total_quantity)
+                reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, total_quantity, total_product_sales)
 
     except Exception as e:
         print(f"Error processing SKU-wise data: {e}")

@@ -17,8 +17,16 @@ from app.utils.formulas_utils import (
     uk_profit,
     sku_mask,
     safe_num,
+    uk_platform_fee,
+    uk_advertising,
 )
-from app.utils.email_utils import send_live_bi_email , get_user_email_by_id, has_recent_bi_email, mark_bi_email_sent
+from app.utils.email_utils import (
+    send_live_bi_email,
+    get_user_email_by_id,
+    has_recent_bi_email,
+    mark_bi_email_sent,
+)
+
 # -----------------------------------------------------------------------------
 # ENV / DB SETUP
 # -----------------------------------------------------------------------------
@@ -26,28 +34,27 @@ from app.utils.email_utils import send_live_bi_email , get_user_email_by_id, has
 load_dotenv()
 SECRET_KEY = Config.SECRET_KEY
 
-db_url = os.getenv("DATABASE_URL")           # historical / settlement-style
-db_url2 = os.getenv("DATABASE_AMAZON_URL")   # amazon orders (Order model)
+db_url = os.getenv("DATABASE_URL")
+db_url2 = os.getenv("DATABASE_AMAZON_URL")
 
 engine_hist = create_engine(db_url)
 engine_live = create_engine(db_url2)
 
-# 🔹 NEW: OpenAI client
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 oa_client = OpenAI(api_key=OPENAI_API_KEY)
+# simple process-level debounce (survives hot reload)
+_SENT_EMAIL_CACHE = set()
+
 
 live_data_bi_bp = Blueprint("live_data_bi_bp", __name__)
-
 
 # -----------------------------------------------------------------------------
 # DATE HELPERS
 # -----------------------------------------------------------------------------
 
-
-
-# ENV / DB SETUP ke paas, jaha engine_hist / engine_live define hua hai
 def is_blank_str(x):
     return x is None or (isinstance(x, str) and x.strip() == "")
+
 
 def fetch_sku_product_mapping(user_id: int) -> pd.DataFrame:
     """
@@ -90,6 +97,12 @@ def fetch_sku_product_mapping(user_id: int) -> pd.DataFrame:
     df = df.drop_duplicates(subset=["sku"])
 
     return df
+
+def clamp_near_zero(value, eps=1e-9):
+    if value is None:
+        return value
+    return 0.0 if abs(value) < eps else value
+
 
 
 def get_mtd_and_prev_ranges(as_of=None, start_day=None, end_day=None):
@@ -174,6 +187,7 @@ def get_mtd_and_prev_ranges(as_of=None, start_day=None, end_day=None):
     }
 
 
+
 def month_num_to_name(m):
     try:
         m_int = int(m)
@@ -181,21 +195,73 @@ def month_num_to_name(m):
     except Exception:
         return None
 
-
 def construct_prev_table_name(user_id, country, month, year):
-    """
-    user_{user_id}_{country_lower}_{monthname}{year}_data
-    e.g. user_10_uk_october2025_data
-    """
     month_str = month_num_to_name(month)
     if not month_str:
         raise ValueError("Invalid month")
     return f"user_{user_id}_{country.lower()}_{month_str}{year}_data"
 
+# -----------------------------------------------------------------------------
+# 🔹 NEW HELPER — HISTORIC BI PARITY (6-MONTH LOOKBACK)
+# -----------------------------------------------------------------------------
 
-# -----------------------------------------------------------------------------
-# METRIC COMPUTATION PER SKU (using formula_utils)
-# -----------------------------------------------------------------------------
+def fetch_historical_skus_last_6_months(user_id: int, country: str, ref_date: date):
+    """
+    Mirrors Historic BI logic.
+    Returns set of SKUs seen in last 6 months (excluding current month).
+    """
+    skus = set()
+    y, m = ref_date.year, ref_date.month
+
+    for _ in range(6):
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+
+        try:
+            table = construct_prev_table_name(
+                user_id=user_id,
+                country=country,
+                month=m,
+                year=y
+            )
+        except Exception:
+            continue
+
+        try:
+            with engine_hist.connect() as conn:
+                res = conn.execute(text(f"SELECT DISTINCT sku FROM {table}"))
+                for r in res:
+                    if r[0]:
+                        skus.add(str(r[0]).strip())
+        except Exception:
+            continue
+
+    return skus
+
+def normalize_sales_mix(df: pd.DataFrame, mix_col="sales_mix", digits=2):
+    """
+    Forces sales_mix to sum exactly to 100.00 after rounding.
+    """
+    if df.empty or mix_col not in df.columns:
+        return df
+
+    df = df.copy()
+
+    # Round all values
+    df[mix_col] = df[mix_col].round(digits)
+
+    total = df[mix_col].sum()
+    diff = round(100.0 - total, digits)
+
+    if abs(diff) > 0:
+        # Add residual to the SKU with highest mix (or last row)
+        idx = df[mix_col].idxmax()
+        df.loc[idx, mix_col] = round(df.loc[idx, mix_col] + diff, digits)
+
+    return df
+
 
 def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
     """
@@ -206,6 +272,7 @@ def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
     compute per-SKU metrics:
 
       quantity
+      product_sales
       net_sales
       profit
       asp
@@ -235,6 +302,16 @@ def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
     else:
         qty_df = pd.DataFrame(columns=["sku", "quantity"])
 
+    # ---- product_sales per SKU (GROSS SALES) ----
+    if "product_sales" in df.columns:
+        product_sales_df = (
+            df.assign(product_sales=safe_num(df["product_sales"]))
+              .groupby("sku", as_index=False)["product_sales"]
+              .sum()
+        )
+    else:
+        product_sales_df = pd.DataFrame(columns=["sku", "product_sales"])
+
     # ---- product_name per SKU (first non-null) ----
     if "product_name" in df.columns:
         name_df = (
@@ -260,34 +337,37 @@ def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
 
     # ---- merge everything ----
     metrics = (
-        qty_df.merge(name_df, on="sku", how="left")
-              .merge(
-                  sales_by[["sku", "sales_metric"]]
-                  if not sales_by.empty
-                  else pd.DataFrame(columns=["sku", "sales_metric"]),
-                  on="sku", how="left"
-              )
-              .merge(
-                  credits_by[["sku", "credits_metric"]]
-                  if not credits_by.empty
-                  else pd.DataFrame(columns=["sku", "credits_metric"]),
-                  on="sku", how="left"
-              )
-              .merge(
-                  profit_by[["sku", "profit_metric"]]
-                  if not profit_by.empty
-                  else pd.DataFrame(columns=["sku", "profit_metric"]),
-                  on="sku", how="left"
-              )
+        qty_df
+        .merge(name_df, on="sku", how="left")
+        .merge(product_sales_df, on="sku", how="left")  # ✅ ADD
+        .merge(
+            sales_by[["sku", "sales_metric"]]
+            if not sales_by.empty
+            else pd.DataFrame(columns=["sku", "sales_metric"]),
+            on="sku", how="left"
+        )
+        .merge(
+            credits_by[["sku", "credits_metric"]]
+            if not credits_by.empty
+            else pd.DataFrame(columns=["sku", "credits_metric"]),
+            on="sku", how="left"
+        )
+        .merge(
+            profit_by[["sku", "profit_metric"]]
+            if not profit_by.empty
+            else pd.DataFrame(columns=["sku", "profit_metric"]),
+            on="sku", how="left"
+        )
     )
 
     # ---- compute final fields ----
     metrics["quantity"] = safe_num(metrics["quantity"])
+    metrics["product_sales"] = safe_num(metrics.get("product_sales", 0.0))
     metrics["sales_metric"] = safe_num(metrics.get("sales_metric", 0.0))
     metrics["credits_metric"] = safe_num(metrics.get("credits_metric", 0.0))
     metrics["profit_metric"] = safe_num(metrics.get("profit_metric", 0.0))
 
-    metrics["net_sales"] = metrics["sales_metric"] + metrics["credits_metric"]
+    metrics["net_sales"] = metrics["sales_metric"]
     metrics["profit"] = metrics["profit_metric"]
 
     # asp & per-unit profitability
@@ -302,34 +382,47 @@ def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
     else:
         metrics["sales_mix"] = 0.0
 
+    # ✅ force exact 100%
+    metrics = normalize_sales_mix(metrics, "sales_mix", digits=2)
+
     # final list of dicts expected by growth logic
     out_cols = [
         "sku",
         "product_name",
         "quantity",
+        "product_sales",            # ✅ ADD
         "asp",
         "profit",
         "sales_mix",
         "net_sales",
         "unit_wise_profitability",
     ]
+
     return (
         metrics[out_cols]
         .replace({np.nan: None})
         .to_dict(orient="records")
     )
 
+def totals_from_daily_series(daily_series):
+    """
+    daily_series: list[dict] with keys like profit/platform_fee/advertising etc.
+    Returns totals (float) safely.
+    """
+    def s(key: str) -> float:
+        return float(sum(float((x.get(key, 0) or 0)) for x in (daily_series or [])))
 
-# -----------------------------------------------------------------------------
-# FETCH DATA: PREVIOUS PERIOD (historical table) + CURRENT MTD (orders)
-# -----------------------------------------------------------------------------
+    return {
+        "quantity": s("quantity"),
+        "net_sales": s("net_sales"),
+        "product_sales": s("product_sales"),
+        "profit": s("profit"),
+        "platform_fee": s("platform_fee"),
+        "advertising": s("advertising"),
+    }
+
 
 def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: date):
-    """
-    Return:
-      sku_metrics: list of per-SKU metrics (for growth calc)
-      daily_series: list of {date, quantity, net_sales} for line chart
-    """
     table_name = construct_prev_table_name(
         user_id=user_id,
         country=country,
@@ -337,12 +430,8 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
         year=prev_start.year,
     )
 
-    # Debug: show constructed table name
     print(f"[DEBUG] Previous Period Table: {table_name}")
 
-    # Safer approach:
-    #  - build a subquery that casts date_time to date_ts
-    #  - use NULLIF to avoid casting '0' / '' values
     query = text(f"""
         SELECT *
         FROM (
@@ -360,126 +449,92 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
         "end_date_plus_one": datetime.combine(prev_end + timedelta(days=1), datetime.min.time()),
     }
 
-    # Debug: show SQL + params
-    print("[DEBUG] SQL for previous period:")
-    print(query)
-    print("[DEBUG] Params:", params)
-
     with engine_hist.connect() as conn:
         result = conn.execute(query, params)
         rows = result.fetchall()
-
-        # Debug: row count
-        print(f"[DEBUG] Fetched {len(rows)} rows from {table_name}")
-
-        if len(rows) > 0:
-            # Show first 2 rows for sanity
-            print("[DEBUG] First rows:", rows[:2])
-
         if not rows:
-            print("[DEBUG] No previous period data found.")
             return [], []
 
         df = pd.DataFrame(rows, columns=result.keys())
 
-    # Debug: DataFrame shape
-    print(f"[DEBUG] DataFrame shape: {df.shape}")
-    print(f"[DEBUG] DataFrame columns: {list(df.columns)}")
-
-    # ---- per-SKU metrics (existing behaviour) ----
+    # 1) per-SKU metrics (unchanged)
     sku_metrics = compute_sku_metrics_from_df(df)
 
-    # Debug: Number of SKU items returned
-    print(f"[DEBUG] SKU Metrics Count: {len(sku_metrics)}")
-
-    # ---- daily series for line chart (quantity + net_sales) ----
+    # 2) daily series
     daily_series = []
+    date_col = "date_ts" if "date_ts" in df.columns else "date_time"
 
-    # Prefer using the parsed timestamp column if present
-    date_col_for_series = None
-    if "date_ts" in df.columns:
-        date_col_for_series = "date_ts"
-    elif "date_time" in df.columns:
-        date_col_for_series = "date_time"
+    if date_col in df.columns:
+        tmp_all = df.copy()
+        tmp_all["date_only"] = pd.to_datetime(tmp_all[date_col], errors="coerce").dt.date
+        tmp_all = tmp_all.dropna(subset=["date_only"])
 
-    if date_col_for_series:
-        tmp = df.copy()
-        tmp["date_only"] = pd.to_datetime(tmp[date_col_for_series]).dt.date
+        # For sales/profit you may want SKU-only rows
+        tmp_sku = tmp_all.copy()
+        if "sku" in tmp_sku.columns:
+            tmp_sku = tmp_sku.loc[sku_mask(tmp_sku)].copy()
 
-        # quantity per day (agar column hai)
-        if "quantity" in tmp.columns:
-            tmp["quantity"] = safe_num(tmp["quantity"])
-            daily_qty = (
-                tmp.groupby("date_only", as_index=False)["quantity"]
-                   .sum()
-            )
-            qty_map = {
-                d: float(q)
-                for d, q in zip(daily_qty["date_only"], daily_qty["quantity"])
-            }
-        else:
-            qty_map = {}
+        for d in sorted(tmp_all["date_only"].unique()):
+            day_all = tmp_all[tmp_all["date_only"] == d]
+            day_sku = tmp_sku[tmp_sku["date_only"] == d]
 
-        # net_sales per day (yahan simple approx: product_sales ka sum)
-        if "product_sales" in tmp.columns:
-            tmp["product_sales"] = safe_num(tmp["product_sales"])
-            daily_sales = (
-                tmp.groupby("date_only", as_index=False)["product_sales"]
-                   .sum()
-            )
-            sales_map = {
-                d: float(v)
-                for d, v in zip(daily_sales["date_only"], daily_sales["product_sales"])
-            }
-        else:
-            sales_map = {}
+            quantity = float(safe_num(day_sku.get("quantity", 0)).sum()) if len(day_sku) else 0.0
+            product_sales = float(safe_num(day_sku.get("product_sales", 0)).sum()) if len(day_sku) else 0.0
 
-        all_dates = sorted(set(qty_map.keys()) | set(sales_map.keys()))
+            # sales/profit based on SKU rows (keeps your earlier behavior)
+            net_sales, _, _ = uk_sales(day_sku if len(day_sku) else day_all)
+            profit, _, _ = uk_profit(day_sku if len(day_sku) else day_all)
 
-        for d in all_dates:
-            daily_series.append(
-                {
-                    "date": d.isoformat(),
-                    "quantity": qty_map.get(d, 0.0) if qty_map else None,
-                    "net_sales": sales_map.get(d, 0.0) if sales_map else None,
-                }
-            )
+            # ✅ fees MUST be computed on ALL rows for that date
+            platform_fee_total, _, _ = uk_platform_fee(day_all)
+            advertising_total, _, _ = uk_advertising(day_all)
 
-        # Debug: line chart points
-        print(f"[DEBUG] Daily series points: {len(daily_series)}")
+            daily_series.append({
+                "date": d.isoformat(),
+                "quantity": float(quantity),
+                "product_sales": float(product_sales),
+                "net_sales": float(net_sales),
+                "profit": float(profit),
+                "platform_fee": float(platform_fee_total),
+                "advertising": float(advertising_total),
+            })
 
+    daily_series = sorted(daily_series, key=lambda x: x["date"])
     return sku_metrics, daily_series
 
 
-def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date, is_global: bool):
+def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
     """
-    Return:
-      sku_metrics: list of per-SKU metrics (manual aggregation, no formula utils)
-      daily_series: list of {date, quantity, net_sales} for line chart
+    Returns:
+      sku_metrics: list of per-SKU metrics from liveorders
+      daily_series: date-wise series with qty/net_sales/product_sales/profit + platform_fee/advertising
 
-    Notes:
-      - NO country/is_global filtering is applied here (as requested).
-      - Uses orders.profit and orders.cogs directly (assumes cogs is TOTAL per row).
-      - Manually calculates:
-          asp = net_sales / quantity
-          unit_wise_profitability = profit / quantity
-          profit_per_unit = profit / quantity
-          sales_mix = net_sales share %
+    FIX:
+      - Compute fees directly from liveorders patterns (type/description),
+        because liveorders uses values like ProductAdsPayment / ServiceFee which
+        settlement-style parsers may not recognize.
+      - Fees returned as POSITIVE numbers (expense) to support:
+          CM2 = Profit - Advertising - Platform Fees
     """
-    table_name = "orders"
 
-    query = text(f"""
+    table_live = "liveorders"
+
+    query_live = text(f"""
         SELECT
             sku,
-            product_name,
             quantity,
             cogs,
-            total_amount,
+            product_sales,
+            promotional_rebates,
             profit,
-            country,
+            total,
             purchase_date,
-            order_status
-        FROM {table_name}
+            order_status,
+            description,
+            type,
+            other_transaction_fees,
+            other
+        FROM {table_live}
         WHERE user_id = :user_id
           AND purchase_date >= :start_date
           AND purchase_date < :end_date_plus_one
@@ -491,58 +546,32 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date, i
         "end_date_plus_one": datetime.combine(curr_end + timedelta(days=1), datetime.min.time()),
     }
 
-    print("\n[DEBUG] CURRENT MTD QUERY")
-    print(query)
-    print("[DEBUG] Params:", params)
-
     with engine_live.connect() as conn:
-        result = conn.execute(query, params)
-        rows = result.fetchall()
-        print(f"[DEBUG] Current MTD rows fetched (full filter): {len(rows)}")
-
+        res = conn.execute(query_live, params)
+        rows = res.fetchall()
         if not rows:
-            print("[DEBUG] No current MTD data found in orders table.")
-
-            diag1 = conn.execute(text("""
-                SELECT MIN(purchase_date), MAX(purchase_date), COUNT(*)
-                FROM orders
-                WHERE user_id = :user_id
-            """), {"user_id": user_id}).fetchone()
-            print("[DEBUG] User-level date range in orders:", diag1)
-
-            diag2 = conn.execute(text("""
-                SELECT DISTINCT country
-                FROM orders
-                WHERE user_id = :user_id
-            """), {"user_id": user_id}).fetchall()
-            print("[DEBUG] Countries for this user in orders:", diag2)
-
-            diag3 = conn.execute(text("""
-                SELECT DISTINCT order_status
-                FROM orders
-                WHERE user_id = :user_id
-            """), {"user_id": user_id}).fetchall()
-            print("[DEBUG] Order statuses for this user in orders:", diag3)
-
+            print("[DEBUG] No current MTD rows found in liveorders for this user/date range.")
             return [], []
 
-        df = pd.DataFrame(rows, columns=result.keys())
+        df = pd.DataFrame(rows, columns=res.keys())
 
-    # ✅ default assume "unmapped"
+    # ----------------------------
+    # SKU + mapping logic
+    # ----------------------------
+    df["sku"] = df["sku"].astype(str).str.strip()
+    df.loc[df["sku"].str.lower().isin(["none", "nan", "null", ""]), "sku"] = None
+
+    df["product_name"] = df["sku"].fillna("")
+
     df["__has_mapping__"] = False
-
-    # 🔹 SKU mapping se product_name override + __has_mapping__ flag set
     try:
-        sku_map_df = fetch_sku_product_mapping(user_id)  # only valid mappings
+        sku_map_df = fetch_sku_product_mapping(user_id)
         if not sku_map_df.empty:
-            print(f"[DEBUG] Merging SKU mapping for user_id={user_id}")
-
-            df["sku"] = df["sku"].astype(str).str.strip()
             sku_map_df = sku_map_df.copy()
             sku_map_df["sku"] = sku_map_df["sku"].astype(str).str.strip()
 
             mapped_skus = set(sku_map_df["sku"].dropna())
-            df["__has_mapping__"] = df["sku"].isin(mapped_skus)
+            df["__has_mapping__"] = df["sku"].astype(str).str.strip().isin(mapped_skus)
 
             df = df.merge(
                 sku_map_df,
@@ -552,30 +581,100 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date, i
             )
 
             if "product_name_from_sku_table" in df.columns:
-                df["product_name"] = df["product_name_from_sku_table"].combine_first(df.get("product_name"))
+                df["product_name"] = df["product_name_from_sku_table"].combine_first(df["product_name"])
                 df.drop(columns=["product_name_from_sku_table"], inplace=True)
         else:
-            print("[DEBUG] SKU mapping DF empty, using product_name from orders table only.")
+            print("[DEBUG] SKU mapping DF empty, using SKU as product_name.")
     except Exception as e:
         print("[WARN] Failed to fetch/merge SKU product mapping:", e)
 
     # ----------------------------
-    # ✅ Manual prep (no formula utils)
+    # Numeric prep
     # ----------------------------
     df["quantity"] = safe_num(df.get("quantity", 0))
-    df["total_amount"] = safe_num(df.get("total_amount", 0))
     df["profit"] = safe_num(df.get("profit", 0))
-    df["cogs"] = safe_num(df.get("cogs", 0))  # assumed TOTAL COGS per row
+    df["cogs"] = safe_num(df.get("cogs", 0))
+    df["product_sales"] = safe_num(df.get("product_sales", 0))
+    df["promotional_rebates"] = safe_num(df.get("promotional_rebates", 0))
+    df["net_sales"] = df["product_sales"] + df["promotional_rebates"]
+
+    # total is what your table shows as the signed amount
+    df["total"] = safe_num(df.get("total", 0))
+
+    # normalize text cols
+    df["description"] = df.get("description", "").fillna("").astype(str)
+    df["type"] = df.get("type", "").fillna("").astype(str)
 
     # ----------------------------
-    # ---- per-SKU metrics (manual but compatible with growth pipeline) ----
+    # ✅ Fee extraction (LIVEORDERS-SPECIFIC)
     # ----------------------------
+    def _fee_amount_col(xdf: pd.DataFrame) -> pd.Series:
+        """
+        Prefer other_transaction_fees if populated, else fallback to total.
+        In your sample, both match for fee rows (e.g., -386.59).
+        """
+        if "other_transaction_fees" in xdf.columns:
+            s = safe_num(xdf["other_transaction_fees"])
+            # if it's all zeros, use total
+            if float(np.nansum(s.values)) != 0.0:
+                return s
+        return safe_num(xdf["total"])
+
+    def _calc_fees_from_liveorders(day_df: pd.DataFrame) -> tuple[float, float]:
+        """
+        Returns (platform_fee, advertising) as POSITIVE numbers.
+        Uses type/description patterns visible in your sample:
+          - ProductAdsPayment -> advertising
+          - ServiceFee / disposal / storage / fee -> platform_fee bucket
+        Excludes Transfer/Disbursement (cash movement) and Order Payment (sales).
+        """
+        if day_df is None or day_df.empty:
+            return 0.0, 0.0
+
+        t = day_df["type"].fillna("").astype(str).str.lower()
+        d = day_df["description"].fillna("").astype(str).str.lower()
+        amt = _fee_amount_col(day_df)
+
+        # ignore cash movement + normal order payments
+        ignore = (
+            t.str.contains("transfer|disbursement", na=False)
+            | d.str.contains("disbursement", na=False)
+            | d.str.contains("order payment", na=False)
+        )
+
+        # advertising patterns (your sample: ProductAdsPayment)
+        is_ads = (
+            t.str.contains("productadspayment|ads|advert", na=False)
+            | d.str.contains("productadspayment|ads|advert", na=False)
+            | t.str.contains("sponsored", na=False)
+            | d.str.contains("sponsored", na=False)
+        ) & (~ignore)
+
+        # platform fee patterns (your sample: ServiceFee + FBADisposal)
+        is_platform_fee = (
+            t.str.contains("servicefee|fee", na=False)
+            | d.str.contains("fee|fba|disposal|storage|commission|referral", na=False)
+        ) & (~ignore) & (~is_ads)
+
+        # sum signed amounts, return as positive expense
+        ads_total = float(np.nansum(amt[is_ads].values))
+        pf_total = float(np.nansum(amt[is_platform_fee].values))
+
+        return abs(pf_total), abs(ads_total)
+
+    # ----------------------------
+    # Per-SKU metrics (same as before)
+    # ----------------------------
+    # Only real SKUs here (exclude NULL sku fee rows from sku table)
+    df_sku = df.dropna(subset=["sku"]).copy()
+
     sku_agg = (
-        df.groupby("sku", as_index=False)
+        df_sku.groupby("sku", as_index=False)
           .agg(
               product_name=("product_name", "first"),
               quantity=("quantity", "sum"),
-              net_sales=("total_amount", "sum"),
+              net_sales=("net_sales", "sum"),
+              product_sales=("product_sales", "sum"),
               profit=("profit", "sum"),
               cogs=("cogs", "sum"),
               __has_mapping__=("__has_mapping__", "max"),
@@ -583,52 +682,67 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date, i
     )
 
     qty_nonzero = sku_agg["quantity"].replace(0, np.nan)
-
-    # Required by existing growth + AI logic
     sku_agg["asp"] = (sku_agg["net_sales"] / qty_nonzero).fillna(0.0)
     sku_agg["unit_wise_profitability"] = (sku_agg["profit"] / qty_nonzero).fillna(0.0)
 
     total_net_sales = float(sku_agg["net_sales"].sum())
-    sku_agg["sales_mix"] = (sku_agg["net_sales"] / total_net_sales * 100.0) if total_net_sales else 0.0
-
-    # Your requested metric
-    sku_agg["profit_per_unit"] = sku_agg["unit_wise_profitability"]
+    sku_agg["sales_mix"] = (sku_agg["net_sales"] / total_net_sales) * 100.0 if total_net_sales else 0.0
+    sku_agg = normalize_sales_mix(sku_agg, "sales_mix", digits=2)
 
     sku_metrics = sku_agg.to_dict(orient="records")
 
     # ----------------------------
-    # ---- daily series for line chart (quantity + net_sales) ----
+    # Daily series (sales + fees)
     # ----------------------------
     daily_series = []
-    if "purchase_date" in df.columns:
-        tmp = df.copy()
-        tmp["date_only"] = pd.to_datetime(tmp["purchase_date"]).dt.date
 
-        daily_qty = tmp.groupby("date_only", as_index=False)["quantity"].sum()
-        qty_map = {d: float(q) for d, q in zip(daily_qty["date_only"], daily_qty["quantity"])}
+    df["date_only"] = pd.to_datetime(df["purchase_date"], errors="coerce").dt.date
+    df = df.dropna(subset=["date_only"])
 
-        daily_sales = tmp.groupby("date_only", as_index=False)["total_amount"].sum()
-        sales_map = {d: float(v) for d, v in zip(daily_sales["date_only"], daily_sales["total_amount"])}
+    # sales/profit per day (includes fee rows too, but they usually have 0 qty/net_sales/profit)
+    daily_qty = df.groupby("date_only", as_index=False)["quantity"].sum()
+    qty_map = {d: float(v) for d, v in zip(daily_qty["date_only"], daily_qty["quantity"])}
 
-        for d in sorted(set(qty_map.keys()) | set(sales_map.keys())):
-            daily_series.append(
-                {
-                    "date": d.isoformat(),
-                    "quantity": qty_map.get(d, 0.0),
-                    "net_sales": sales_map.get(d, 0.0),
-                }
-            )
+    daily_ns = df.groupby("date_only", as_index=False)["net_sales"].sum()
+    ns_map = {d: float(v) for d, v in zip(daily_ns["date_only"], daily_ns["net_sales"])}
+
+    daily_ps = df.groupby("date_only", as_index=False)["product_sales"].sum()
+    ps_map = {d: float(v) for d, v in zip(daily_ps["date_only"], daily_ps["product_sales"])}
+
+    daily_profit = df.groupby("date_only", as_index=False)["profit"].sum()
+    profit_map = {d: float(v) for d, v in zip(daily_profit["date_only"], daily_profit["profit"])}
+
+    # ✅ fees per day
+    pf_map, ad_map = {}, {}
+    for d, day_df in df.groupby("date_only"):
+        pf, ad = _calc_fees_from_liveorders(day_df)
+        pf_map[d] = float(pf)
+        ad_map[d] = float(ad)
+
+    all_days = sorted(set(qty_map) | set(ns_map) | set(ps_map) | set(profit_map) | set(pf_map) | set(ad_map))
+    for d in all_days:
+        daily_series.append({
+            "date": d.isoformat(),
+            "quantity": qty_map.get(d, 0.0),
+            "net_sales": ns_map.get(d, 0.0),
+            "product_sales": ps_map.get(d, 0.0),
+            "profit": profit_map.get(d, 0.0),
+            "platform_fee": pf_map.get(d, 0.0),
+            "advertising": ad_map.get(d, 0.0),
+        })
 
     return sku_metrics, daily_series
 
-# -----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
 # GROWTH METRIC CALCULATION (same formulas as Business Insights)
 # -----------------------------------------------------------------------------
 
 growth_field_mapping = {
     "quantity": "Unit Growth (%)",
     "asp": "ASP Growth (%)",
-    "net_sales": "Sales Growth (%)",
+    "net_sales": "Net Sales Growth (%)",
+    "product_sales": "Gross Sales Growth (%)",
     "sales_mix": "Sales Mix Change (%)",
     "unit_wise_profitability": "Profit Per Unit (%)",
     "profit": "CM1 Profit Impact (%)",
@@ -771,6 +885,14 @@ def build_segment_total_row(prev_segment, curr_segment, key="sku", label="Total"
     seg_growth_list = calculate_growth([prev_row], [curr_row], key=key)
     return seg_growth_list[0] if seg_growth_list else None
 
+def calc_profit_pct(profit, net_sales):
+    profit = safe_float_local(profit)
+    net_sales = safe_float_local(net_sales)
+
+    if profit is None or net_sales is None or net_sales == 0:
+        return 0.0
+
+    return round((profit / net_sales) * 100.0, 2)
 
 def calculate_growth(prev_data, curr_data, key="sku", numeric_fields=None) -> list:
     """
@@ -783,6 +905,7 @@ def calculate_growth(prev_data, curr_data, key="sku", numeric_fields=None) -> li
       - % growth mapped via growth_field_mapping
       - Sales Mix (Current)  (for categorization / frontend)
       - new_or_reviving flag
+      - profit_pct_prev / profit_pct_curr  ✅ NEW (NO growth)
     """
     if numeric_fields is None:
         numeric_fields = list(growth_field_mapping.keys())
@@ -818,43 +941,61 @@ def calculate_growth(prev_data, curr_data, key="sku", numeric_fields=None) -> li
                 growth_row[f"{field}_prev"] = 0.0 if val1 is None else val1
                 growth_row[f"{field}_curr"] = 0.0 if val2 is None else val2
 
-                # ✅ % growth calculation (no blanks)
-                if val1 is None or val2 is None:
-                    growth = 0.0
-                elif val1 != 0:
-                    growth = round(((val2 - val1) / val1) * 100.0, 2)
+                # ✅ Growth calculation
+                if field == "sales_mix":
+                    if val1 is None or val2 is None:
+                        growth = 0.0
+                    else:
+                        raw_change = val2 - val1
+                        raw_change = clamp_near_zero(raw_change)
+                        growth = round(raw_change, 2)
                 else:
-                    # prev = 0 => undefined, but as per requirement send 0
-                    growth = 0.0
+                    if val1 is None or val2 is None:
+                        growth = 0.0
+                    elif val1 != 0:
+                        growth = round(((val2 - val1) / val1) * 100.0, 2)
+                    else:
+                        growth = 0.0
 
-                label = growth_field_mapping[field]  # e.g. "Unit Growth (%)"
+                label = growth_field_mapping[field]
                 growth_row[label] = {
                     "category": categorize_growth(growth),
                     "value": growth,
                 }
+
+            # ✅ PROFIT % (NO growth, absolute value)
+            profit_prev = safe_float_local(row1.get("profit"))
+            sales_prev = safe_float_local(row1.get("net_sales"))
+            profit_curr = safe_float_local(row2.get("profit"))
+            sales_curr = safe_float_local(row2.get("net_sales"))
+
+            growth_row["profit_pct_prev"] = (
+                round((profit_prev / sales_prev) * 100.0, 2)
+                if profit_prev is not None and sales_prev not in (None, 0)
+                else 0.0
+            )
+            growth_row["profit_pct_curr"] = (
+                round((profit_curr / sales_curr) * 100.0, 2)
+                if profit_curr is not None and sales_curr not in (None, 0)
+                else 0.0
+            )
 
         # -----------------------------
         # Case 2: New / Reviving SKU
         # -----------------------------
         else:
             growth_row["new_or_reviving"] = True
-
-            # prev row agar mil jaye (edge case: sku new_or_reviving mark hua, but prev_dict me row present ho sakta)
-            row1 = prev_dict.get(item_key, {})  # {} => prev missing
+            row1 = prev_dict.get(item_key, {})
 
             for field in numeric_fields:
-                val1 = safe_float_local(row1.get(field))  # previous
-                val2 = safe_float_local(row2.get(field))  # current
+                val1 = safe_float_local(row1.get(field))
+                val2 = safe_float_local(row2.get(field))
 
-                # raw values
                 growth_row[f"{field}_prev"] = 0.0 if val1 is None else val1
                 growth_row[f"{field}_curr"] = 0.0 if val2 is None else val2
 
                 label = growth_field_mapping[field]
 
-                # ✅ RULE:
-                # if prev > 0 => calculate growth %
-                # if prev == 0 (or missing) => don't calculate, keep as "No Data"
                 if val1 is not None and val1 > 0 and val2 is not None:
                     growth = round(((val2 - val1) / val1) * 100.0, 2)
                     growth_row[label] = {
@@ -862,12 +1003,27 @@ def calculate_growth(prev_data, curr_data, key="sku", numeric_fields=None) -> li
                         "value": growth,
                     }
                 else:
-                    # prev is 0 / missing => keep "as-is" behavior
                     growth_row[label] = {
                         "category": "No Data",
                         "value": 0.0,
                     }
 
+            # ✅ PROFIT % (NO growth, absolute value)
+            profit_prev = safe_float_local(row1.get("profit"))
+            sales_prev = safe_float_local(row1.get("net_sales"))
+            profit_curr = safe_float_local(row2.get("profit"))
+            sales_curr = safe_float_local(row2.get("net_sales"))
+
+            growth_row["profit_pct_prev"] = (
+                round((profit_prev / sales_prev) * 100.0, 2)
+                if profit_prev is not None and sales_prev not in (None, 0)
+                else 0.0
+            )
+            growth_row["profit_pct_curr"] = (
+                round((profit_curr / sales_curr) * 100.0, 2)
+                if profit_curr is not None and sales_curr not in (None, 0)
+                else 0.0
+            )
 
         results.append(growth_row)
 
@@ -1334,8 +1490,7 @@ DATA
 #-----------------------------------------------------------------------------
 # ChatGPT insight generator for live MTD vs previous (per-SKU)
 #-----------------------------------------------------------------------------
-
-def generate_live_insight(item, country, is_global, prev_label, curr_label):
+def generate_live_insight(item, country, prev_label, curr_label):
     """
     Generate AI insight for a single SKU row from live_mtd_vs_previous growth_data.
     item: one dict from growth_data/top_80_skus/new_reviving/etc.
@@ -1343,13 +1498,8 @@ def generate_live_insight(item, country, is_global, prev_label, curr_label):
     sku = item.get("sku")
     product_name = (item.get("product_name") or "this product").strip()
 
-    # Decide key: for global without SKU, fall back to product_name
-    if is_global and not sku:
-        key = product_name
-    elif sku:
-        key = sku
-    else:
-        key = product_name
+    # ✅ single, deterministic key (no global logic)
+    key = sku or product_name
 
     is_new_or_reviving = item.get("new_or_reviving", False)
 
@@ -1359,127 +1509,125 @@ def generate_live_insight(item, country, is_global, prev_label, curr_label):
     if is_new_or_reviving:
         # New / reviving SKU prompt
         prompt = f"""
-You are a senior ecommerce business analyst. The following is a new or reviving product (no meaningful previous-period baseline).
-Compare it only within the current period and talk about its launch strength.
+    You are a senior ecommerce business analyst. The following is a new or reviving product (no meaningful previous-period baseline).
+    Compare it only within the current period and talk about its launch strength.
 
-Context:
-- Country: {country}
-- Previous period label: {prev_label}
-- Current period label: {curr_label}
+    Context:
+    - Country: {country}
+    - Previous period label: {prev_label}
+    - Current period label: {curr_label}
 
-Details for '{product_name}'
+    Details for '{product_name}'
 
-Observations:
-- List the 2–3 most important observations about this product's current performance
-  (units sold, ASP, net sales, profit per unit, etc.) using absolute values from the data.
-- Comment on launch/return momentum—e.g., strong debut, moderate start, slow start.
-- Call out any potential red flags (e.g., high ASP but very low volume, low unit profitability, etc.).
+    Observations:
+    - List the 2–3 most important observations about this product's current performance
+    (units sold, ASP, net sales, profit per unit, etc.) using absolute values from the data.
+    - Comment on launch/return momentum—e.g., strong debut, moderate start, slow start.
+    - Call out any potential red flags (e.g., high ASP but very low volume, low unit profitability, etc.).
 
-Improvements:
-- Suggest clear, concrete next actions for:
-  • Marketing
-  • Sales / Commercial
-  • Operations / Supply
-- Make each action specific and easy to execute.
+    Improvements:
+    - Suggest clear, concrete next actions for:
+    • Marketing
+    • Sales / Commercial
+    • Operations / Supply
+    - Make each action specific and easy to execute.
 
-Sales Volume:
-• Comment on volume and what it says about early traction.
-• Suggest one commercial lever to improve or scale volume.
+    Sales Volume:
+    • Comment on volume and what it says about early traction.
+    • Suggest one commercial lever to improve or scale volume.
 
-ASP:
-• Comment on price positioning; suggest whether to test price up/down or hold.
+    ASP:
+    • Comment on price positioning; suggest whether to test price up/down or hold.
 
-Profitability:
-• Comment on profit per unit or total profit; suggest if costs or pricing need optimization.
+    Profitability:
+    • Comment on profit per unit or total profit; suggest if costs or pricing need optimization.
 
-End with one line:
-• Verdict: should this SKU be scaled quickly, tested more, or carefully repositioned? And why?
+    End with one line:
+    • Verdict: should this SKU be scaled quickly, tested more, or carefully repositioned? And why?
 
-Instructions:
-- Use plain text with bullet points only.
-- DO NOT use Markdown formatting (no **bold**, no headings).
-- Do NOT compare to previous periods (assume no baseline).
-- Use actual numbers or percentages from the data whenever they are present.
+    Instructions:
+    - Use plain text with bullet points only.
+    - DO NOT use Markdown formatting (no **bold**, no headings).
+    - Do NOT compare to previous periods (assume no baseline).
+    - Use actual numbers or percentages from the data whenever they are present.
 
-Data:
-{data_block}
-"""
+    Data:
+    {data_block}
+    """
     else:
         # Existing SKU with prev vs current
         prompt = f"""
-You are a senior ecommerce business analyst. The data below shows a product's performance
-comparing a previous period vs the current MTD.
+    You are a senior ecommerce business analyst. The data below shows a product's performance
+    comparing a previous period vs the current MTD.
 
-Context:
-- Country: {country}
-- Previous period: {prev_label}
-- Current period: {curr_label}
+    Context:
+    - Country: {country}
+    - Previous period: {prev_label}
+    - Current period: {curr_label}
 
-Details for '{product_name}'
+    Details for '{product_name}'
 
-Observations:
-- List the 2–3 most important changes using ONLY the given metrics:
-  • quantity_prev vs quantity_curr
-  • net_sales_prev vs net_sales_curr
-  • profit_prev vs profit_curr
-  • asp_prev vs asp_curr
-  • unit_wise_profitability_prev vs unit_wise_profitability_curr
-  • and % fields like "Unit Growth (%)", "Sales Growth (%)", etc.
-- Use the exact causal tone wherever % values exist:
-  "The increase/decrease in ASP by X% resulted in a dip/growth in units by Y%, which also resulted in sales falling/increasing by Z%."
-- In at least one observation, mention Sales Mix Change (%) direction if present (up/down).
-- Do NOT add assumptions like stock issues, supply constraints, replenishment, OOS, or fulfillment problems.
+    Observations:
+    - List the 2–3 most important changes using ONLY the given metrics:
+    • quantity_prev vs quantity_curr
+    • net_sales_prev vs net_sales_curr
+    • profit_prev vs profit_curr
+    • asp_prev vs asp_curr
+    • unit_wise_profitability_prev vs unit_wise_profitability_curr
+    • and % fields like "Unit Growth (%)", "Sales Growth (%)", etc.
+    - Use the exact causal tone wherever % values exist:
+    "The increase/decrease in ASP by X% resulted in a dip/growth in units by Y%, which also resulted in sales falling/increasing by Z%."
+    - In at least one observation, mention Sales Mix Change (%) direction if present (up/down).
+    - Do NOT add assumptions like stock issues, supply constraints, replenishment, OOS, or fulfillment problems.
 
-Improvements:
-- Provide exactly 3–5 action bullets.
-- Each action bullet MUST be exactly ONE sentence and MUST be chosen ONLY from the list below, verbatim (no edits):
-  • "Check ads and visibility campaigns for this product."
-  • "Review the visibility setup for this product."
-  • "Reduce ASP slightly to improve traction."
-  • "Increase ASP slightly to strengthen margins."
-  • "Monitor performance closely and reassess next steps."
-  • "Monitor performance closely for now."
-- Do NOT add any other recommendations, explanations, or extra words.
-- Do NOT mention stock, inventory, supply, operations, OOS, logistics, replenishment, or warehousing.
-- Decision guidance:
-  • If ASP is strongly up and units are down: prefer "Reduce ASP slightly to improve traction."
-  • If units and sales are down and ASP is flat or slightly up: prefer visibility lines.
-  • If profit/unit profit is very strong and units are stable/slightly down: prefer maintain/increase ASP.
+    Improvements:
+    - Provide exactly 3–5 action bullets.
+    - Each action bullet MUST be exactly ONE sentence and MUST be chosen ONLY from the list below, verbatim (no edits):
+    • "Check ads and visibility campaigns for this product."
+    • "Review the visibility setup for this product."
+    • "Reduce ASP slightly to improve traction."
+    • "Increase ASP slightly to strengthen margins."
+    • "Monitor performance closely and reassess next steps."
+    • "Monitor performance closely for now."
+    - Do NOT add any other recommendations, explanations, or extra words.
+    - Do NOT mention stock, inventory, supply, operations, OOS, logistics, replenishment, or warehousing.
+    - Decision guidance:
+    • If ASP is strongly up and units are down: prefer "Reduce ASP slightly to improve traction."
+    • If units and sales are down and ASP is flat or slightly up: prefer visibility lines.
+    • If profit/unit profit is very strong and units are stable/slightly down: prefer maintain/increase ASP.
 
-Then, for each metric, add:
+    Then, for each metric, add:
 
-Unit Growth:
-• [Explain reasons for the growth/decline using ONLY available signals like unit trend vs ASP trend and what that implies about demand/visibility/conversion.]
-• [Choose ONE action bullet from the Improvements list that best fits the unit pattern and paste it verbatim.]
+    Unit Growth:
+    • [Explain reasons for the growth/decline using ONLY available signals like unit trend vs ASP trend and what that implies about demand/visibility/conversion.]
+    • [Choose ONE action bullet from the Improvements list that best fits the unit pattern and paste it verbatim.]
 
-ASP:
-• [Explain why ASP changed using ONLY available signals like pricing changes, discounting intensity, or product/pack/channel mix shifts (premium vs value) without referencing costs.]
-• [Choose ONE action bullet from the Improvements list that best fits the ASP direction and paste it verbatim.]
+    ASP:
+    • [Explain why ASP changed using ONLY available signals like pricing changes, discounting intensity, or product/pack/channel mix shifts (premium vs value) without referencing costs.]
+    • [Choose ONE action bullet from the Improvements list that best fits the ASP direction and paste it verbatim.]
 
-Sales:
-• [Describe sales trend by explicitly tying it to Units × ASP (e.g., “sales down mainly due to units decline while ASP was flat/up” or “sales up driven by ASP lift with stable units”).]
-• [Choose ONE action bullet from the Improvements list that best fits the sales pattern and paste it verbatim.]
+    Sales:
+    • [Describe sales trend by explicitly tying it to Units × ASP (e.g., “sales down mainly due to units decline while ASP was flat/up” or “sales up driven by ASP lift with stable units”).]
+    • [Choose ONE action bullet from the Improvements list that best fits the sales pattern and paste it verbatim.]
 
-Profit:
-• [Explain profit change using ONLY available signals like sales movement plus realized pricing/discounting/mix impact, and avoid any mention of COGS or cost changes.]
-• [Choose ONE action bullet from the Improvements list that best aligns with protecting/improving profitability given the observed trend and paste it verbatim.]
+    Profit:
+    • [Explain profit change using ONLY available signals like sales movement plus realized pricing/discounting/mix impact, and avoid any mention of COGS or cost changes.]
+    • [Choose ONE action bullet from the Improvements list that best aligns with protecting/improving profitability given the observed trend and paste it verbatim.]
 
-Unit Profitability:
-• [Explain per-unit profit change using ONLY available signals like realized price/discounting and mix (higher-priced variants) impact, without mentioning COGS.]
-• [Choose ONE action bullet from the Improvements list that best fits per-unit profit strength/weakness and paste it verbatim.]
+    Unit Profitability:
+    • [Explain per-unit profit change using ONLY available signals like realized price/discounting and mix (higher-priced variants) impact, without mentioning COGS.]
+    • [Choose ONE action bullet from the Improvements list that best fits per-unit profit strength/weakness and paste it verbatim.]
 
+    Instructions:
+    - Use plain text with bullets only.
+    - DO NOT use Markdown formatting (no **bold**, no italics, no headers).
+    - Avoid labels like "Root cause:" or "Action item:". Just use bullet points.
+    - Use % values and trends from the data for every observation.
+    - Make all insights easy for business teams to act on.
 
-
-Instructions:
-- Use plain text with bullets only.
-- DO NOT use Markdown formatting (no **bold**, no italics, no headers).
-- Avoid labels like "Root cause:" or "Action item:". Just use bullet points.
-- Use % values and trends from the data for every observation.
-- Make all insights easy for business teams to act on.
-
-Data:
-{data_block}
-"""
+    Data:
+    {data_block}
+    """
 
     try:
         ai_response = oa_client.chat.completions.create(
@@ -1503,9 +1651,9 @@ Data:
 
         # ===== DEBUG: print exactly what model returned =====
         print("\n================ AI INSIGHT DEBUG ================")
-        print("KEY:", key, "| SKU:", sku, "| Product:", product_name, "| Global:", is_global, "| New/Reviving:", is_new_or_reviving)
+        print("KEY:", key, "| SKU:", sku, "| Product:", product_name, "| New/Reviving:", is_new_or_reviving)
         print("INSIGHT (raw):\n", ai_text)
-        print("INSIGHT (repr):\n", repr(ai_text))   # shows \n, \t etc clearly
+        print("INSIGHT (repr):\n", repr(ai_text))
         print("==================================================\n")
 
         return key, {
@@ -1513,20 +1661,17 @@ Data:
             "product_name": product_name,
             "insight": ai_text,
             "key_used": key,
-            "is_global": is_global,
             "is_new_or_reviving": is_new_or_reviving,
         }
+
     except Exception as e:
-        # In case of API error, return a debug-friendly insight
         return key, {
             "sku": sku,
             "product_name": product_name,
             "insight": f"Error generating insight: {str(e)}",
             "key_used": key,
-            "is_global": is_global,
             "is_new_or_reviving": is_new_or_reviving,
         }
-
 
 # -----------------------------------------------------------------------------
 # MAIN ROUTE: LIVE MTD vs PREVIOUS-MONTH-SAME-PERIOD BI
@@ -1546,7 +1691,7 @@ def live_mtd_vs_previous():
         if not user_id:
             return jsonify({"error": "Invalid token payload: user_id missing"}), 401
 
-        country = request.args.get("countryName", "uk")
+        country = (request.args.get("countryName", "uk") or "uk").strip().lower()
         as_of = request.args.get("as_of")
 
         # optional custom day range
@@ -1583,7 +1728,7 @@ def live_mtd_vs_previous():
         last_day_prev = monthrange(prev_full_start.year, prev_full_start.month)[1]
         prev_full_end = date(prev_full_start.year, prev_full_start.month, last_day_prev)
 
-        is_global = country.lower() == "global"
+        # is_global = country.lower() == "global"
         key_column = "sku"
 
         # 1) fetch previous period (ALIGNED) -> table/growth/totals/AI
@@ -1595,11 +1740,18 @@ def live_mtd_vs_previous():
         _, prev_daily_full = fetch_previous_period_data(
             user_id, country, prev_full_start, prev_full_end
         )
+        # ✅ FULL previous month net sales total (30-day series)
+        prev_full_totals = totals_from_daily_series(prev_daily_full)
+        total_previous_net_sales_full_month = float(
+            prev_full_totals.get("net_sales", 0) or 0
+        )
+
 
         # 2) fetch current MTD (✅ now includes __has_mapping__ in each row)
         curr_data, curr_daily = fetch_current_mtd_data(
-            user_id, country, curr_start, curr_end, is_global
+        user_id, country, curr_start, curr_end
         )
+
 
         # 3) growth calculation (use ALIGNED prev)
         growth_data = calculate_growth(prev_data_aligned, curr_data, key=key_column)
@@ -1607,43 +1759,32 @@ def live_mtd_vs_previous():
         # 4) categorization (use ALIGNED prev)
         prev_keys = {row.get(key_column) for row in prev_data_aligned if row.get(key_column)}
 
+    
         # ==========================================================
-        # ✅ STEP 5: Force "unmapped product_name" SKUs into New/Reviving
+        # ✅ STEP 5: New / Reviving SKUs (Historic BI parity: 6-month check)
         # ==========================================================
+        # Logic:
+        # - Reviving: SKU present in current, absent in previous aligned period
+        # - New: SKU not seen in last 6 months (excluding current month)
+        # - Final: union of (reviving ∪ new)
 
-        # lookup: sku -> has_mapping (based on curr_data from fetch_current_mtd_data)
-        curr_map_flag = {
-            str(r.get(key_column)): bool(r.get("__has_mapping__", False))
-            for r in curr_data
-            if r.get(key_column) is not None
-        }
+        curr_keys = {row.get(key_column) for row in curr_data if row.get(key_column)}
 
-        # optional: copy mapping flag into growth rows (debugging / frontend badge)
-        for gr in growth_data:
-            sku = gr.get(key_column)
-            if sku is not None:
-                gr["__has_mapping__"] = curr_map_flag.get(str(sku), False)
+        historical_6m_keys = fetch_historical_skus_last_6_months(
+            user_id=user_id,
+            country=country,
+            ref_date=curr_start
+        )
 
-        # existing "new/reviving" (prev missing)
-        new_reviving_prev_missing = [row for row in growth_data if row.get("new_or_reviving")]
+        reviving_keys = curr_keys - prev_keys
+        newly_launched_keys = curr_keys - historical_6m_keys
+        new_reviving_keys = reviving_keys | newly_launched_keys
 
-        # unmapped (mapping missing) => force to new/reviving
-        unmapped_growth = [
-            r for r in growth_data
-            if r.get(key_column) is not None
-            and not curr_map_flag.get(str(r.get(key_column)), False)
+        new_reviving = [
+            row for row in growth_data
+            if row.get(key_column) in new_reviving_keys
         ]
 
-        # merge + dedupe by sku
-        seen = set()
-        new_reviving = []
-        for r in (new_reviving_prev_missing + unmapped_growth):
-            k = r.get(key_column)
-            if not k or k in seen:
-                continue
-            seen.add(k)
-            r["new_or_reviving"] = True  # force
-            new_reviving.append(r)
 
         # ==========================================================
         # ✅ STEP 6: Exclude new_reviving (incl. unmapped) from Top80/Other pipeline
@@ -1756,42 +1897,51 @@ def live_mtd_vs_previous():
         # SEND EMAIL WITH AI SUMMARY
         # ============================
 
-        # 1) Try to read email from JWT payload, else from query param
         user_email = payload.get("email") or request.args.get("email")
         if not user_email:
             user_email = get_user_email_by_id(user_id)
 
-
         if user_email:
-            # 3) Throttle: only once in 24 hours per user+country
-            if has_recent_bi_email(user_id, country, hours=24):
-                print(f"[INFO] BI email already sent in last 24h for user_id={user_id}, country={country}; skipping.")
-            else:
-                # 4) Generate a fresh token for this user for deep-link
-                email_token_payload = {
-                    "user_id": user_id,
-                    "email": user_email,
-                    "scope": "live_mtd_bi",
-                    "exp": datetime.utcnow() + timedelta(hours=24),
-                }
-                email_token = jwt.encode(email_token_payload, SECRET_KEY, algorithm="HS256")
+            cache_key = (user_id, country)
 
-                try:
-                    send_live_bi_email(
-                        to_email=user_email,
-                        overall_summary=overall_summary,
-                        overall_actions=overall_actions,
-                        country=country,
-                        prev_label=prev_label,
-                        curr_label=curr_label,
-                        deep_link_token=email_token,
-                    )
-                    mark_bi_email_sent(user_id, country)
-                except Exception as e:
-                    # Don't break the API if email fails
-                    print(f"[WARN] Error sending live BI email: {e}")
+            # ✅ dev reload/double hit protection
+            if cache_key in _SENT_EMAIL_CACHE:
+                print("[INFO] Email already sent in this process, skipping.")
+            else:
+                # ✅ DB throttle: only once per 24h per user+country
+                if has_recent_bi_email(user_id, country, hours=24):
+                    print(f"[INFO] BI email already sent in last 24h for user_id={user_id}, country={country}; skipping.")
+                    _SENT_EMAIL_CACHE.add(cache_key)  # optional: prevents repeated DB hits in same process
+                else:
+                    email_token_payload = {
+                        "user_id": user_id,
+                        "email": user_email,
+                        "scope": "live_mtd_bi",
+                        "exp": datetime.utcnow() + timedelta(hours=24),
+                    }
+                    email_token = jwt.encode(email_token_payload, SECRET_KEY, algorithm="HS256")
+
+                    try:
+                        send_live_bi_email(
+                            to_email=user_email,
+                            overall_summary=overall_summary,
+                            overall_actions=overall_actions,
+                            sku_actions=None,
+                            country=country,
+                            prev_label=prev_label,
+                            curr_label=curr_label,
+                            deep_link_token=email_token,
+                        )
+
+                        mark_bi_email_sent(user_id, country)
+                        _SENT_EMAIL_CACHE.add(cache_key)
+
+                    except Exception as e:
+                        print(f"[WARN] Error sending live BI email: {e}")
+                        # ✅ DO NOT mark as sent on send failure
         else:
             print("[WARN] No user email found in token, query params, or DB; skipping BI email.")
+
 
 
 
@@ -1808,7 +1958,6 @@ def live_mtd_vs_previous():
                         generate_live_insight,
                         item,
                         country,
-                        is_global,
                         prev_label,
                         curr_label,
                     ): item
@@ -1827,10 +1976,67 @@ def live_mtd_vs_previous():
                         )
 
         # ============================
-        # RESPONSE
+        # ✅ ALIGNED TOTALS (respects start_day/end_day)
+        # ============================
+        prev_aligned_totals = totals_from_daily_series(prev_daily_aligned)
+        curr_aligned_totals = totals_from_daily_series(curr_daily)
+
+        aligned_totals_payload = {
+            "total_current_profit": curr_aligned_totals["profit"],
+            "total_previous_profit": prev_aligned_totals["profit"],
+
+            "total_current_platform_fees": curr_aligned_totals["platform_fee"],
+            "total_previous_platform_fees": prev_aligned_totals["platform_fee"],
+
+            "total_current_advertising": curr_aligned_totals["advertising"],
+            "total_previous_advertising": prev_aligned_totals["advertising"],
+            
+            # ✅ ADD THESE TWO:
+            "total_current_net_sales": curr_aligned_totals["net_sales"],
+            "total_previous_net_sales": prev_aligned_totals["net_sales"],
+        }
+        # ============================
+        # ✅ CM2 PROFIT (aligned window)
+        # CM2 = Profit - Advertising - Platform Fees
+        # ============================
+        aligned_totals_payload["current_cm2_profit"] = (
+            float(aligned_totals_payload.get("total_current_profit", 0) or 0)
+            - float(aligned_totals_payload.get("total_current_advertising", 0) or 0)
+            - float(aligned_totals_payload.get("total_current_platform_fees", 0) or 0)
+        )
+
+        aligned_totals_payload["previous_cm2_profit"] = (
+            float(aligned_totals_payload.get("total_previous_profit", 0) or 0)
+            - float(aligned_totals_payload.get("total_previous_advertising", 0) or 0)
+            - float(aligned_totals_payload.get("total_previous_platform_fees", 0) or 0)
+        )
+        # ============================
+        # ✅ PROFIT % (aligned window)
+        # Profit % = Profit / Net Sales * 100
+        # ============================
+        aligned_totals_payload["total_current_profit_percentage"] = (
+            (aligned_totals_payload["current_cm2_profit"] / aligned_totals_payload["total_current_net_sales"]) * 100
+            if aligned_totals_payload.get("total_current_net_sales", 0)
+            else 0.0
+        )
+
+        aligned_totals_payload["total_previous_profit_percentage"] = (
+            (aligned_totals_payload["previous_cm2_profit"] / aligned_totals_payload["total_previous_net_sales"]) * 100
+            if aligned_totals_payload.get("total_previous_net_sales", 0)
+            else 0.0
+        )
+        
+
+        aligned_totals_payload["total_previous_net_sales_full_month"] = total_previous_net_sales_full_month
+
+
+
+        # ============================
+        # ✅ RESPONSE PAYLOAD (complete)
         # ============================
         response_payload = {
             "message": "Live MTD vs previous-month-same-period comparison",
+
             "periods": {
                 "previous": {
                     "label": prev_label,
@@ -1848,22 +2054,31 @@ def live_mtd_vs_previous():
                     "end_date": curr_end.isoformat(),
                 },
             },
+
+            # ✅ NEW: totals for aligned window only (start_day/end_day)
+            "aligned_totals": aligned_totals_payload,
+
             "categorized_growth": {
                 "top_80_skus": top_80_skus,
                 "top_80_total": top_80_total_row,
-                "new_or_reviving_skus": new_reviving,  # ✅ includes unmapped now
+
+                "new_or_reviving_skus": new_reviving,
                 "new_or_reviving_total": new_reviving_total_row,
+
                 "other_skus": other_skus,
                 "other_total": other_total_row,
             },
+
             "daily_series": {
-                "previous": prev_daily_full,
-                "current_mtd": curr_daily,
+                "previous": prev_daily_full,     # full previous month series (graph only)
+                "current_mtd": curr_daily,       # current aligned series (your route already uses this)
             },
+
             "daily_series_aligned": {
-                "previous": prev_daily_aligned,
-                "current_mtd": curr_daily,
+                "previous": prev_daily_aligned,  # aligned (start_day/end_day)
+                "current_mtd": curr_daily,       # aligned (start_day/end_day)
             },
+
             "ai_insights": insights,
             "overall_summary": overall_summary,
             "overall_actions": overall_actions,
@@ -1872,6 +2087,7 @@ def live_mtd_vs_previous():
         response_payload = round_numeric_values(response_payload, ndigits=2)
         return jsonify(response_payload), 200
 
+
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token has expired"}), 401
     except jwt.InvalidTokenError:
@@ -1879,5 +2095,4 @@ def live_mtd_vs_previous():
     except Exception as e:
         print("Unexpected error in /live_mtd_bi:", e)
         return jsonify({"error": "Server error", "details": str(e)}), 500
-
 

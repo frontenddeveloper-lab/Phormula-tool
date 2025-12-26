@@ -14,7 +14,6 @@ SECRET_KEY = Config.SECRET_KEY
 UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 from dotenv import load_dotenv
 
-
 load_dotenv()
 db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
 db_url1= os.getenv('DATABASE_ADMIN_URL', 'postgresql://postgres:password@localhost:5432/admin_db')
@@ -22,12 +21,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 skuwise_bp = Blueprint('skuwise_bp', __name__)
 
-
 def encode_file_to_base64(file_path):
     with open(file_path, 'rb') as file:
         return base64.b64encode(file.read()).decode('utf-8')
-
-
 
 def get_countries_for_currency(currency):
     currency = currency.lower()
@@ -76,7 +72,6 @@ country_currency_map = {
     "us": "usd",
     "global": None   # global stays as it is (optional)
 }
-
 
 
 @skuwise_bp.route('/ProductwisePerformance', methods=['POST'])
@@ -407,6 +402,8 @@ def product_names():
     except Exception as e:
         print("Error fetching product names:", str(e))
         return jsonify({'error': str(e)}), 500
+
+
 
 ############################################################################################################################################
 ##DJ's NEW CODE FOR GROWTH + AI INSIGHTS Donot change anything here unless discussed with DJ##

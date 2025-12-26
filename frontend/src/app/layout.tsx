@@ -1,3 +1,62 @@
+// import "./globals.css";
+// import { Lato } from "next/font/google";
+
+// import { SidebarProvider } from "@/context/SidebarContext";
+// import { ThemeProvider } from "@/context/ThemeContext";
+// import Providers from "./providers";
+// import { Toaster } from "sonner";
+
+// // 🆕 Replace Outfit with Lato
+// const lato = Lato({
+//   subsets: ["latin"],
+//   weight: ["300", "400", "700", "900"], 
+//   variable: "--font-lato",              
+// });
+
+// export default function RootLayout({
+//   children,
+// }: Readonly<{
+//   children: React.ReactNode;
+// }>) {
+//   return (
+//     <html lang="en" className={lato.variable}>
+//       <body className={`font-sans dark:bg-gray-900`}>
+//         <Providers>
+//           <ThemeProvider>
+//             <SidebarProvider>{children}</SidebarProvider>
+//           </ThemeProvider>
+//         </Providers>
+
+//         <Toaster position="top-right" richColors closeButton />
+//       </body>
+//     </html>
+//   );
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import "./globals.css";
 import { Lato } from "next/font/google";
 
@@ -6,11 +65,14 @@ import { ThemeProvider } from "@/context/ThemeContext";
 import Providers from "./providers";
 import { Toaster } from "sonner";
 
+// ✅ add this
+import { PlatformProvider } from "@/components/context/PlatformContext";
+
 // 🆕 Replace Outfit with Lato
 const lato = Lato({
   subsets: ["latin"],
-  weight: ["300", "400", "700", "900"], 
-  variable: "--font-lato",              
+  weight: ["300", "400", "700", "900"],
+  variable: "--font-lato",
 });
 
 export default function RootLayout({
@@ -20,14 +82,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={lato.variable}>
-      <body className={`font-sans dark:bg-gray-900`}>
+      <body className="font-sans dark:bg-gray-900">
         <Providers>
           <ThemeProvider>
-            <SidebarProvider>{children}</SidebarProvider>
+            <SidebarProvider>
+              <PlatformProvider>{children}</PlatformProvider>
+            </SidebarProvider>
           </ThemeProvider>
         </Providers>
 
-        {/* 👇 Global toaster */}
         <Toaster position="top-right" richColors closeButton />
       </body>
     </html>

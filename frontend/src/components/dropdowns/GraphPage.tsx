@@ -3759,7 +3759,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
             ].join(" ")}
           >
             {[
-              { name: "sales", label: "Sales", color: "#2CA9E0" },
+              { name: "sales", label: "Net Sales", color: "#2CA9E0" },
               { name: "total_cous", label: "COGS", color: "#AB64B5" },
               { name: "AmazonExpense", label: "Amazon Fees", color: "#FF5C5C" },
               { name: "taxncredit", label: "Taxes & Credits", color: "#FFBE26" },
