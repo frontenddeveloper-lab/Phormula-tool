@@ -948,6 +948,69 @@ const currentCountryName =
   }
 };
 
+const handleInventoryForecastFetch = async () => {
+  try {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("jwtToken")
+        : null;
+
+    if (!token) {
+      console.error("No auth token found");
+      return;
+    }
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
+
+    // 🔒 month/year se LAST DATE nikaalne ka logic (same as page)
+    const months = [
+      "january","february","march","april","may","june",
+      "july","august","september","october","november","december",
+    ];
+
+    const monthIndex = months.indexOf(currentParams.month.toLowerCase());
+    if (monthIndex === -1) {
+      console.error("Invalid month");
+      return;
+    }
+
+    const year = Number(currentParams.year);
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+
+    const lastDateISO = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+    const url =
+      `${baseUrl}/amazon_api/inventory/ledger-summary` +
+      `?start_date=${encodeURIComponent(lastDateISO)}` +
+      `&end_date=${encodeURIComponent(lastDateISO)}` +
+      `&store_in_db=true`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Ledger API failed");
+
+    console.log("✅ Inventory Forecast API Response:", data);
+
+    // 👉 yahan tum:
+    // - context
+    // - redux
+    // - localStorage
+    // - ya direct table component
+    // bhej sakte ho
+
+  } catch (err) {
+    console.error("❌ Inventory Forecast API Error:", err);
+  }
+};
+
+
 
   const onRegionChange = (val: string) => {
     const platform = val as PlatformId;
@@ -1061,8 +1124,8 @@ const currentCountryName =
   subItems: [
     {
       name: "Real-Time Dashboard",
-      path: `/`,
-      onClick: handleFetchAgedInventory, // 🔥 yahin API hit hogi
+      path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+      onClick: handleFetchAgedInventory, 
     },
   ],
 },
@@ -1118,6 +1181,7 @@ const currentCountryName =
         {
           name: "Inventory Forecast",
           path: `/inventoryChoice/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+          onClick: handleInventoryForecastFetch,
         },
         {
           name: "P/L Forecast",
