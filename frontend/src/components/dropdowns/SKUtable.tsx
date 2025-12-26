@@ -1178,7 +1178,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
                       <strong>{topData.totals.salesMix}%</strong>
                     </td>
                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <strong>{topData.totals.unit_wise_profitability}</strong>
+                      {/* <strong>{topData.totals.unit_wise_profitability}</strong> */}
+                      <strong></strong>
                     </td>
                   </tr>
                 </tbody>
@@ -1249,7 +1250,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
                       <strong>{bottomData.totals.salesMix}%</strong>
                     </td>
                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <strong>{bottomData.totals.unit_wise_profitability}</strong>
+                      {/* <strong>{bottomData.totals.unit_wise_profitability}</strong> */}
+                      <strong></strong>
                     </td>
                   </tr>
                 </tbody>

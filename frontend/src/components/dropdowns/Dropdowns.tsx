@@ -511,6 +511,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
         {uploadsData?.summary &&
           (() => {
             const summary = displayData;
+            const netSales = summary.total_sales;
+
 
             // ✅ comparisons (camelCase OR snake_case)
             const rawComparisons =
@@ -547,8 +549,11 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               summary.total_expense === 0 &&
               summary.cm2_profit === 0;
 
+            // const cm2Percent =
+            //   summary.total_sales > 0 ? (summary.cm2_profit / summary.total_sales) * 100 : 0;
+
             const cm2Percent =
-              summary.total_sales > 0 ? (summary.cm2_profit / summary.total_sales) * 100 : 0;
+              netSales > 0 ? (summary.cm2_profit / netSales) * 100 : 0;
 
             console.log("SUMMARY KEYS:", Object.keys(summary as any));
             console.log("SUMMARY RAW:", summary);
@@ -734,18 +739,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             // ---------- CM2% comparisons ----------
             const getCm2Percent = (s?: Summary) =>
               s && s.total_sales > 0 ? (s.cm2_profit / s.total_sales) * 100 : 0;
-
             const renderCm2PercentComparisons = () => {
-              if (!comparisons) return null;
-
               const yNum = Number(selectedYear);
-
-              const prev =
-                range === "monthly"
-                  ? comparisons.lastMonth && getCm2Percent(comparisons.lastMonth)
-                  : range === "quarterly"
-                    ? comparisons.lastQuarter && getCm2Percent(comparisons.lastQuarter)
-                    : comparisons.lastYear && getCm2Percent(comparisons.lastYear);
 
               const label =
                 range === "monthly"
@@ -760,28 +755,44 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                       ? getPrevYearLabel(yNum)
                       : "Prev year";
 
-              if (typeof prev !== "number") return null;
+              const prevVal =
+                range === "monthly"
+                  ? comparisons?.lastMonth
+                    ? getCm2Percent(comparisons.lastMonth)
+                    : undefined
+                  : range === "quarterly"
+                    ? comparisons?.lastQuarter
+                      ? getCm2Percent(comparisons.lastQuarter)
+                      : undefined
+                    : comparisons?.lastYear
+                      ? getCm2Percent(comparisons.lastYear)
+                      : undefined;
 
-              const diffPct = prev === 0 ? null : ((cm2Percent - prev) / prev) * 100;
+              const hasPrev = typeof prevVal === "number" && !isNaN(prevVal);
+
+              const diffPct =
+                hasPrev && prevVal !== 0 ? ((cm2Percent - prevVal) / prevVal) * 100 : null;
+
+              const diffClass =
+                typeof diffPct === "number"
+                  ? diffPct >= 0
+                    ? "text-emerald-600"
+                    : "text-red-600"
+                  : "text-gray-400";
 
               return (
                 <div className="mt-3 space-y-1.5">
                   <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
                     <div className="min-w-0">
-                      <div className="font-semibold text-gray-600 whitespace-nowrap">{label}:</div>
-                      <div className="font-semibold text-gray-800 whitespace-nowrap">{formatPercent(prev)}</div>
+                      <div className="font-semibold text-gray-600 whitespace-nowrap">
+                        {label}:
+                      </div>
+                      <div className="font-semibold text-gray-800 whitespace-nowrap">
+                        {hasPrev ? formatPercent(prevVal!) : "-"}
+                      </div>
                     </div>
 
-                    <span
-                      className={[
-                        "font-bold whitespace-nowrap",
-                        typeof diffPct === "number"
-                          ? diffPct >= 0
-                            ? "text-emerald-600"
-                            : "text-red-600"
-                          : "text-gray-400",
-                      ].join(" ")}
-                    >
+                    <span className={`font-bold whitespace-nowrap ${diffClass}`}>
                       {typeof diffPct === "number" ? (
                         <>
                           {diffPct >= 0 ? "▲" : "▼"} {Math.abs(diffPct).toFixed(1)}%
@@ -794,6 +805,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 </div>
               );
             };
+
 
             return (
               <div
@@ -827,17 +839,15 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                   {renderGrossSalesComparisons()}
                 </div>
 
-                {/* Sales */}
+                {/* Net Sales */}
                 <div className="w-full rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Sales</span>
-                    <FcSalesPerformance fill="000" color="#000" size={16} />
-                  </div>
+                  <span className="text-xs text-charcoal-500">Net Sales</span>
                   <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
-                    {formatMoney(summary.total_sales)}
+                    {formatMoney(netSales)}
                   </div>
                   {renderComparisons("total_sales", formatMoney)}
                 </div>
+
 
                 {/* Expenses */}
                 <div className="w-full rounded-2xl border border-[#FF5C5C] bg-[#FF5C5C26] shadow-sm px-4 py-3 flex flex-col justify-between">

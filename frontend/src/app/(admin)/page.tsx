@@ -1080,6 +1080,11 @@ export default function DashboardPage() {
     };
   }, [curr, prev]);
 
+  const deltaPctPoints = (currentPct: number, previousPct: number) => {
+    const c = Number(currentPct) || 0;
+    const p = Number(previousPct) || 0;
+    return c - p; // percentage points
+  };
 
 
   /* ===================== ✅ RANGE KPIs FOR CARDS (FROM SAME BI DATA AS GRAPH) ===================== */
@@ -1097,22 +1102,22 @@ export default function DashboardPage() {
   // }, [biDailySeriesHome]);
 
   useEffect(() => {
-  const pts = biDailySeriesHome?.current_mtd || [];
-  if (!pts.length) return;
+    const pts = biDailySeriesHome?.current_mtd || [];
+    if (!pts.length) return;
 
-  const todayDay = getDayOfMonthIST();
+    const todayDay = getDayOfMonthIST();
 
-  // try exact today
-  const exact = pts.find((p) => Number(p.date?.slice(8, 10)) === todayDay);
-  if (exact?.net_sales != null) {
-    setTodaySalesRaw(Number(exact.net_sales) || 0);
-    return;
-  }
+    // try exact today
+    const exact = pts.find((p) => Number(p.date?.slice(8, 10)) === todayDay);
+    if (exact?.net_sales != null) {
+      setTodaySalesRaw(Number(exact.net_sales) || 0);
+      return;
+    }
 
-  // fallback: latest available day in series
-  const latest = [...pts].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
-  setTodaySalesRaw(Number(latest?.net_sales) || 0);
-}, [biDailySeriesHome]);
+    // fallback: latest available day in series
+    const latest = [...pts].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+    setTodaySalesRaw(Number(latest?.net_sales) || 0);
+  }, [biDailySeriesHome]);
 
 
   const biCardKpis = useMemo(() => {
@@ -1958,13 +1963,14 @@ export default function DashboardPage() {
                       deltaPct={
                         globalUseBi
                           ? (globalCm2Ready
-                            ? safeDeltaPctFromPct(
+                            ? deltaPctPoints(
                               biAlignedTotals?.total_current_profit_percentage ?? 0,
                               biAlignedTotals?.total_previous_profit_percentage ?? 0
                             )
                             : null)
-                          : safeDeltaPctFromPct(curr.profitPct ?? 0, prev.profitPct ?? 0)
+                          : deltaPctPoints(curr.profitPct ?? 0, prev.profitPct ?? 0)
                       }
+
 
                       loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={fmtPct}
@@ -2144,16 +2150,14 @@ export default function DashboardPage() {
                       deltaPct={
                         useBiCm2
                           ? (cm2Ready
-                            ? safeDeltaPctFromPct(
+                            ? deltaPctPoints(
                               biAlignedTotals?.total_current_profit_percentage ?? 0,
                               biAlignedTotals?.total_previous_profit_percentage ?? 0
                             )
                             : null)
-                          : safeDeltaPctFromPct(
-                            curr.profitPct ?? 0,
-                            prev.profitPct ?? 0
-                          )
+                          : deltaPctPoints(curr.profitPct ?? 0, prev.profitPct ?? 0)
                       }
+
                       loading={loading || (useBiCm2 ? biLoading : false)}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
