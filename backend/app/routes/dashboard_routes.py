@@ -1202,7 +1202,9 @@ def cashflow():
     month = request.args.get('month')
     year = request.args.get('year')
     country_param = request.args.get('country', '')
-    currency_param = (request.args.get('currency') or 'USD').lower()
+    # currency_param = (request.args.get('currency') or 'USD').lower()
+    currency_param = (request.args.get('currency') or '').lower()
+
 
     
     country = resolve_country(country_param, currency_param)

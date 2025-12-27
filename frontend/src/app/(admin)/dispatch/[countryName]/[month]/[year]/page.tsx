@@ -7,6 +7,8 @@ import '@/app/(admin)/pnlforecast/[countryName]/[month]/[year]/Styles.css';
 import { Modal } from '@/components/ui/modal'; // Adjust path as needed
 import FileUploadForm from '@/app/(admin)/(ui-elements)/modals/FileUploadForm'; // Adjust path as needed
 import MonthYearPickerTable from '@/components/filters/MonthYearPickerTable';
+import DataTable, { ColumnDef } from "@/components/ui/table/DataTable"
+import { IoDownload } from "react-icons/io5";
 
 // Types
 interface SkuRow {
@@ -247,6 +249,67 @@ export default function DispatchPage() {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Dispatch')
     XLSX.writeFile(workbook, `Dispatch Report ${monthdp}-${yeardp}.xlsx`)
   }
+
+  // ---- build rows for DataTable ----
+const tableRows = skuData.map((row, index) => {
+  const isTotal = isTotalRow(row)
+
+  const obj: Record<string, any> = {
+    __isTotal: isTotal,
+    sno: isTotal ? "" : index + 1,
+  }
+
+  displayedColumns.forEach((col) => {
+    if (col === "Sno.") return
+
+    if (
+      isTotal &&
+      [
+        "Inventory at Month End",
+        "Projected Sales Total",
+        "Dispatch",
+        "Current Inventory + Dispatch",
+        "Inventory Coverage Ratio Before Dispatch",
+      ].includes(col)
+    ) {
+      obj[col] = calculateColumnTotal(col).toLocaleString("en-US")
+    }else {
+  // ✅ Fix Total row text duplication
+  if (isTotal) {
+    if (col === "sku") {
+      obj[col] = "Total"                // SKU blank
+      return
+    }
+    if (col === "Product Name") {
+      obj[col] = ""           // Total only here
+      return
+    }
+  }
+
+  const v = row[col]
+  obj[col] =
+    typeof v === "number"
+      ? v.toLocaleString("en-US")
+      : v ?? ""
+}
+  })
+
+  return obj
+})
+
+const columns: ColumnDef<any>[] = displayedColumns.map((col) => ({
+  key: col === "Sno." ? "sno" : col,
+  header: col,
+
+  // ✅ Sno column small width
+  width: col === "Sno." ? "50px" : undefined,
+
+  cellClassName:
+    col === "Sno."
+      ? "text-center whitespace-nowrap"
+      : "text-center",
+}))
+
 
   return (
     <>
@@ -607,46 +670,30 @@ export default function DispatchPage() {
       <div className="forecast-data">
         {skuData.length > 0 ? (
           <>
-            <table className="tablec">
-              <thead className="theadc">
-                <tr>
-                  {displayedColumns.map((key) => (
-                    <th key={key}>{key.toLowerCase() === 'sku' ? key.toUpperCase() : key}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {skuData.map((row, index) => (
-                  <tr key={index}>
-                    {displayedColumns.map((col) => (
-                      <td key={col}>
-                        {col === 'Sno.'
-                          ? isTotalRow(row)
-                            ? ''
-                            : index + 1
-                          : col === 'sku' && isTotalRow(row)
-                          ? ''
-                          : isTotalRow(row) &&
-                            [
-                              'Inventory at Month End',
-                              'Projected Sales Total',
-                              'Dispatch',
-                              'Current Inventory + Dispatch',
-                              'Inventory Coverage Ratio Before Dispatch',
-                            ].includes(col)
-                          ? calculateColumnTotal(col).toLocaleString('en-US')
-                          : typeof row[col] === 'number'
-                          ? (row[col] as number).toLocaleString('en-US')
-                          : (row[col] as string)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button className="styled-button" style={{ display: 'flex', marginTop: '10px' }} onClick={handleExportToExcel}>
-              Download (.xlsx)&nbsp;<i className="fa-solid fa-download fa-beat"></i>
-            </button>
+           <DataTable
+  columns={columns}
+  data={tableRows}
+  paginate={false}          // ❗ pagination OFF so Total row stays visible
+  scrollY
+  maxHeight="70vh"
+  stickyHeader
+  loading={loading}
+  rowClassName={(row: any) =>
+    row.__isTotal ? "bg-[#D9D9D9] font-bold" : ""
+  }
+/>
+    <div className='flex justify-end items-end mt-2'>
+ <button
+                               onClick={handleExportToExcel}
+                              className="bg-white border border-[#8B8585] px-1 rounded-sm py-1"
+                                                          style={{
+                                               boxShadow: "0px 4px 4px 0px #00000040",  
+                                             }}
+                                                       >
+                                                       <IoDownload size={27} />
+                              </button>
+    </div>
+            
           </>
         ) : (
           <p>Select Month and Year to see Dispatch!</p>

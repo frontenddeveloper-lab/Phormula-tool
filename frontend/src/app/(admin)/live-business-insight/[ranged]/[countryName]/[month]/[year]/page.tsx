@@ -2173,7 +2173,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 28,              // ⬅️ increase this (was 14)
+                    gap: 42,            
                     flexWrap: 'wrap',
                     fontSize: 14,
                     color: '#414042',

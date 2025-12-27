@@ -1,263 +1,490 @@
-// // // components/dashboard/SalesTargetCard.tsx
-// // "use client";
+// // // // "use client";
 
-// // import React, { useMemo, useState } from "react";
-// // import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-// // import SegmentedToggle from "@/components/ui/SegmentedToggle";
-// // import { fmtUSDk } from "@/lib/dashboard/format";
-// // import {
-// //   getISTDayInfo,
-// //   getPrevMonthShortLabel,
-// //   getThisMonthShortLabel,
-// // } from "@/lib/dashboard/date";
-// // import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
+// // // // import React, { useMemo, useState } from "react";
+// // // // import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+// // // // import SegmentedToggle from "@/components/ui/SegmentedToggle";
+// // // // import {
+// // // //   getISTDayInfo,
+// // // //   getPrevMonthShortLabel,
+// // // //   getThisMonthShortLabel,
+// // // // } from "@/lib/dashboard/date";
+// // // // import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
 
-// // type Props = {
-// //   regions: Record<RegionKey, RegionMetrics>;
-// //   defaultRegion?: RegionKey;
-// // };
+// // // // type CurrencyCode = "USD" | "GBP" | "INR" | "CAD";
 
-// // export default function SalesTargetCard({
-// //   regions,
-// //   defaultRegion = "Global",
-// // }: Props) {
-// //   // Tabs: Global + only connected countries
-// //   const availableRegions = useMemo<RegionKey[]>(() => {
-// //     const list: RegionKey[] = ["Global"];
-// //     (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
-// //       const r = regions[key];
-// //       if (!r) return;
+// // // // type Props = {
+// // // //     data: RegionMetrics; 
+// // // //   regions: Record<RegionKey, RegionMetrics>;
+// // // //   value: RegionKey;
+// // // //   onChange: (r: RegionKey) => void;
+// // // //   defaultRegion?: RegionKey;
+// // // //   hideTabs?: boolean;
+// // // //   homeCurrency: CurrencyCode;
+// // // //   convertToHomeCurrency: (value: number, from: CurrencyCode) => number;
+// // // //   formatHomeK: (value: number) => string;
+// // // //   todaySales?: number;
+// // // //   currentReimbursement?: number;
+// // // //   previousReimbursement?: number;
+// // // //   reimbursementDeltaPct?: number | null;
+// // // // };
 
-// //       if (
-// //         r.mtdUSD ||
-// //         r.lastMonthToDateUSD ||
-// //         r.lastMonthTotalUSD ||
-// //         r.targetUSD
-// //       ) {
-// //         list.push(key);
-// //       }
-// //     });
+// // // // export default function SalesTargetCard({
+// // // //   data,
+// // // //   regions,
+// // // //   value,
+// // // //   onChange,
+// // // //   homeCurrency,
+// // // //   convertToHomeCurrency,
+// // // //   formatHomeK,
+// // // //   hideTabs,
+// // // //   todaySales,
+// // // //   currentReimbursement,
+// // // //   previousReimbursement,
+// // // //   reimbursementDeltaPct,
+// // // // }: Props) {
+// // // //   const tab = value;
+// // // //   console.log("Values", currentReimbursement,
+// // // //     previousReimbursement,
+// // // //     reimbursementDeltaPct)
+// // // //   const availableRegions = useMemo<RegionKey[]>(() => {
+// // // //     const list: RegionKey[] = ["Global"];
+// // // //     (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
+// // // //       const r = regions[key];
+// // // //       if (!r) return;
 
-// //     return list;
-// //   }, [regions]);
+// // // //       if (
+// // // //         r.mtdUSD ||
+// // // //         r.lastMonthToDateUSD ||
+// // // //         r.lastMonthTotalUSD ||
+// // // //         r.targetUSD
+// // // //       ) {
+// // // //         list.push(key);
+// // // //       }
+// // // //     });
 
-// //   const [tab, setTab] = useState<RegionKey>(defaultRegion);
+// // // //     return list;
+// // // //   }, [regions]);
 
-// //   const data = regions[tab] || regions.Global;
-// //   const { mtdUSD, lastMonthToDateUSD, lastMonthTotalUSD, targetUSD } = data;
+// // // //   const data = regions[tab] || regions.Global;
 
-// //   const pct = targetUSD > 0 ? Math.min(mtdUSD / targetUSD, 1) : 0;
-// //   const pctLastMTD =
-// //     targetUSD > 0 ? Math.min(lastMonthToDateUSD / targetUSD, 1) : 0;
+// // // //   // RegionMetrics are stored in USD in your current data model
+// // // //   const mtdHome = convertToHomeCurrency(data.mtdUSD ?? 0, "USD");
+// // // //   const lastMtdHome = convertToHomeCurrency(
+// // // //     data.lastMonthToDateUSD ?? 0,
+// // // //     "USD"
+// // // //   );
+// // // //   const lastMonthTotalHome = convertToHomeCurrency(
+// // // //     data.lastMonthTotalUSD ?? 0,
+// // // //     "USD"
+// // // //   );
+// // // //   const targetHome = convertToHomeCurrency(data.targetUSD ?? 0, "USD");
 
-// //   const deltaPct = (pct - pctLastMTD) * 100;
+// // // //   // ✅ Gauge logic (unchanged)
+// // // //   const ratio = targetHome > 0 ? mtdHome / targetHome : 0;
+// // // //   const ratioLast = targetHome > 0 ? lastMonthTotalHome / targetHome : 0;
 
-// //   const { todayDay } = getISTDayInfo();
-// //   const todayApprox = todayDay > 0 ? mtdUSD / todayDay : 0;
+// // // //   const greenDraw = Math.min(Math.max(ratio, 0), 1);
 
-// //   const prevLabel = getPrevMonthShortLabel();
-// //   const thisMonthLabel = getThisMonthShortLabel();
+// // // //   const OVERFLOW_EMPTY_AT = 2; // visual-only
+// // // //   let orangeDraw = 1;
+// // // //   if (ratio > 1) {
+// // // //     const t = (ratio - 1) / (OVERFLOW_EMPTY_AT - 1);
+// // // //     orangeDraw = 1 - Math.min(Math.max(t, 0), 1);
+// // // //   }
 
-// //   const size = 280;
-// //   const strokeMain = 10;
-// //   const strokeLast = 5;
+// // // //   const toDeg_MTD = 180 * greenDraw;
+// // // //   const toDeg_Orange = 180 * orangeDraw;
 
-// //   const cx = size / 2;
-// //   const rBase = size / 2 - strokeMain;
-// //   const gap = 15;
+// // // //   const pctDisplay = ratio * 100;
+// // // //   const deltaPct = (ratio - ratioLast) * 100;
 
-// //   const rTarget = rBase;
-// //   const rCurrent = rBase;
-// //   const rLastMTD = rCurrent - strokeMain / 2 - gap - strokeLast / 2;
+// // // //   const { todayDay } = getISTDayInfo();
+// // // //   const todayHome =
+// // // //     typeof todaySales === "number" && !Number.isNaN(todaySales)
+// // // //       ? todaySales
+// // // //       : todayDay > 0
+// // // //         ? mtdHome / todayDay
+// // // //         : 0;
 
-// //   const toXYRadius = (angDeg: number, radius: number) => {
-// //     const rad = (Math.PI / 180) * (180 - angDeg);
-// //     return {
-// //       x: cx + radius * Math.cos(rad),
-// //       y: size / 2 - radius * Math.sin(rad),
-// //     };
-// //   };
+// // // //   const prevLabel = getPrevMonthShortLabel();
+// // // //   const thisMonthLabel = getThisMonthShortLabel();
 
-// //   const arcPath = (fromDeg: number, toDeg: number, radius: number) => {
-// //     const start = toXYRadius(fromDeg, radius);
-// //     const end = toXYRadius(toDeg, radius);
-// //     const largeArc = toDeg - fromDeg > 180 ? 1 : 0;
-// //     return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
-// //   };
+// // // //   // Gauge sizing
+// // // //   const size = 220;
+// // // //   const strokeMain = 10;
+// // // //   const strokeLast = 5;
 
-// //   const fullFrom = 0;
-// //   const fullTo = 180;
-// //   const toDeg_MTD = 180 * pct;
-// //   const toDeg_LastMTD = 180;
+// // // //   const cx = size / 2;
+// // // //   const rBase = size / 2 - strokeMain;
+// // // //   const gap = 12;
 
-// //   const knobGreen = toXYRadius(toDeg_MTD, rCurrent);
-// //   const knobYellow = toXYRadius(toDeg_LastMTD, rLastMTD);
+// // // //   const rTarget = rBase;
+// // // //   const rCurrent = rBase;
+// // // //   const rLastMTD = rCurrent - strokeMain / 2 - gap - strokeLast / 2;
 
-// //   const badgeIsUp = deltaPct >= 0;
-// //   const badgeStr =
-// //     (badgeIsUp ? "▲ " : "▼ ") + `${Math.abs(deltaPct).toFixed(2)}%`;
+// // // //   const toXYRadius = (angDeg: number, radius: number) => {
+// // // //     const rad = (Math.PI / 180) * (180 - angDeg);
+// // // //     return {
+// // // //       x: cx + radius * Math.cos(rad),
+// // // //       y: size / 2 - radius * Math.sin(rad),
+// // // //     };
+// // // //   };
 
-// //   return (
-// //     <div className="h-full rounded-2xl border bg-white py-5 px-2 shadow-sm flex flex-col">
-// //       {/* Header with tabs */}
-// //       <div className="flex flex-col items-center justify-between gap-2">
-// //         <PageBreadcrumb
-// //           pageTitle="Sales Target"
-// //           textSize="2xl"
-// //           variant="page"
-// //           align="center"
-// //         />
+// // // //   const targetDeg = 180;
+// // // //   const targetMarkOuter = toXYRadius(targetDeg, rTarget + 2);
+// // // //   const targetMarkInner = toXYRadius(targetDeg, rTarget - strokeMain - 2);
 
-// //         <SegmentedToggle<RegionKey>
-// //           value={tab}
-// //           options={availableRegions.map((r) => ({ value: r }))}
-// //           onChange={setTab}
-// //           className="my-1 md:my-8"
-// //         />
-// //       </div>
+// // // //   const arcPath = (fromDeg: number, toDeg: number, radius: number) => {
+// // // //     const start = toXYRadius(fromDeg, radius);
+// // // //     const end = toXYRadius(toDeg, radius);
+// // // //     const largeArc = toDeg - fromDeg > 180 ? 1 : 0;
+// // // //     return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
+// // // //   };
 
-// //       {/* Legend */}
-// //       <div className="mt-5 mb-2 flex items-center gap-2 text-xs">
-// //         <div className="flex flex-1 items-center justify-center gap-2">
-// //           <span
-// //             className="block h-3 w-3 rounded-sm shrink-0"
-// //             style={{ backgroundColor: "#5EA68E" }}
-// //           />
-// //           <span className="text-gray-600">MTD Sales</span>
-// //         </div>
+// // // //   const fullFrom = 0;
+// // // //   const fullTo = 180;
 
-// //         <div className="flex flex-1 items-center justify-center gap-2">
-// //           <span
-// //             className="block h-3 w-3 rounded-sm shrink-0"
-// //             style={{ backgroundColor: "#9ca3af" }}
-// //           />
-// //           <span className="text-gray-600">{thisMonthLabel} Target</span>
-// //         </div>
+// // // //   const knobGreen = toXYRadius(toDeg_MTD, rCurrent);
+// // // //   const knobYellow = toXYRadius(toDeg_Orange, rLastMTD);
 
-// //         <div className="flex flex-1 items-center justify-center gap-2">
-// //           <span
-// //             className="block h-3 w-3 rounded-sm shrink-0"
-// //             style={{ backgroundColor: "#FFBE25" }}
-// //           />
-// //           <span className="text-gray-600">{prevLabel} MTD</span>
-// //         </div>
-// //       </div>
+// // // //   const badgeIsUp = deltaPct >= 0;
+// // // //   const badgeStr =
+// // // //     (badgeIsUp ? "▲ " : "▼ ") + `${Math.abs(deltaPct).toFixed(2)}%`;
 
-// //       {/* Gauge */}
-// //       <div className="flex-1 flex flex-col items-center justify-center mt-4 md:mt-10">
-// //         <div className="mt-2 md:mt-0 flex items-center justify-center">
-// //           <svg
-// //             width={size}
-// //             height={size / 2}
-// //             viewBox={`0 0 ${size} ${size / 2}`}
-// //           >
-// //             <path
-// //               d={arcPath(fullFrom, fullTo, rTarget)}
-// //               fill="none"
-// //               stroke="#e5e7eb"
-// //               strokeWidth={strokeMain}
-// //               strokeLinecap="round"
-// //             />
-// //             <path
-// //               d={arcPath(fullFrom, toDeg_LastMTD, rLastMTD)}
-// //               fill="none"
-// //               stroke="#f59e0b"
-// //               strokeWidth={strokeLast}
-// //               strokeLinecap="round"
-// //             />
-// //             <path
-// //               d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
-// //               fill="none"
-// //               stroke="#5EA68E"
-// //               strokeWidth={strokeMain}
-// //               strokeLinecap="round"
-// //             />
-// //             <circle
-// //               cx={knobYellow.x}
-// //               cy={knobYellow.y}
-// //               r={10}
-// //               fill="#f59e0b"
-// //               stroke="#fffbeb"
-// //               strokeWidth={4}
-// //             />
-// //             <circle
-// //               cx={knobGreen.x}
-// //               cy={knobGreen.y}
-// //               r={14}
-// //               fill="#5EA68E"
-// //               stroke="#ecfdf3"
-// //               strokeWidth={5}
-// //             />
-// //           </svg>
-// //         </div>
+// // // //   const salesTrendPct =
+// // // //     lastMtdHome > 0 ? ((mtdHome - lastMtdHome) / lastMtdHome) * 100 : 0;
 
-// //         {/* Center metrics */}
-// //         <div className="mt-2 text-center">
-// //           <div className="text-3xl font-bold">{(pct * 100).toFixed(1)}%</div>
-// //           <div
-// //             className={`mx-auto mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-// //               badgeIsUp
-// //                 ? "bg-green-50 text-green-700"
-// //                 : "bg-rose-50 text-rose-700"
-// //             }`}
-// //           >
-// //             {badgeStr}
-// //           </div>
-// //         </div>
-// //       </div>
+// // // //   const targetTrendPct =
+// // // //     lastMonthTotalHome > 0
+// // // //       ? ((targetHome - lastMonthTotalHome) / lastMonthTotalHome) * 100
+// // // //       : 0;
 
-// //       {/* Bottom cards */}
-// //       <div className="mt-3 md:mt-12 mb-3 grid grid-cols-2 gap-4 text-base">
-// //         <div className="flex flex-col text-center items-center justify-between rounded-xl bg-gray-50 p-3">
-// //           <div className="text-charcoal-500">Today's Sale</div>
-// //           <div className="mt-0.5 font-semibold">{fmtUSDk(todayApprox)}</div>
-// //         </div>
+// // // //   const [tip, setTip] = useState<{
+// // // //     show: boolean;
+// // // //     x: number;
+// // // //     y: number;
+// // // //     title: string;
+// // // //     lines: string[];
+// // // //   }>({ show: false, x: 0, y: 0, title: "", lines: [] });
 
-// //         <div className="flex flex-col text-center items-center justify-between rounded-xl bg-gray-50 p-3">
-// //           <div className="text-charcoal-500">MTD Sales</div>
-// //           <div className="mt-0.5 font-semibold">{fmtUSDk(mtdUSD)}</div>
-// //         </div>
+// // // //   const showTip = (e: React.MouseEvent, title: string, lines: string[]) => {
+// // // //     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+// // // //     setTip({
+// // // //       show: true,
+// // // //       x: e.clientX - rect.left,
+// // // //       y: e.clientY - rect.top,
+// // // //       title,
+// // // //       lines,
+// // // //     });
+// // // //   };
 
-// //         <div className="flex flex-col text-center items-center justify-between rounded-xl bg-gray-50 p-3">
-// //           <div className="text-charcoal-500">Sales Target</div>
-// //           <div className="mt-0.5 font-semibold">{fmtUSDk(targetUSD)}</div>
-// //         </div>
+// // // //   const moveTip = (e: React.MouseEvent) => {
+// // // //     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+// // // //     setTip((t) =>
+// // // //       t.show ? { ...t, x: e.clientX - rect.left, y: e.clientY - rect.top } : t
+// // // //     );
+// // // //   };
 
-// //         <div className="flex flex-col text-center items-center justify-between rounded-xl bg-gray-50 p-3">
-// //           <div className="text-charcoal-500">{prevLabel} Sales</div>
-// //           <div className="mt-0.5 font-semibold">
-// //             {fmtUSDk(lastMonthTotalUSD)}
-// //           </div>
-// //         </div>
-// //       </div>
-// //     </div>
-// //   );
-// // }
+// // // //   const hideTip = () => setTip((t) => ({ ...t, show: false }));
+
+// // // //   // ✅ One unified tooltip content for BOTH arcs/knobs
+// // // //   const tipTitle = "Sales Snapshot";
+// // // //   const tipLines = [
+// // // //     `MTD Sale: ${formatHomeK(mtdHome)} (${pctDisplay.toFixed(1)}%)`,
+// // // //     `Target: ${formatHomeK(targetHome)}`,
+// // // //     `${prevLabel} Sale: ${formatHomeK(lastMonthTotalHome)}`,
+// // // //   ];
+
+// // // //   // Reimbursement month labels (e.g., Dec'25 / Nov'25)
+// // // //   const reimbNowLabel = new Intl.DateTimeFormat("en-US", {
+// // // //     month: "short",
+// // // //     year: "2-digit",
+// // // //   }).format(new Date()); // Dec 25
+
+// // // //   const reimbPrevLabel = new Intl.DateTimeFormat("en-US", {
+// // // //     month: "short",
+// // // //     year: "2-digit",
+// // // //   }).format(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)); // Nov 25
+
+// // // //   const reimbNow = currentReimbursement ?? 0;
+// // // //   const reimbPrev = previousReimbursement ?? 0;
+
+// // // //   // Scale both bars on the same baseline for comparison
+// // // //   const reimbMax = Math.max(reimbNow, reimbPrev, 1);
+// // // //   const reimbNowPct = (reimbNow / reimbMax) * 100;
+// // // //   const reimbPrevPct = (reimbPrev / reimbMax) * 100;
+
+// // // //   // Convert "Dec 25" -> "Dec'25"
+// // // //   const toApostropheLabel = (s: string) => s.replace(" ", "'");
+
+// // // //   const currencySymbolMap: Record<CurrencyCode, string> = {
+// // // //   USD: "$",
+// // // //   GBP: "£",
+// // // //   INR: "₹",
+// // // //   CAD: "C$",
+// // // // };
+
+// // // // const homeCurrencySymbol = currencySymbolMap[homeCurrency];
 
 
+// // // //   return (
+// // // //     <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
+// // // //       {/* Header */}
+// // // //       <div className="relative flex flex-col items-center gap-1">
+// // // //         {/* <PageBreadcrumb
+// // // //           pageTitle="Sales Target"
+// // // //           textSize="2xl"
+// // // //           variant="page"
+// // // //           align="center"
+// // // //         /> */}
 
+// // // //         {!hideTabs && (
+// // // //           <SegmentedToggle<RegionKey>
+// // // //             value={tab}
+// // // //             options={availableRegions.map((r) => ({ value: r }))}
+// // // //             onChange={onChange}
+// // // //             className="mt-2"
+// // // //           />
+// // // //         )}
+// // // //       </div>
 
+// // // //       {/* Legend */}
+// // // //       <div className="mt-3 flex items-center justify-center gap-6 text-xs">
+// // // //         <div className="flex items-center gap-2">
+// // // //           <span
+// // // //             className="h-2.5 w-2.5 rounded-sm"
+// // // //             style={{ backgroundColor: "#5EA68E" }}
+// // // //           />
+// // // //           <span className="text-gray-600">MTD Sale</span>
+// // // //         </div>
 
+// // // //         <div className="flex items-center gap-2">
+// // // //           <span
+// // // //             className="h-2.5 w-2.5 rounded-sm"
+// // // //             style={{ backgroundColor: "#9ca3af" }}
+// // // //           />
+// // // //           <span className="text-gray-600">{thisMonthLabel} Target</span>
+// // // //         </div>
 
+// // // //         <div className="flex items-center gap-2">
+// // // //           <span
+// // // //             className="h-2.5 w-2.5 rounded-sm"
+// // // //             style={{ backgroundColor: "#FFBE25" }}
+// // // //           />
+// // // //           <span className="text-gray-600">{prevLabel} Sale</span>
+// // // //         </div>
+// // // //       </div>
 
+// // // //       {/* Gauge */}
+// // // //       <div className="mt-6 flex flex-col items-center justify-center">
+// // // //         <div
+// // // //           className="relative"
+// // // //           style={{ width: size, height: size / 2 }}
+// // // //           onMouseMove={moveTip}
+// // // //           onMouseLeave={hideTip}
+// // // //         >
+// // // //           <svg
+// // // //             width={size}
+// // // //             height={size / 2}
+// // // //             viewBox={`0 0 ${size} ${size / 2}`}
+// // // //           >
+// // // //             {/* Target background */}
+// // // //             <path
+// // // //               d={arcPath(fullFrom, fullTo, rTarget)}
+// // // //               fill="none"
+// // // //               stroke="#e5e7eb"
+// // // //               strokeWidth={strokeMain}
+// // // //               strokeLinecap="round"
+// // // //             />
 
+// // // //             {/* 100% target marker */}
+// // // //             <line
+// // // //               x1={targetMarkInner.x}
+// // // //               y1={targetMarkInner.y}
+// // // //               x2={targetMarkOuter.x}
+// // // //               y2={targetMarkOuter.y}
+// // // //               stroke="#9ca3af"
+// // // //               strokeWidth={2}
+// // // //             />
 
+// // // //             {/* ✅ Orange arc (same unified tooltip) */}
+// // // //             <path
+// // // //               d={arcPath(fullFrom, toDeg_Orange, rLastMTD)}
+// // // //               fill="none"
+// // // //               stroke="#f59e0b"
+// // // //               strokeWidth={strokeLast}
+// // // //               strokeLinecap="round"
+// // // //               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
+// // // //               onMouseLeave={hideTip}
+// // // //             />
 
+// // // //             {/* ✅ Green arc (same unified tooltip) */}
+// // // //             <path
+// // // //               d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
+// // // //               fill="none"
+// // // //               stroke="#5EA68E"
+// // // //               strokeWidth={strokeMain}
+// // // //               strokeLinecap="round"
+// // // //               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
+// // // //               onMouseLeave={hideTip}
+// // // //             />
 
+// // // //             {/* Knobs (same unified tooltip too) */}
+// // // //             <circle
+// // // //               cx={knobYellow.x}
+// // // //               cy={knobYellow.y}
+// // // //               r={9}
+// // // //               fill="#f59e0b"
+// // // //               stroke="#fffbeb"
+// // // //               strokeWidth={3}
+// // // //               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
+// // // //               onMouseLeave={hideTip}
+// // // //             />
+// // // //             <circle
+// // // //               cx={knobGreen.x}
+// // // //               cy={knobGreen.y}
+// // // //               r={12}
+// // // //               fill="#5EA68E"
+// // // //               stroke="#ecfdf3"
+// // // //               strokeWidth={4}
+// // // //               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
+// // // //               onMouseLeave={hideTip}
+// // // //             />
+// // // //           </svg>
 
+// // // //           {/* Tooltip */}
+// // // //           {tip.show && (
+// // // //             <div
+// // // //               className="pointer-events-none absolute z-10 rounded-lg border bg-white px-3 py-2 text-xs shadow-md whitespace-nowrap"
+// // // //               style={{
+// // // //                 left: tip.x + 12,
+// // // //                 top: tip.y - 12,
+// // // //               }}
+// // // //             >
+// // // //               <div className="font-semibold text-gray-900">{tip.title}</div>
+// // // //               <div className="mt-1 space-y-0.5 text-gray-600">
+// // // //                 {tip.lines.map((l, i) => (
+// // // //                   <div key={i}>{l}</div>
+// // // //                 ))}
+// // // //               </div>
+// // // //             </div>
+// // // //           )}
 
+// // // //         </div>
 
+// // // //         {/* Percentage + badge */}
+// // // //         <div className="mt-2 text-center">
+// // // //           <div className="text-3xl font-semibold">{pctDisplay.toFixed(1)}%</div>
 
+// // // //           <div className="text-xs text-gray-500 mt-1">Target Achieved</div>
+// // // //           {/* <div
+// // // //             className={`mx-auto mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${badgeIsUp
+// // // //               ? "bg-green-50 text-green-700"
+// // // //               : "bg-rose-50 text-rose-700"
+// // // //               }`}
+// // // //           >
+// // // //             {badgeStr}
+// // // //           </div> */}
+// // // //         </div>
+// // // //       </div>
 
+// // // //       <div className="mt-3 rounded-lg border p-3">
+// // // //         <div className="flex items-center justify-center">
+// // // //           <div className="text-xs text-gray-500">Reimbursement ({homeCurrencySymbol})</div>
 
+// // // //         </div>
 
+// // // //         <div className="mt-3">
+// // // //           <div className="flex items-center justify-between text-xs">
+// // // //             <span className="text-gray-600">{toApostropheLabel(reimbNowLabel)}</span>
+// // // //             <span className="font-semibold text-gray-900">{formatHomeK(reimbNow)}</span>
+// // // //           </div>
+// // // //           <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+// // // //             <div
+// // // //               className="h-full rounded-full"
+// // // //               style={{ width: `${reimbNowPct}%`, backgroundColor: "#5EA68E" }} // green
+// // // //             />
+// // // //           </div>
+// // // //         </div>
 
+// // // //         <div className="mt-3">
+// // // //           <div className="flex items-center justify-between text-xs">
+// // // //             <span className="text-gray-600">{toApostropheLabel(reimbPrevLabel)}</span>
+// // // //             <span className="font-semibold text-gray-900">{formatHomeK(reimbPrev)}</span>
+// // // //           </div>
+// // // //           <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+// // // //             <div
+// // // //               className="h-full rounded-full"
+// // // //               style={{ width: `${reimbPrevPct}%`, backgroundColor: "#FFBE25" }} // orange
+// // // //             />
+// // // //           </div>
+// // // //         </div>
+// // // //       </div>
 
-
-
-
-
-
+// // // //       {/* Stats */}
+// // // //       {/* <div className="mt-auto pt-6">
+// // // //         <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+// // // //           {[
+// // // //             {
+// // // //               title: "Today",
+// // // //               value: formatHomeK(todayHome),
+// // // //               helper: "\u00A0",
+// // // //             },
+// // // //             {
+// // // //               title: "MTD Sales",
+// // // //               value: formatHomeK(mtdHome),
+// // // //               helper: "\u00A0",
+// // // //             },
+// // // //             {
+// // // //               title: "Target",
+// // // //               value: formatHomeK(targetHome),
+// // // //               helper: "\u00A0",
+// // // //             },
+// // // //             {
+// // // //               title: prevLabel,
+// // // //               value: formatHomeK(lastMonthTotalHome),
+// // // //               helper: "\u00A0",
+// // // //             },
+// // // //             {
+// // // //               title: "Sales Trend",
+// // // //               value: `${salesTrendPct >= 0 ? "+" : ""}${salesTrendPct.toFixed(
+// // // //                 2
+// // // //               )}%`,
+// // // //               helper: `vs ${prevLabel} MTD`,
+// // // //             },
+// // // //             {
+// // // //               title: "Target Trend",
+// // // //               value: `${targetTrendPct >= 0 ? "+" : ""}${targetTrendPct.toFixed(
+// // // //                 2
+// // // //               )}%`,
+// // // //               helper: `target vs ${prevLabel} total`,
+// // // //             },
+// // // //           ].map((t) => (
+// // // //             <div
+// // // //               key={t.title}
+// // // //               className="rounded-xl p-3 text-center h-full flex flex-col items-center"
+// // // //             >
+// // // //               <div className="text-charcoal-500 whitespace-nowrap leading-none">
+// // // //                 {t.title}
+// // // //               </div>
+// // // //               <div className="mt-2 font-semibold whitespace-nowrap leading-none">
+// // // //                 {t.value}
+// // // //               </div>
+// // // //               <div
+// // // //                 className={`mt-1 text-[11px] leading-none ${t.helper === "\u00A0"
+// // // //                   ? "text-transparent select-none"
+// // // //                   : "text-gray-500"
+// // // //                   }`}
+// // // //               >
+// // // //                 {t.helper}
+// // // //               </div>
+// // // //             </div>
+// // // //           ))}
+// // // //         </div>
+// // // //       </div> */}
+// // // //     </div>
+// // // //   );
+// // // // }
 
 
 
@@ -272,859 +499,124 @@
 
 // "use client";
 
-// import React, { useMemo, useState } from "react";
-// import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-// import SegmentedToggle from "@/components/ui/SegmentedToggle";
-// import { fmtUSDk } from "@/lib/dashboard/format";
+// import React, { useState } from "react";
 // import {
 //   getISTDayInfo,
 //   getPrevMonthShortLabel,
 //   getThisMonthShortLabel,
 // } from "@/lib/dashboard/date";
-// import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
-
-// type Props = {
-//   regions: Record<RegionKey, RegionMetrics>;
-//   defaultRegion?: RegionKey;
-// };
-
-// export default function SalesTargetCard({
-//   regions,
-//   defaultRegion = "Global",
-// }: Props) {
-//   // Tabs: Global + only connected countries
-//   const availableRegions = useMemo<RegionKey[]>(() => {
-//     const list: RegionKey[] = ["Global"];
-//     (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
-//       const r = regions[key];
-//       if (!r) return;
-
-//       if (
-//         r.mtdUSD ||
-//         r.lastMonthToDateUSD ||
-//         r.lastMonthTotalUSD ||
-//         r.targetUSD
-//       ) {
-//         list.push(key);
-//       }
-//     });
-
-//     return list;
-//   }, [regions]);
-
-//   const [tab, setTab] = useState<RegionKey>(defaultRegion);
-
-//   const data = regions[tab] || regions.Global;
-//   const { mtdUSD, lastMonthToDateUSD, lastMonthTotalUSD, targetUSD } = data;
-
-//   const pct = targetUSD > 0 ? Math.min(mtdUSD / targetUSD, 1) : 0;
-//   const pctLastMTD =
-//     targetUSD > 0 ? Math.min(lastMonthToDateUSD / targetUSD, 1) : 0;
-
-//   const deltaPct = (pct - pctLastMTD) * 100;
-
-//   const { todayDay } = getISTDayInfo();
-//   const todayApprox = todayDay > 0 ? mtdUSD / todayDay : 0;
-
-//   const prevLabel = getPrevMonthShortLabel();
-//   const thisMonthLabel = getThisMonthShortLabel();
-
-//   // ↓ smaller gauge so the card is not too tall
-//   const size = 220;
-//   const strokeMain = 10;
-//   const strokeLast = 5;
-
-//   const cx = size / 2;
-//   const rBase = size / 2 - strokeMain;
-//   const gap = 12;
-
-//   const rTarget = rBase;
-//   const rCurrent = rBase;
-//   const rLastMTD = rCurrent - strokeMain / 2 - gap - strokeLast / 2;
-
-//   const toXYRadius = (angDeg: number, radius: number) => {
-//     const rad = (Math.PI / 180) * (180 - angDeg);
-//     return {
-//       x: cx + radius * Math.cos(rad),
-//       y: size / 2 - radius * Math.sin(rad),
-//     };
-//   };
-
-//   const arcPath = (fromDeg: number, toDeg: number, radius: number) => {
-//     const start = toXYRadius(fromDeg, radius);
-//     const end = toXYRadius(toDeg, radius);
-//     const largeArc = toDeg - fromDeg > 180 ? 1 : 0;
-//     return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
-//   };
-
-//   const fullFrom = 0;
-//   const fullTo = 180;
-//   const toDeg_MTD = 180 * pct;
-//   const toDeg_LastMTD = 180;
-
-//   const knobGreen = toXYRadius(toDeg_MTD, rCurrent);
-//   const knobYellow = toXYRadius(toDeg_LastMTD, rLastMTD);
-
-//   const badgeIsUp = deltaPct >= 0;
-//   const badgeStr =
-//     (badgeIsUp ? "▲ " : "▼ ") + `${Math.abs(deltaPct).toFixed(2)}%`;
-
-//   return (
-//     // removed h-full so the card height is just its content
-//     <div className="rounded-2xl border bg-white py-4 px-3 shadow-sm flex flex-col gap-3">
-//       {/* Header with tabs */}
-//       <div className="flex flex-col items-center justify-between gap-1">
-//         <PageBreadcrumb
-//           pageTitle="Sales Target"
-//           textSize="2xl"
-//           variant="page"
-//           align="center"
-//         />
-
-//         <SegmentedToggle<RegionKey>
-//           value={tab}
-//           options={availableRegions.map((r) => ({ value: r }))}
-//           onChange={setTab}
-//           className="my-1"
-//         />
-//       </div>
-
-//       {/* Legend */}
-//       <div className="mt-2 flex items-center gap-2 text-xs">
-//         <div className="flex flex-1 items-center justify-center gap-2">
-//           <span
-//             className="block h-3 w-3 rounded-sm shrink-0"
-//             style={{ backgroundColor: "#5EA68E" }}
-//           />
-//           <span className="text-gray-600">MTD Sales</span>
-//         </div>
-
-//         <div className="flex flex-1 items-center justify-center gap-2">
-//           <span
-//             className="block h-3 w-3 rounded-sm shrink-0"
-//             style={{ backgroundColor: "#9ca3af" }}
-//           />
-//           <span className="text-gray-600">{thisMonthLabel} Target</span>
-//         </div>
-
-//         <div className="flex flex-1 items-center justify-center gap-2">
-//           <span
-//             className="block h-3 w-3 rounded-sm shrink-0"
-//             style={{ backgroundColor: "#FFBE25" }}
-//           />
-//           <span className="text-gray-600">{prevLabel} MTD</span>
-//         </div>
-//       </div>
-
-//       {/* Gauge */}
-//       {/* removed flex-1 so the gauge doesn't force extra height */}
-//       <div className="mt-3 flex flex-col items-center justify-center">
-//         <svg
-//           width={size}
-//           height={size / 2}
-//           viewBox={`0 0 ${size} ${size / 2}`}
-//         >
-//           <path
-//             d={arcPath(fullFrom, fullTo, rTarget)}
-//             fill="none"
-//             stroke="#e5e7eb"
-//             strokeWidth={strokeMain}
-//             strokeLinecap="round"
-//           />
-//           <path
-//             d={arcPath(fullFrom, toDeg_LastMTD, rLastMTD)}
-//             fill="none"
-//             stroke="#f59e0b"
-//             strokeWidth={strokeLast}
-//             strokeLinecap="round"
-//           />
-//           <path
-//             d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
-//             fill="none"
-//             stroke="#5EA68E"
-//             strokeWidth={strokeMain}
-//             strokeLinecap="round"
-//           />
-//           <circle
-//             cx={knobYellow.x}
-//             cy={knobYellow.y}
-//             r={9}
-//             fill="#f59e0b"
-//             stroke="#fffbeb"
-//             strokeWidth={3}
-//           />
-//           <circle
-//             cx={knobGreen.x}
-//             cy={knobGreen.y}
-//             r={12}
-//             fill="#5EA68E"
-//             stroke="#ecfdf3"
-//             strokeWidth={4}
-//           />
-//         </svg>
-
-//         {/* Center metrics */}
-//         <div className="mt-1 text-center">
-//           <div className="text-2xl font-bold">
-//             {(pct * 100).toFixed(1)}%
-//           </div>
-//           <div
-//             className={`mx-auto mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-//               badgeIsUp
-//                 ? "bg-green-50 text-green-700"
-//                 : "bg-rose-50 text-rose-700"
-//             }`}
-//           >
-//             {badgeStr}
-//           </div>
-//         </div>
-//       </div>
-
-//       {/* Bottom cards */}
-//       <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-//         <div className="flex flex-col text-center items-center justify-between rounded-xl bg-gray-50 p-2.5">
-//           <div className="text-charcoal-500">Today's Sale</div>
-//           <div className="mt-0.5 font-semibold">
-//             {fmtUSDk(todayApprox)}
-//           </div>
-//         </div>
-
-//         <div className="flex flex-col text-center items-center justify-between rounded-xl bg-gray-50 p-2.5">
-//           <div className="text-charcoal-500">MTD Sales</div>
-//           <div className="mt-0.5 font-semibold">
-//             {fmtUSDk(mtdUSD)}
-//           </div>
-//         </div>
-
-//         <div className="flex flex-col text-center items-center justify-between rounded-xl bg-gray-50 p-2.5">
-//           <div className="text-charcoal-500">Sales Target</div>
-//           <div className="mt-0.5 font-semibold">
-//             {fmtUSDk(targetUSD)}
-//           </div>
-//         </div>
-
-//         <div className="flex flex-col text-center items-center justify-between rounded-xl bg-gray-50 p-2.5">
-//           <div className="text-charcoal-500">{prevLabel} Sales</div>
-//           <div className="mt-0.5 font-semibold">
-//             {fmtUSDk(lastMonthTotalUSD)}
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// "use client";
-
-// import React, { useMemo, useState } from "react";
-// import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-// import SegmentedToggle from "@/components/ui/SegmentedToggle";
-// import {
-//   getISTDayInfo,
-//   getPrevMonthShortLabel,
-//   getThisMonthShortLabel,
-// } from "@/lib/dashboard/date";
-// import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
+// import type { RegionMetrics } from "@/lib/dashboard/types";
 
 // type CurrencyCode = "USD" | "GBP" | "INR" | "CAD";
 
-// // type Props = {
-// //   regions: Record<RegionKey, RegionMetrics>;
-// //   defaultRegion?: RegionKey;
-// // ✅ pass from DashboardPage
-// //   homeCurrency: CurrencyCode;
-// //   convertToHomeCurrency: (
-// //     value: number,
-// //     from: CurrencyCode
-// //   ) => number;
-// //   formatHomeK: (value: number) => string;
-// // };
-
 // type Props = {
-//   regions: Record<RegionKey, RegionMetrics>;
-//   value: RegionKey;
-//   onChange: (r: RegionKey) => void;
-//   defaultRegion?: RegionKey;
-//   hideTabs?: boolean;
+//   data: RegionMetrics; // ✅ selected region metrics (passed from parent)
 //   homeCurrency: CurrencyCode;
 //   convertToHomeCurrency: (value: number, from: CurrencyCode) => number;
 //   formatHomeK: (value: number) => string;
 //   todaySales?: number;
 
+//   // ✅ target passed from Stats card (already HOME currency)
+//   targetHome?: number;
+
+//   // ✅ NEW: pass these too (already HOME currency) to keep gauge consistent
+//   mtdHome?: number;
+//   lastMonthTotalHome?: number;
+
+//   currentReimbursement?: number;
+//   previousReimbursement?: number;
+//   reimbursementDeltaPct?: number | null;
 // };
 
+// const currencySymbolMap: Record<CurrencyCode, string> = {
+//   USD: "$",
+//   GBP: "£",
+//   INR: "₹",
+//   CAD: "C$",
+// };
 
+// const toApostropheLabel = (s: string) => s.replace(" ", "'");
 
 // export default function SalesTargetCard({
-//   regions,
-//   value,
-//   onChange,
+//   data,
 //   homeCurrency,
 //   convertToHomeCurrency,
 //   formatHomeK,
-//   hideTabs,
-//   todaySales
+//   todaySales,
+//   targetHome,
+//   mtdHome,
+//   lastMonthTotalHome,
+//   currentReimbursement,
+//   previousReimbursement,
+//   reimbursementDeltaPct,
 // }: Props) {
-//   const tab = value;
-
-//   const availableRegions = useMemo<RegionKey[]>(() => {
-//     const list: RegionKey[] = ["Global"];
-//     (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
-//       const r = regions[key];
-//       if (!r) return;
-
-//       if (
-//         r.mtdUSD ||
-//         r.lastMonthToDateUSD ||
-//         r.lastMonthTotalUSD ||
-//         r.targetUSD
-//       ) {
-//         list.push(key);
-//       }
-//     });
-
-//     return list;
-//   }, [regions]);
-
-//   const data = regions[tab] || regions.Global;
 
 
-//   // const clampRatio = (x: number) =>
-//   //   Math.min(Math.max(x, 0), MAX_COMPLETION);
-
-
-//   // RegionMetrics are stored in USD in your current data model
-//   const mtdHome = convertToHomeCurrency(data.mtdUSD ?? 0, "USD");
-//   const lastMtdHome = convertToHomeCurrency(
-//     data.lastMonthToDateUSD ?? 0,
-//     "USD"
-//   );
-//   const lastMonthTotalHome = convertToHomeCurrency(
+//   const computedMtdHome = convertToHomeCurrency(data.mtdUSD ?? 0, "USD");
+//   const computedLastMonthTotalHome = convertToHomeCurrency(
 //     data.lastMonthTotalUSD ?? 0,
 //     "USD"
 //   );
-//   const targetHome = convertToHomeCurrency(data.targetUSD ?? 0, "USD");
+//   const computedTargetHome = convertToHomeCurrency(data.targetUSD ?? 0, "USD");
 
-//   // const pct =
-//   //   targetHome > 0 ? Math.min(mtdHome / targetHome, 1) : 0;
-//   // const pctLastMTD =
-//   //   targetHome > 0
-//   //     ? Math.min(lastMtdHome / targetHome, 1)
-//   //     : 0;
+//   const mtdHomeResolved =
+//     typeof mtdHome === "number" && Number.isFinite(mtdHome)
+//       ? mtdHome
+//       : computedMtdHome;
 
-//   // const deltaPct = (pct - pctLastMTD) * 100;
+//   const lastMonthTotalHomeResolved =
+//     typeof lastMonthTotalHome === "number" && Number.isFinite(lastMonthTotalHome)
+//       ? lastMonthTotalHome
+//       : computedLastMonthTotalHome;
 
-//   const MAX_COMPLETION = 2; // 200%
+//   const targetHomeResolved =
+//     typeof targetHome === "number" && Number.isFinite(targetHome)
+//       ? targetHome
+//       : computedTargetHome;
 
-//   const ratio = targetHome > 0 ? mtdHome / targetHome : 0;
-//   const ratioLast = targetHome > 0 ? lastMonthTotalHome / targetHome : 0;
+//   console.log("SalesTargetCard data =", data);
 
-//   const clampRatio = (x: number) => Math.min(Math.max(x, 0), MAX_COMPLETION);
+//   console.log("data.decTargetUSD =", data.decTargetUSD);
 
-//   // for drawing inside 180deg
-//   const drawPct = clampRatio(ratio) / MAX_COMPLETION;
-//   const drawPctLast = clampRatio(ratioLast) / MAX_COMPLETION;
-//   // for text display (cap at 200%)
-//   const pctDisplay = clampRatio(ratio) * 100;
-
-//   // badge delta (also capped at 200%)
-//   const deltaPct = (clampRatio(ratio) - clampRatio(ratioLast)) * 100;
-
-//   const toDeg_MTD = 180 * drawPct;
-//   const toDeg_LastMTD = 180 * drawPctLast;
+//   const computedDecTargetHome = convertToHomeCurrency(data.decTargetUSD ?? 0, "USD");
 
 
-//   const { todayDay } = getISTDayInfo();
-// // if parent sent todaySales, trust it (it’s already in home currency)
-// const todayHome =
-//   typeof todaySales === "number" && !Number.isNaN(todaySales)
-//     ? todaySales
-//     : (todayDay > 0 ? mtdHome / todayDay : 0);
+//   // ✅ Gauge ratios (ALL in HOME currency now)
+//   const ratio =
+//     targetHomeResolved > 0 ? mtdHomeResolved / targetHomeResolved : 0;
 
-//   const prevLabel = getPrevMonthShortLabel();
-//   const thisMonthLabel = getThisMonthShortLabel();
-
-//   // Gauge sizing
-//   const size = 220;
-//   const strokeMain = 10;
-//   const strokeLast = 5;
-
-//   const cx = size / 2;
-//   const rBase = size / 2 - strokeMain;
-//   const gap = 12;
-
-//   const rTarget = rBase;
-//   const rCurrent = rBase;
-//   const rLastMTD = rCurrent - strokeMain / 2 - gap - strokeLast / 2;
-
-//   const toXYRadius = (angDeg: number, radius: number) => {
-//     const rad = (Math.PI / 180) * (180 - angDeg);
-//     return {
-//       x: cx + radius * Math.cos(rad),
-//       y: size / 2 - radius * Math.sin(rad),
-//     };
-//   };
-
-//   const targetDeg = 180 * (1 / MAX_COMPLETION); // where 100% sits on the arc
-//   const targetMarkOuter = toXYRadius(targetDeg, rTarget + 2);
-//   const targetMarkInner = toXYRadius(targetDeg, rTarget - strokeMain - 2);
-
-
-//   const arcPath = (fromDeg: number, toDeg: number, radius: number) => {
-//     const start = toXYRadius(fromDeg, radius);
-//     const end = toXYRadius(toDeg, radius);
-//     const largeArc = toDeg - fromDeg > 180 ? 1 : 0;
-//     return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
-//   };
-
-//   const fullFrom = 0;
-//   const fullTo = 180;
-
-
-//   const knobGreen = toXYRadius(toDeg_MTD, rCurrent);
-//   const knobYellow = toXYRadius(toDeg_LastMTD, rLastMTD);
-
-//   const badgeIsUp = deltaPct >= 0;
-//   const badgeStr =
-//     (badgeIsUp ? "▲ " : "▼ ") + `${Math.abs(deltaPct).toFixed(2)}%`;
-
-
-//   const salesTrendPct =
-//     lastMtdHome > 0 ? ((mtdHome - lastMtdHome) / lastMtdHome) * 100 : 0;
-
-//   const targetTrendPct =
-//     lastMonthTotalHome > 0
-//       ? ((targetHome - lastMonthTotalHome) / lastMonthTotalHome) * 100
+//   const ratioLast =
+//     targetHomeResolved > 0
+//       ? lastMonthTotalHomeResolved / targetHomeResolved
 //       : 0;
 
-//   const [tip, setTip] = useState<{
-//     show: boolean;
-//     x: number;
-//     y: number;
-//     title: string;
-//     lines: string[];
-//   }>({ show: false, x: 0, y: 0, title: "", lines: [] });
+//   const decRatio =
+//     targetHomeResolved > 0 ? decTargetHome / targetHomeResolved : 0;
 
-//   const showTip = (
-//     e: React.MouseEvent,
-//     title: string,
-//     lines: string[]
-//   ) => {
-//     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-//     setTip({
-//       show: true,
-//       x: e.clientX - rect.left,
-//       y: e.clientY - rect.top,
-//       title,
-//       lines,
-//     });
-//   };
-
-//   const moveTip = (e: React.MouseEvent) => {
-//     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-//     setTip((t) =>
-//       t.show
-//         ? { ...t, x: e.clientX - rect.left, y: e.clientY - rect.top }
-//         : t
-//     );
-//   };
-
-//   const hideTip = () => setTip((t) => ({ ...t, show: false }));
-
-//   return (
-//     <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
-//       {/* Header */}
-//       <div className="relative flex flex-col items-center gap-1">
-//         <PageBreadcrumb
-//           pageTitle="Sales Target"
-//           textSize="2xl"
-//           variant="page"
-//           align="center"
-//         />
-
-//         {!hideTabs && (
-//           <SegmentedToggle<RegionKey>
-//             value={tab}
-//             options={availableRegions.map((r) => ({ value: r }))}
-//             onChange={onChange}
-//             className="mt-2"
-//           />
-//         )}
-//       </div>
-
-//       {/* Legend */}
-//       <div className="mt-3 flex items-center justify-center gap-6 text-xs">
-//         <div className="flex items-center gap-2">
-//           <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "#5EA68E" }} />
-//           <span className="text-gray-600">MTD Sale</span>
-//         </div>
-
-//         <div className="flex items-center gap-2">
-//           <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "#9ca3af" }} />
-//           <span className="text-gray-600">{thisMonthLabel} Target</span>
-//         </div>
-
-//         <div className="flex items-center gap-2">
-//           <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "#FFBE25" }} />
-//           <span className="text-gray-600">{prevLabel} Sale</span>
-//         </div>
-//       </div>
-
-//       {/* Gauge */}
-//       <div className="mt-6 flex flex-col items-center justify-center">
-//         <div
-//           className="relative"
-//           style={{ width: size, height: size / 2 }}
-//           onMouseMove={moveTip}
-//           onMouseLeave={hideTip}
-//         >
-//           <svg width={size} height={size / 2} viewBox={`0 0 ${size} ${size / 2}`}>
-//             {/* Target background */}
-//             <path
-//               d={arcPath(fullFrom, fullTo, rTarget)}
-//               fill="none"
-//               stroke="#e5e7eb"
-//               strokeWidth={strokeMain}
-//               strokeLinecap="round"
-//             />
-
-//             {/* 100% target marker */}
-//             <line
-//               x1={targetMarkInner.x}
-//               y1={targetMarkInner.y}
-//               x2={targetMarkOuter.x}
-//               y2={targetMarkOuter.y}
-//               stroke="#9ca3af"
-//               strokeWidth={2}
-//             />
-
-
-//             {/* Last month MTD arc */}
-//             <path
-//               d={arcPath(fullFrom, toDeg_LastMTD, rLastMTD)}
-//               fill="none"
-//               stroke="#f59e0b"
-//               strokeWidth={strokeLast}
-//               strokeLinecap="round"
-//               onMouseEnter={(e) =>
-//                 showTip(e, "Target / Last Month", [
-//                   `Target: ${formatHomeK(targetHome)}`,
-//                   `${prevLabel}: ${formatHomeK(lastMonthTotalHome)}`,
-//                 ])
-//               }
-//               onMouseLeave={hideTip}
-//             />
-
-
-//             {/* Current MTD arc */}
-//             <path
-//               d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
-//               fill="none"
-//               stroke="#5EA68E"
-//               strokeWidth={strokeMain}
-//               strokeLinecap="round"
-//               onMouseEnter={(e) =>
-//                 showTip(e, "MTD Sale", [`MTD: ${formatHomeK(mtdHome)}`])
-//               }
-//               onMouseLeave={hideTip}
-//             />
-
-
-//             {/* Knobs (optional hover, nicer UX) */}
-//             <circle
-//               cx={knobYellow.x}
-//               cy={knobYellow.y}
-//               r={9}
-//               fill="#f59e0b"
-//               stroke="#fffbeb"
-//               strokeWidth={3}
-//               onMouseEnter={(e) =>
-//                 showTip(e, `${prevLabel}`, [`${formatHomeK(lastMonthTotalHome)}`])
-//               }
-
-//             />
-//             <circle
-//               cx={knobGreen.x}
-//               cy={knobGreen.y}
-//               r={12}
-//               fill="#5EA68E"
-//               stroke="#ecfdf3"
-//               strokeWidth={4}
-//               onMouseEnter={(e) =>
-//                 showTip(e, "MTD Sale", [`${formatHomeK(mtdHome)}`])
-//               }
-//             />
-//           </svg>
-
-//           {/* Tooltip */}
-//           {tip.show && (
-//             <div
-//               className="pointer-events-none absolute z-10 rounded-lg border bg-white px-3 py-2 text-xs shadow-md"
-//               style={{
-//                 left: tip.x + 12,
-//                 top: tip.y - 12,
-//                 maxWidth: 220,
-//               }}
-//             >
-//               <div className="font-semibold text-gray-900">{tip.title}</div>
-//               <div className="mt-1 space-y-0.5 text-gray-600">
-//                 {tip.lines.map((l, i) => (
-//                   <div key={i}>{l}</div>
-//                 ))}
-//               </div>
-//             </div>
-//           )}
-//         </div>
-
-//         {/* your existing percentage + badge UI below stays same */}
-//         <div className="mt-2 text-center">
-//           <div className="text-3xl font-semibold">{pctDisplay.toFixed(1)}%</div>
-
-//           <div className="text-xs text-gray-500 mt-1">Target Achieved</div>
-//           <div
-//             className={`mx-auto mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${badgeIsUp ? "bg-green-50 text-green-700" : "bg-rose-50 text-rose-700"
-//               }`}
-//           >
-//             {badgeStr}
-//           </div>
-//         </div>
-//       </div>
-
-
-
-//       <div className="mt-auto pt-6">
-//         <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
-//           {[
-//             {
-//               title: "Today",
-//               // ✅ CHANGE THIS LINE
-//               value: formatHomeK(todayHome),
-//               helper: "\u00A0",
-//             },
-//             {
-//               title: "MTD Sales",
-//               value: formatHomeK(mtdHome),
-//               helper: "\u00A0",
-//             },
-//             {
-//               title: "Target",
-//               value: formatHomeK(targetHome),
-//               helper: "\u00A0",
-//             },
-//             {
-//               title: prevLabel,
-//               value: formatHomeK(lastMonthTotalHome),
-//               helper: "\u00A0",
-//             },
-//             {
-//               title: "Sales Trend",
-//               value: `${salesTrendPct >= 0 ? "+" : ""}${salesTrendPct.toFixed(2)}%`,
-//               helper: `vs ${prevLabel} MTD`,
-//             },
-//             {
-//               title: "Target Trend",
-//               value: `${targetTrendPct >= 0 ? "+" : ""}${targetTrendPct.toFixed(2)}%`,
-//               helper: `target vs ${prevLabel} total`,
-//             },
-//           ].map((t) => (
-//             <div
-//               key={t.title}
-//               className="rounded-xl p-3 text-center h-full flex flex-col items-center"
-//             >
-//               <div className="text-charcoal-500 whitespace-nowrap leading-none">
-//                 {t.title}
-//               </div>
-//               <div className="mt-2 font-semibold whitespace-nowrap leading-none">
-//                 {t.value}
-//               </div>
-//               <div
-//                 className={`mt-1 text-[11px] leading-none ${t.helper === "\u00A0" ? "text-transparent select-none" : "text-gray-500"
-//                   }`}
-//               >
-//                 {t.helper}
-//               </div>
-//             </div>
-//           ))}
-//         </div>
-//       </div>
-
-
-//     </div>
-//   );
-
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// "use client";
-
-// import React, { useMemo, useState } from "react";
-// import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-// import SegmentedToggle from "@/components/ui/SegmentedToggle";
-// import {
-//   getISTDayInfo,
-//   getPrevMonthShortLabel,
-//   getThisMonthShortLabel,
-// } from "@/lib/dashboard/date";
-// import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
-
-// type CurrencyCode = "USD" | "GBP" | "INR" | "CAD";
-
-// type Props = {
-//   regions: Record<RegionKey, RegionMetrics>;
-//   value: RegionKey;
-//   onChange: (r: RegionKey) => void;
-//   defaultRegion?: RegionKey;
-//   hideTabs?: boolean;
-//   homeCurrency: CurrencyCode;
-//   convertToHomeCurrency: (value: number, from: CurrencyCode) => number;
-//   formatHomeK: (value: number) => string;
-//   todaySales?: number;
-// };
-
-// export default function SalesTargetCard({
-//   regions,
-//   value,
-//   onChange,
-//   homeCurrency,
-//   convertToHomeCurrency,
-//   formatHomeK,
-//   hideTabs,
-//   todaySales,
-// }: Props) {
-//   const tab = value;
-
-//   const availableRegions = useMemo<RegionKey[]>(() => {
-//     const list: RegionKey[] = ["Global"];
-//     (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
-//       const r = regions[key];
-//       if (!r) return;
-
-//       if (
-//         r.mtdUSD ||
-//         r.lastMonthToDateUSD ||
-//         r.lastMonthTotalUSD ||
-//         r.targetUSD
-//       ) {
-//         list.push(key);
-//       }
-//     });
-
-//     return list;
-//   }, [regions]);
-
-//   const data = regions[tab] || regions.Global;
-
-//   // RegionMetrics are stored in USD in your current data model
-//   const mtdHome = convertToHomeCurrency(data.mtdUSD ?? 0, "USD");
-//   const lastMtdHome = convertToHomeCurrency(
-//     data.lastMonthToDateUSD ?? 0,
-//     "USD"
-//   );
-//   const lastMonthTotalHome = convertToHomeCurrency(
-//     data.lastMonthTotalUSD ?? 0,
-//     "USD"
-//   );
-//   const targetHome = convertToHomeCurrency(data.targetUSD ?? 0, "USD");
-
-//   /**
-//    * ✅ UPDATED GAUGE LOGIC
-//    * - Gauge range is 0–100% only.
-//    * - Green fills up to 100% and stays full after that.
-//    * - Orange stays full until reaching 100%, then starts shrinking as you exceed target.
-//    * - % display shows actual ratio * 100 (can be 120, 130, ...).
-//    *
-//    * Orange shrink needs a visual rule for "how much overflow makes it empty".
-//    * This does NOT clamp the displayed percentage—only the orange arc visualization.
-//    */
-//   const ratio = targetHome > 0 ? mtdHome / targetHome : 0; // can exceed 1
-//   const ratioLast = targetHome > 0 ? lastMonthTotalHome / targetHome : 0;
-
-//   // Green draw (0..1)
 //   const greenDraw = Math.min(Math.max(ratio, 0), 1);
 
-//   // Orange draw (1 until 100%, then shrinks)
-//   const OVERFLOW_EMPTY_AT = 2; // orange becomes empty at 200% overflow (visual only)
+//   const OVERFLOW_EMPTY_AT = 2;
 //   let orangeDraw = 1;
 //   if (ratio > 1) {
-//     const t = (ratio - 1) / (OVERFLOW_EMPTY_AT - 1); // 0 at 100%, 1 at 200%
-//     orangeDraw = 1 - Math.min(Math.max(t, 0), 1); // 1..0
+//     const t = (ratio - 1) / (OVERFLOW_EMPTY_AT - 1);
+//     orangeDraw = 1 - Math.min(Math.max(t, 0), 1);
 //   }
 
-//   // Degrees for arcs/knobs
+//   const decDraw = Math.min(Math.max(decRatio, 0), 1);
+
 //   const toDeg_MTD = 180 * greenDraw;
 //   const toDeg_Orange = 180 * orangeDraw;
+//   const toDeg_DecTarget = 180 * decDraw;
 
-//   // Display actual percentage (no clamping)
 //   const pctDisplay = ratio * 100;
 
-//   // Badge delta based on actual values (no clamping)
-//   const deltaPct = (ratio - ratioLast) * 100;
-
 //   const { todayDay } = getISTDayInfo();
-//   // if parent sent todaySales, trust it (it’s already in home currency)
-//   const todayHome =
+//   const todayHomeComputed =
 //     typeof todaySales === "number" && !Number.isNaN(todaySales)
 //       ? todaySales
 //       : todayDay > 0
-//       ? mtdHome / todayDay
-//       : 0;
+//         ? mtdHomeResolved / todayDay
+//         : 0;
 
 //   const prevLabel = getPrevMonthShortLabel();
 //   const thisMonthLabel = getThisMonthShortLabel();
@@ -1133,14 +625,15 @@
 //   const size = 220;
 //   const strokeMain = 10;
 //   const strokeLast = 5;
+//   const strokeDec = 6;
 
 //   const cx = size / 2;
 //   const rBase = size / 2 - strokeMain;
 //   const gap = 12;
 
-//   const rTarget = rBase;
 //   const rCurrent = rBase;
 //   const rLastMTD = rCurrent - strokeMain / 2 - gap - strokeLast / 2;
+//   const rDecTarget = rCurrent - strokeMain / 2 - gap / 2 - strokeDec / 2;
 
 //   const toXYRadius = (angDeg: number, radius: number) => {
 //     const rad = (Math.PI / 180) * (180 - angDeg);
@@ -1150,11 +643,6 @@
 //     };
 //   };
 
-//   // ✅ 100% marker is now at the end of the semicircle
-//   const targetDeg = 180;
-//   const targetMarkOuter = toXYRadius(targetDeg, rTarget + 2);
-//   const targetMarkInner = toXYRadius(targetDeg, rTarget - strokeMain - 2);
-
 //   const arcPath = (fromDeg: number, toDeg: number, radius: number) => {
 //     const start = toXYRadius(fromDeg, radius);
 //     const end = toXYRadius(toDeg, radius);
@@ -1163,23 +651,12 @@
 //   };
 
 //   const fullFrom = 0;
-//   const fullTo = 180;
 
 //   const knobGreen = toXYRadius(toDeg_MTD, rCurrent);
 //   const knobYellow = toXYRadius(toDeg_Orange, rLastMTD);
+//   const knobDec = toXYRadius(toDeg_DecTarget, rDecTarget);
 
-//   const badgeIsUp = deltaPct >= 0;
-//   const badgeStr =
-//     (badgeIsUp ? "▲ " : "▼ ") + `${Math.abs(deltaPct).toFixed(2)}%`;
-
-//   const salesTrendPct =
-//     lastMtdHome > 0 ? ((mtdHome - lastMtdHome) / lastMtdHome) * 100 : 0;
-
-//   const targetTrendPct =
-//     lastMonthTotalHome > 0
-//       ? ((targetHome - lastMonthTotalHome) / lastMonthTotalHome) * 100
-//       : 0;
-
+//   // ✅ Tooltip
 //   const [tip, setTip] = useState<{
 //     show: boolean;
 //     x: number;
@@ -1208,27 +685,42 @@
 
 //   const hideTip = () => setTip((t) => ({ ...t, show: false }));
 
+//   const tipTitle = "Sales Snapshot";
+//   const tipLines = [
+//     `MTD Sale: ${formatHomeK(mtdHomeResolved)} (${pctDisplay.toFixed(1)}%)`,
+//     `Target: ${formatHomeK(targetHomeResolved)}`,
+//     `${prevLabel} Sale: ${formatHomeK(lastMonthTotalHomeResolved)}`,
+//   ];
+
+//   const decTipTitle = "December Target";
+//   const decTipLines = [`Dec Target: ${formatHomeK(decTargetHome)}`];
+
+//   // ✅ Reimbursement labels
+//   const reimbNowLabel = new Intl.DateTimeFormat("en-US", {
+//     month: "short",
+//     year: "2-digit",
+//   }).format(new Date());
+
+//   const reimbPrevLabel = new Intl.DateTimeFormat("en-US", {
+//     month: "short",
+//     year: "2-digit",
+//   }).format(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
+
+//   const reimbNow = currentReimbursement ?? 0;
+//   const reimbPrev = previousReimbursement ?? 0;
+
+//   const reimbMax = Math.max(reimbNow, reimbPrev, 1);
+//   const reimbNowPct = (reimbNow / reimbMax) * 100;
+//   const reimbPrevPct = (reimbPrev / reimbMax) * 100;
+
+//   const homeCurrencySymbol = currencySymbolMap[homeCurrency];
+
+//   const showReimbDelta =
+//     typeof reimbursementDeltaPct === "number" &&
+//     !Number.isNaN(reimbursementDeltaPct);
+
 //   return (
 //     <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
-//       {/* Header */}
-//       <div className="relative flex flex-col items-center gap-1">
-//         <PageBreadcrumb
-//           pageTitle="Sales Target"
-//           textSize="2xl"
-//           variant="page"
-//           align="center"
-//         />
-
-//         {!hideTabs && (
-//           <SegmentedToggle<RegionKey>
-//             value={tab}
-//             options={availableRegions.map((r) => ({ value: r }))}
-//             onChange={onChange}
-//             className="mt-2"
-//           />
-//         )}
-//       </div>
-
 //       {/* Legend */}
 //       <div className="mt-3 flex items-center justify-center gap-6 text-xs">
 //         <div className="flex items-center gap-2">
@@ -1237,6 +729,14 @@
 //             style={{ backgroundColor: "#5EA68E" }}
 //           />
 //           <span className="text-gray-600">MTD Sale</span>
+//         </div>
+
+//         <div className="flex items-center gap-2">
+//           <span
+//             className="h-2.5 w-2.5 rounded-sm"
+//             style={{ backgroundColor: "#6366f1" }}
+//           />
+//           <span className="text-gray-600">Dec Target</span>
 //         </div>
 
 //         <div className="flex items-center gap-2">
@@ -1264,58 +764,39 @@
 //           onMouseMove={moveTip}
 //           onMouseLeave={hideTip}
 //         >
-//           <svg
-//             width={size}
-//             height={size / 2}
-//             viewBox={`0 0 ${size} ${size / 2}`}
-//           >
-//             {/* Target background */}
-//             <path
-//               d={arcPath(fullFrom, fullTo, rTarget)}
-//               fill="none"
-//               stroke="#e5e7eb"
-//               strokeWidth={strokeMain}
-//               strokeLinecap="round"
-//             />
+//           <svg width={size} height={size / 2} viewBox={`0 0 ${size} ${size / 2}`}>
+//             {/* ✅ No grey background arc */}
 
-//             {/* 100% target marker */}
-//             <line
-//               x1={targetMarkInner.x}
-//               y1={targetMarkInner.y}
-//               x2={targetMarkOuter.x}
-//               y2={targetMarkOuter.y}
-//               stroke="#9ca3af"
-//               strokeWidth={2}
-//             />
-
-//             {/* ✅ Orange arc (full until 100%, then shrinks on overflow) */}
+//             {/* Orange arc (Prev month sale reference) */}
 //             <path
 //               d={arcPath(fullFrom, toDeg_Orange, rLastMTD)}
 //               fill="none"
 //               stroke="#f59e0b"
 //               strokeWidth={strokeLast}
 //               strokeLinecap="round"
-//               onMouseEnter={(e) =>
-//                 showTip(e, "Overflow Meter", [
-//                   `Target: ${formatHomeK(targetHome)}`,
-//                   `Achieved: ${formatHomeK(mtdHome)} (${pctDisplay.toFixed(
-//                     1
-//                   )}%)`,
-//                 ])
-//               }
+//               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
 //               onMouseLeave={hideTip}
 //             />
 
-//             {/* ✅ Green arc (fills up to 100% and stays full) */}
+//             {/* Dec target arc */}
+//             <path
+//               d={arcPath(fullFrom, toDeg_DecTarget, rDecTarget)}
+//               fill="none"
+//               stroke="#6366f1"
+//               strokeWidth={strokeDec}
+//               strokeLinecap="round"
+//               onMouseEnter={(e) => showTip(e, decTipTitle, decTipLines)}
+//               onMouseLeave={hideTip}
+//             />
+
+//             {/* Green arc (Current MTD) */}
 //             <path
 //               d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
 //               fill="none"
 //               stroke="#5EA68E"
 //               strokeWidth={strokeMain}
 //               strokeLinecap="round"
-//               onMouseEnter={(e) =>
-//                 showTip(e, "MTD Sale", [`MTD: ${formatHomeK(mtdHome)}`])
-//               }
+//               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
 //               onMouseLeave={hideTip}
 //             />
 
@@ -1327,13 +808,21 @@
 //               fill="#f59e0b"
 //               stroke="#fffbeb"
 //               strokeWidth={3}
-//               onMouseEnter={(e) =>
-//                 showTip(e, "Overflow Arc", [
-//                   `Achieved: ${pctDisplay.toFixed(1)}%`,
-//                   `Target: ${formatHomeK(targetHome)}`,
-//                 ])
-//               }
+//               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
+//               onMouseLeave={hideTip}
 //             />
+
+//             <circle
+//               cx={knobDec.x}
+//               cy={knobDec.y}
+//               r={7}
+//               fill="#6366f1"
+//               stroke="#eef2ff"
+//               strokeWidth={3}
+//               onMouseEnter={(e) => showTip(e, decTipTitle, decTipLines)}
+//               onMouseLeave={hideTip}
+//             />
+
 //             <circle
 //               cx={knobGreen.x}
 //               cy={knobGreen.y}
@@ -1341,21 +830,16 @@
 //               fill="#5EA68E"
 //               stroke="#ecfdf3"
 //               strokeWidth={4}
-//               onMouseEnter={(e) =>
-//                 showTip(e, "MTD Sale", [`${formatHomeK(mtdHome)}`])
-//               }
+//               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
+//               onMouseLeave={hideTip}
 //             />
 //           </svg>
 
 //           {/* Tooltip */}
 //           {tip.show && (
 //             <div
-//               className="pointer-events-none absolute z-10 rounded-lg border bg-white px-3 py-2 text-xs shadow-md"
-//               style={{
-//                 left: tip.x + 12,
-//                 top: tip.y - 12,
-//                 maxWidth: 220,
-//               }}
+//               className="pointer-events-none absolute z-10 rounded-lg border bg-white px-3 py-2 text-xs shadow-md whitespace-nowrap"
+//               style={{ left: tip.x + 12, top: tip.y - 12 }}
 //             >
 //               <div className="font-semibold text-gray-900">{tip.title}</div>
 //               <div className="mt-1 space-y-0.5 text-gray-600">
@@ -1367,81 +851,62 @@
 //           )}
 //         </div>
 
-//         {/* Percentage + badge */}
+//         {/* Percentage */}
 //         <div className="mt-2 text-center">
 //           <div className="text-3xl font-semibold">{pctDisplay.toFixed(1)}%</div>
-
 //           <div className="text-xs text-gray-500 mt-1">Target Achieved</div>
-//           <div
-//             className={`mx-auto mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-//               badgeIsUp ? "bg-green-50 text-green-700" : "bg-rose-50 text-rose-700"
-//             }`}
-//           >
-//             {badgeStr}
+//           <div className="text-xs text-gray-600 mt-1">
+//             Target:{" "}
+//             <span className="font-medium">{formatHomeK(targetHomeResolved)}</span>
 //           </div>
 //         </div>
 //       </div>
 
-//       {/* Stats */}
-//       <div className="mt-auto pt-6">
-//         <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
-//           {[
-//             {
-//               title: "Today",
-//               value: formatHomeK(todayHome),
-//               helper: "\u00A0",
-//             },
-//             {
-//               title: "MTD Sales",
-//               value: formatHomeK(mtdHome),
-//               helper: "\u00A0",
-//             },
-//             {
-//               title: "Target",
-//               value: formatHomeK(targetHome),
-//               helper: "\u00A0",
-//             },
-//             {
-//               title: prevLabel,
-//               value: formatHomeK(lastMonthTotalHome),
-//               helper: "\u00A0",
-//             },
-//             {
-//               title: "Sales Trend",
-//               value: `${salesTrendPct >= 0 ? "+" : ""}${salesTrendPct.toFixed(
-//                 2
-//               )}%`,
-//               helper: `vs ${prevLabel} MTD`,
-//             },
-//             {
-//               title: "Target Trend",
-//               value: `${targetTrendPct >= 0 ? "+" : ""}${targetTrendPct.toFixed(
-//                 2
-//               )}%`,
-//               helper: `target vs ${prevLabel} total`,
-//             },
-//           ].map((t) => (
+//       {/* Reimbursement Section */}
+//       <div className="mt-4 p-3 ">
+//         <div className="flex items-center justify-center gap-2">
+//           <div className="text-xs text-gray-500">
+//             Reimbursement ({homeCurrencySymbol})
+//           </div>
+
+//           {showReimbDelta && (
 //             <div
-//               key={t.title}
-//               className="rounded-xl p-3 text-center h-full flex flex-col items-center"
-//             >
-//               <div className="text-charcoal-500 whitespace-nowrap leading-none">
-//                 {t.title}
-//               </div>
-//               <div className="mt-2 font-semibold whitespace-nowrap leading-none">
-//                 {t.value}
-//               </div>
-//               <div
-//                 className={`mt-1 text-[11px] leading-none ${
-//                   t.helper === "\u00A0"
-//                     ? "text-transparent select-none"
-//                     : "text-gray-500"
+//               className={`text-[11px] font-medium px-2 py-0.5 rounded ${reimbursementDeltaPct! >= 0
+//                   ? "bg-green-50 text-green-700"
+//                   : "bg-rose-50 text-rose-700"
 //                 }`}
-//               >
-//                 {t.helper}
-//               </div>
+//               title="Current vs previous reimbursement (in home currency)"
+//             >
+//               {reimbursementDeltaPct! >= 0 ? "▲" : "▼"}{" "}
+//               {Math.abs(reimbursementDeltaPct!).toFixed(2)}%
 //             </div>
-//           ))}
+//           )}
+//         </div>
+
+//         <div className="mt-3">
+//           <div className="flex items-center justify-between text-xs">
+//             <span className="text-gray-600">{toApostropheLabel(reimbNowLabel)}</span>
+//             <span className="font-semibold text-gray-900">{formatHomeK(reimbNow)}</span>
+//           </div>
+//           <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+//             <div
+//               className="h-full rounded-full"
+//               style={{ width: `${reimbNowPct}%`, backgroundColor: "#5EA68E" }}
+//             />
+//           </div>
+//         </div>
+
+//         <div className="mt-3">
+//           <div className="flex items-center justify-between text-xs">
+//             <span className="text-gray-600">{toApostropheLabel(reimbPrevLabel)}</span>
+//             <span className="font-semibold text-gray-900">{formatHomeK(reimbPrev)}</span>
+//           </div>
+//           <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+//             <div
+//               className="h-full rounded-full"
+//               style={{ width: `${reimbPrevPct}%`, backgroundColor: "#FFBE25" }}
+//             />
+//           </div>
 //         </div>
 //       </div>
 //     </div>
@@ -1458,119 +923,210 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 "use client";
 
-import React, { useMemo, useState } from "react";
-import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import React, { useState, useRef } from "react";
 import {
   getISTDayInfo,
   getPrevMonthShortLabel,
   getThisMonthShortLabel,
 } from "@/lib/dashboard/date";
-import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
+import type { RegionMetrics } from "@/lib/dashboard/types";
 
 type CurrencyCode = "USD" | "GBP" | "INR" | "CAD";
 
 type Props = {
-  regions: Record<RegionKey, RegionMetrics>;
-  value: RegionKey;
-  onChange: (r: RegionKey) => void;
-  defaultRegion?: RegionKey;
-  hideTabs?: boolean;
+  data: RegionMetrics; // selected region metrics
   homeCurrency: CurrencyCode;
+
+  /**
+   * If your parent passes numbers already in HOME currency (as you do now),
+   * pass identityConvert here. If later you truly need conversion, keep this.
+   */
   convertToHomeCurrency: (value: number, from: CurrencyCode) => number;
+
   formatHomeK: (value: number) => string;
   todaySales?: number;
+
+  // already HOME currency (parent wins)
+  targetHome?: number;
+  mtdHome?: number;
+  lastMonthTotalHome?: number;
+
+  // ✅ NEW: Dec target in HOME currency (parent wins). Optional.
+  decTargetHome?: number;
+
+  currentReimbursement?: number;
+  previousReimbursement?: number;
+  reimbursementDeltaPct?: number | null;
 };
 
+const currencySymbolMap: Record<CurrencyCode, string> = {
+  USD: "$",
+  GBP: "£",
+  INR: "₹",
+  CAD: "C$",
+};
+
+const toApostropheLabel = (s: string) => s.replace(" ", "'");
+
 export default function SalesTargetCard({
-  regions,
-  value,
-  onChange,
+  data,
   homeCurrency,
   convertToHomeCurrency,
   formatHomeK,
-  hideTabs,
   todaySales,
+  targetHome,
+  mtdHome,
+  lastMonthTotalHome,
+  decTargetHome,
+  currentReimbursement,
+  previousReimbursement,
+  reimbursementDeltaPct,
 }: Props) {
-  const tab = value;
 
-  const availableRegions = useMemo<RegionKey[]>(() => {
-    const list: RegionKey[] = ["Global"];
-    (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
-      const r = regions[key];
-      if (!r) return;
+  const wrapRef = React.useRef<HTMLDivElement | null>(null);
 
-      if (
-        r.mtdUSD ||
-        r.lastMonthToDateUSD ||
-        r.lastMonthTotalUSD ||
-        r.targetUSD
-      ) {
-        list.push(key);
-      }
-    });
-
-    return list;
-  }, [regions]);
-
-  const data = regions[tab] || regions.Global;
-
-  // RegionMetrics are stored in USD in your current data model
-  const mtdHome = convertToHomeCurrency(data.mtdUSD ?? 0, "USD");
-  const lastMtdHome = convertToHomeCurrency(
-    data.lastMonthToDateUSD ?? 0,
-    "USD"
-  );
-  const lastMonthTotalHome = convertToHomeCurrency(
+  /**
+   * IMPORTANT:
+   * In your current parent, RegionMetrics values are ALREADY in display/home currency
+   * even though the fields are named "*USD".
+   *
+   * To avoid double conversion, we convert from homeCurrency.
+   * If convertToHomeCurrency is identityConvert, this is safe either way.
+   */
+  const computedMtdHome = convertToHomeCurrency(data.mtdUSD ?? 0, homeCurrency);
+  const computedLastMonthTotalHome = convertToHomeCurrency(
     data.lastMonthTotalUSD ?? 0,
-    "USD"
+    homeCurrency
   );
-  const targetHome = convertToHomeCurrency(data.targetUSD ?? 0, "USD");
+  const computedTargetHome = convertToHomeCurrency(
+    data.targetUSD ?? 0,
+    homeCurrency
+  );
+  const computedDecTargetHome = convertToHomeCurrency(
+    data.decTargetUSD ?? 0,
+    homeCurrency
+  );
 
-  // ✅ Gauge logic (unchanged)
-  const ratio = targetHome > 0 ? mtdHome / targetHome : 0;
-  const ratioLast = targetHome > 0 ? lastMonthTotalHome / targetHome : 0;
+  // ✅ Always use resolved home values (parent wins)
+  const mtdHomeResolved =
+    typeof mtdHome === "number" && Number.isFinite(mtdHome)
+      ? mtdHome
+      : computedMtdHome;
+
+  const lastMonthTotalHomeResolved =
+    typeof lastMonthTotalHome === "number" && Number.isFinite(lastMonthTotalHome)
+      ? lastMonthTotalHome
+      : computedLastMonthTotalHome;
+
+  const targetHomeResolved =
+    typeof targetHome === "number" && Number.isFinite(targetHome)
+      ? targetHome
+      : computedTargetHome;
+
+  // ✅ Dec target resolved (parent wins)
+  const decTargetHomeResolved =
+    typeof decTargetHome === "number" && Number.isFinite(decTargetHome)
+      ? decTargetHome
+      : computedDecTargetHome;
+
+  // ---- Gauge ratios (all in HOME currency) ----
+  const ratio =
+    targetHomeResolved > 0 ? mtdHomeResolved / targetHomeResolved : 0;
+
+  const ratioLast =
+    targetHomeResolved > 0
+      ? lastMonthTotalHomeResolved / targetHomeResolved
+      : 0;
+
+  const decRatio =
+    targetHomeResolved > 0 ? decTargetHomeResolved / targetHomeResolved : 0;
 
   const greenDraw = Math.min(Math.max(ratio, 0), 1);
 
-  const OVERFLOW_EMPTY_AT = 2; // visual-only
+  const OVERFLOW_EMPTY_AT = 2;
   let orangeDraw = 1;
   if (ratio > 1) {
     const t = (ratio - 1) / (OVERFLOW_EMPTY_AT - 1);
     orangeDraw = 1 - Math.min(Math.max(t, 0), 1);
   }
 
+  // ✅ Base position of blue marker (where Dec target is on the scale)
+  const decBase = Math.min(Math.max(decRatio, 0), 1);
+
+  // ✅ Shrink factor when ratio > 1 (same behavior as orange)
+  let decShrink = 1;
+  if (ratio > 1) {
+    const t = (ratio - 1) / (OVERFLOW_EMPTY_AT - 1);
+    decShrink = 1 - Math.min(Math.max(t, 0), 1);
+  }
+
+  // ✅ Final visible blue arc
+  const decDraw = decBase * decShrink;
+  const toDeg_DecTarget = 180 * decDraw;
+
   const toDeg_MTD = 180 * greenDraw;
   const toDeg_Orange = 180 * orangeDraw;
 
   const pctDisplay = ratio * 100;
-  const deltaPct = (ratio - ratioLast) * 100;
 
   const { todayDay } = getISTDayInfo();
-  const todayHome =
+  const todayHomeComputed =
     typeof todaySales === "number" && !Number.isNaN(todaySales)
       ? todaySales
       : todayDay > 0
-      ? mtdHome / todayDay
-      : 0;
+        ? mtdHomeResolved / todayDay
+        : 0;
+
+  // (todayHomeComputed currently unused in your JSX; keep if you plan to show it)
 
   const prevLabel = getPrevMonthShortLabel();
   const thisMonthLabel = getThisMonthShortLabel();
 
   // Gauge sizing
   const size = 220;
-  const strokeMain = 10;
-  const strokeLast = 5;
+  const strokeMain = 10; // green
+  const strokeDec = 5;   // grey
+  const strokeLast = 5;  // orange
 
   const cx = size / 2;
-  const rBase = size / 2 - strokeMain;
-  const gap = 12;
 
-  const rTarget = rBase;
-  const rCurrent = rBase;
-  const rLastMTD = rCurrent - strokeMain / 2 - gap - strokeLast / 2;
+  // ✅ gaps
+  const gapBlueToGreen = 0;   // small gap (tweak 0–6)
+  const gapGreenToOrange = 10;
+
+  // ✅ IMPORTANT: base radius must account for blue ring too, since it's outermost
+  const rBase = size / 2 - strokeDec;
+
+  // ✅ Outer ring (Blue)
+  const rDecTarget = rBase;
+
+  // ✅ Middle ring (Green) - just inside Blue
+  const rCurrent =
+    rDecTarget - strokeDec / 2 - gapBlueToGreen - strokeMain / 2;
+
+  // ✅ Inner ring (Orange)
+  const rLastMTD =
+    rCurrent - strokeMain / 2 - gapGreenToOrange - strokeLast / 2;
 
   const toXYRadius = (angDeg: number, radius: number) => {
     const rad = (Math.PI / 180) * (180 - angDeg);
@@ -1580,10 +1136,6 @@ export default function SalesTargetCard({
     };
   };
 
-  const targetDeg = 180;
-  const targetMarkOuter = toXYRadius(targetDeg, rTarget + 2);
-  const targetMarkInner = toXYRadius(targetDeg, rTarget - strokeMain - 2);
-
   const arcPath = (fromDeg: number, toDeg: number, radius: number) => {
     const start = toXYRadius(fromDeg, radius);
     const end = toXYRadius(toDeg, radius);
@@ -1592,22 +1144,13 @@ export default function SalesTargetCard({
   };
 
   const fullFrom = 0;
-  const fullTo = 180;
 
   const knobGreen = toXYRadius(toDeg_MTD, rCurrent);
   const knobYellow = toXYRadius(toDeg_Orange, rLastMTD);
+  const knobDec = toXYRadius(toDeg_DecTarget, rDecTarget);
 
-  const badgeIsUp = deltaPct >= 0;
-  const badgeStr =
-    (badgeIsUp ? "▲ " : "▼ ") + `${Math.abs(deltaPct).toFixed(2)}%`;
-
-  const salesTrendPct =
-    lastMtdHome > 0 ? ((mtdHome - lastMtdHome) / lastMtdHome) * 100 : 0;
-
-  const targetTrendPct =
-    lastMonthTotalHome > 0
-      ? ((targetHome - lastMonthTotalHome) / lastMonthTotalHome) * 100
-      : 0;
+  // Tooltip
+  const TOOLTIP_WIDTH = 70;
 
   const [tip, setTip] = useState<{
     show: boolean;
@@ -1617,55 +1160,82 @@ export default function SalesTargetCard({
     lines: string[];
   }>({ show: false, x: 0, y: 0, title: "", lines: [] });
 
-  const showTip = (e: React.MouseEvent, title: string, lines: string[]) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setTip({
-      show: true,
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-      title,
-      lines,
-    });
-  };
+const showTip = (e: React.MouseEvent, title: string, lines: string[]) => {
+  const rect = wrapRef.current?.getBoundingClientRect();
+  if (!rect) return;
 
-  const moveTip = (e: React.MouseEvent) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setTip((t) =>
-      t.show ? { ...t, x: e.clientX - rect.left, y: e.clientY - rect.top } : t
-    );
-  };
+  setTip({
+    show: true,
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top,
+    title,
+    lines,
+  });
+};
+
+
+const moveTip = (e: React.MouseEvent) => {
+  const rect = wrapRef.current?.getBoundingClientRect();
+  if (!rect) return;
+
+  setTip((t) =>
+    t.show
+      ? { ...t, x: e.clientX - rect.left, y: e.clientY - rect.top }
+      : t
+  );
+};
 
   const hideTip = () => setTip((t) => ({ ...t, show: false }));
 
-  // ✅ One unified tooltip content for BOTH arcs/knobs
   const tipTitle = "Sales Snapshot";
   const tipLines = [
-    `MTD Sale: ${formatHomeK(mtdHome)} (${pctDisplay.toFixed(1)}%)`,
-    `Target: ${formatHomeK(targetHome)}`,
-    `${prevLabel} Sale: ${formatHomeK(lastMonthTotalHome)}`,
+    `MTD Sale: ${formatHomeK(mtdHomeResolved)} (${pctDisplay.toFixed(1)}%)`,
+    `Target: ${formatHomeK(targetHomeResolved)}`,
+    `${prevLabel} Sale: ${formatHomeK(lastMonthTotalHomeResolved)}`,
   ];
+
+  // const decTipTitle = "December Target";
+  // const decTipLines = [`Dec Target: ${formatHomeK(decTargetHomeResolved)}`];
+
+  // Reimbursement labels
+  const reimbNowLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "2-digit",
+  }).format(new Date());
+
+  const reimbPrevLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "2-digit",
+  }).format(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
+
+  const reimbNow = currentReimbursement ?? 0;
+  const reimbPrev = previousReimbursement ?? 0;
+
+  const reimbMax = Math.max(reimbNow, reimbPrev, 1);
+  const reimbNowPct = (reimbNow / reimbMax) * 100;
+  const reimbPrevPct = (reimbPrev / reimbMax) * 100;
+
+  const homeCurrencySymbol = currencySymbolMap[homeCurrency];
+
+  const formatWithCurrencySpace = (value: number) => {
+    // formatHomeK returns something like "£514.04" or "$1.31k"
+    const s = formatHomeK(value);
+
+    // remove only the *leading* currency symbol if present
+    const withoutSymbol = s.startsWith(homeCurrencySymbol)
+      ? s.slice(homeCurrencySymbol.length).trim()
+      : s;
+
+    return `${homeCurrencySymbol} ${withoutSymbol}`;
+  };
+
+
+  const showReimbDelta =
+    typeof reimbursementDeltaPct === "number" &&
+    !Number.isNaN(reimbursementDeltaPct);
 
   return (
     <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
-      {/* Header */}
-      <div className="relative flex flex-col items-center gap-1">
-        <PageBreadcrumb
-          pageTitle="Sales Target"
-          textSize="2xl"
-          variant="page"
-          align="center"
-        />
-
-        {!hideTabs && (
-          <SegmentedToggle<RegionKey>
-            value={tab}
-            options={availableRegions.map((r) => ({ value: r }))}
-            onChange={onChange}
-            className="mt-2"
-          />
-        )}
-      </div>
-
       {/* Legend */}
       <div className="mt-3 flex items-center justify-center gap-6 text-xs">
         <div className="flex items-center gap-2">
@@ -1675,6 +1245,14 @@ export default function SalesTargetCard({
           />
           <span className="text-gray-600">MTD Sale</span>
         </div>
+
+        {/* <div className="flex items-center gap-2">
+          <span
+            className="h-2.5 w-2.5 rounded-sm"
+            style={{ backgroundColor: "#9ca3af" }}
+          />
+          <span className="text-gray-600">Dec Target</span>
+        </div> */}
 
         <div className="flex items-center gap-2">
           <span
@@ -1696,36 +1274,19 @@ export default function SalesTargetCard({
       {/* Gauge */}
       <div className="mt-6 flex flex-col items-center justify-center">
         <div
+          ref={wrapRef}
           className="relative"
           style={{ width: size, height: size / 2 }}
           onMouseMove={moveTip}
           onMouseLeave={hideTip}
         >
+
           <svg
             width={size}
             height={size / 2}
             viewBox={`0 0 ${size} ${size / 2}`}
           >
-            {/* Target background */}
-            <path
-              d={arcPath(fullFrom, fullTo, rTarget)}
-              fill="none"
-              stroke="#e5e7eb"
-              strokeWidth={strokeMain}
-              strokeLinecap="round"
-            />
-
-            {/* 100% target marker */}
-            <line
-              x1={targetMarkInner.x}
-              y1={targetMarkInner.y}
-              x2={targetMarkOuter.x}
-              y2={targetMarkOuter.y}
-              stroke="#9ca3af"
-              strokeWidth={2}
-            />
-
-            {/* ✅ Orange arc (same unified tooltip) */}
+            {/* Orange arc (Prev month sale reference) */}
             <path
               d={arcPath(fullFrom, toDeg_Orange, rLastMTD)}
               fill="none"
@@ -1736,7 +1297,18 @@ export default function SalesTargetCard({
               onMouseLeave={hideTip}
             />
 
-            {/* ✅ Green arc (same unified tooltip) */}
+            {/* Dec target arc */}
+            <path
+              d={arcPath(fullFrom, toDeg_DecTarget, rDecTarget)}
+              fill="none"
+              stroke="#9CA3AF"
+              strokeWidth={strokeDec}
+              strokeLinecap="round"
+              onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
+              onMouseLeave={hideTip}
+            />
+
+            {/* Green arc (Current MTD) */}
             <path
               d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
               fill="none"
@@ -1747,21 +1319,33 @@ export default function SalesTargetCard({
               onMouseLeave={hideTip}
             />
 
-            {/* Knobs (same unified tooltip too) */}
+            {/* Knobs */}
             <circle
               cx={knobYellow.x}
               cy={knobYellow.y}
-              r={9}
+              r={5}
               fill="#f59e0b"
               stroke="#fffbeb"
               strokeWidth={3}
               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
               onMouseLeave={hideTip}
             />
+
+            <circle
+              cx={knobDec.x}
+              cy={knobDec.y}
+              r={5}
+              fill="#9CA3AF"
+              stroke="#eef2ff"
+              strokeWidth={3}
+              onMouseEnter={(e) => showTip(e, decTipTitle, decTipLines)}
+              onMouseLeave={hideTip}
+            />
+
             <circle
               cx={knobGreen.x}
               cy={knobGreen.y}
-              r={12}
+              r={10}
               fill="#5EA68E"
               stroke="#ecfdf3"
               strokeWidth={4}
@@ -1773,13 +1357,16 @@ export default function SalesTargetCard({
           {/* Tooltip */}
           {tip.show && (
             <div
-              className="pointer-events-none absolute z-10 rounded-lg border bg-white px-3 py-2 text-xs shadow-md"
+              className="pointer-events-none absolute z-10 rounded-lg border bg-white px-3 py-2 text-xs shadow-md whitespace-nowrap"
               style={{
-                left: tip.x + 12,
                 top: tip.y - 12,
-                maxWidth: 240,
+                left:
+                  tip.x + TOOLTIP_WIDTH + 16 > size
+                    ? tip.x - TOOLTIP_WIDTH - 12 // 🔥 shift left
+                    : tip.x + 12,                // normal right
               }}
             >
+
               <div className="font-semibold text-gray-900">{tip.title}</div>
               <div className="mt-1 space-y-0.5 text-gray-600">
                 {tip.lines.map((l, i) => (
@@ -1790,83 +1377,72 @@ export default function SalesTargetCard({
           )}
         </div>
 
-        {/* Percentage + badge */}
+        {/* Percentage */}
         <div className="mt-2 text-center">
           <div className="text-3xl font-semibold">{pctDisplay.toFixed(1)}%</div>
-
           <div className="text-xs text-gray-500 mt-1">Target Achieved</div>
-          <div
-            className={`mx-auto mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-              badgeIsUp
-                ? "bg-green-50 text-green-700"
-                : "bg-rose-50 text-rose-700"
-            }`}
-          >
-            {badgeStr}
+          <div className="text-xs text-gray-600 mt-1">
+            Target:{" "}
+            <span className="font-medium">{formatHomeK(targetHomeResolved)}</span>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="mt-auto pt-6">
-        <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
-          {[
-            {
-              title: "Today",
-              value: formatHomeK(todayHome),
-              helper: "\u00A0",
-            },
-            {
-              title: "MTD Sales",
-              value: formatHomeK(mtdHome),
-              helper: "\u00A0",
-            },
-            {
-              title: "Target",
-              value: formatHomeK(targetHome),
-              helper: "\u00A0",
-            },
-            {
-              title: prevLabel,
-              value: formatHomeK(lastMonthTotalHome),
-              helper: "\u00A0",
-            },
-            {
-              title: "Sales Trend",
-              value: `${salesTrendPct >= 0 ? "+" : ""}${salesTrendPct.toFixed(
-                2
-              )}%`,
-              helper: `vs ${prevLabel} MTD`,
-            },
-            {
-              title: "Target Trend",
-              value: `${targetTrendPct >= 0 ? "+" : ""}${targetTrendPct.toFixed(
-                2
-              )}%`,
-              helper: `target vs ${prevLabel} total`,
-            },
-          ].map((t) => (
+      {/* Reimbursement Section */}
+      <div className="mt-4 p-3 ">
+        <div className="flex items-center justify-center gap-2">
+          <div className="text-xs text-gray-500">
+            Monthly Reimbursement
+          </div>
+
+          {showReimbDelta && (
             <div
-              key={t.title}
-              className="rounded-xl p-3 text-center h-full flex flex-col items-center"
-            >
-              <div className="text-charcoal-500 whitespace-nowrap leading-none">
-                {t.title}
-              </div>
-              <div className="mt-2 font-semibold whitespace-nowrap leading-none">
-                {t.value}
-              </div>
-              <div
-                className={`mt-1 text-[11px] leading-none ${
-                  t.helper === "\u00A0"
-                    ? "text-transparent select-none"
-                    : "text-gray-500"
+              className={`text-[11px] font-medium px-2 py-0.5 rounded ${reimbursementDeltaPct! >= 0
+                ? "bg-green-50 text-green-700"
+                : "bg-rose-50 text-rose-700"
                 }`}
-              >
-                {t.helper}
-              </div>
+              title="Current vs previous reimbursement (in home currency)"
+            >
+              {reimbursementDeltaPct! >= 0 ? "▲" : "▼"}{" "}
+              {Math.abs(reimbursementDeltaPct!).toFixed(2)}%
             </div>
-          ))}
+          )}
+        </div>
+
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-xs ">
+            <span className="text-gray-600">
+              {toApostropheLabel(reimbNowLabel)}{' '}
+            </span>
+            <span className="font-semibold text-gray-900">
+              {formatWithCurrencySpace(reimbNow)}
+            </span>
+
+          </div>
+          <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${reimbNowPct}%`, backgroundColor: "#5EA68E" }}
+            />
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-600">
+              {toApostropheLabel(reimbPrevLabel)}{' '}
+            </span>
+            <span className="font-semibold text-gray-900">
+              {formatWithCurrencySpace(reimbPrev)}
+            </span>
+
+          </div>
+          <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${reimbPrevPct}%`, backgroundColor: "#FFBE25" }}
+            />
+          </div>
         </div>
       </div>
     </div>
