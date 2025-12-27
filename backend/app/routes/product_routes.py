@@ -348,47 +348,91 @@ def get_currency_rates():
     token = auth_header.split(' ')[1]
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
+        _user_id = payload.get('user_id')  # not used, but keeps auth consistent
     except jwt.ExpiredSignatureError:
         return jsonify({'error': 'Token has expired'}), 401
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
     try:
-        # Connect to the admin database where currency_conversion table is located
-        admin_engine = create_engine(db_url1)  # Using admin database
-        
-        # Query the currency_conversion table
+        admin_engine = create_engine(db_url1)
+
         with admin_engine.connect() as conn:
-            # Get the most recent currency rates for each currency-country combination
             query = text("""
-                SELECT DISTINCT ON (user_currency, country) 
+                SELECT DISTINCT ON (user_currency, country)
                     user_currency, country, selected_currency, conversion_rate, month, year
-                FROM currency_conversion 
-                ORDER BY user_currency, country, year DESC, 
-                    CASE month 
-                        WHEN 'january' THEN 1 WHEN 'february' THEN 2 WHEN 'march' THEN 3 
-                        WHEN 'april' THEN 4 WHEN 'may' THEN 5 WHEN 'june' THEN 6 
-                        WHEN 'july' THEN 7 WHEN 'august' THEN 8 WHEN 'september' THEN 9 
-                        WHEN 'october' THEN 10 WHEN 'november' THEN 11 WHEN 'december' THEN 12 
+                FROM currency_conversion
+                ORDER BY user_currency, country, year DESC,
+                    CASE month
+                        WHEN 'january' THEN 1 WHEN 'february' THEN 2 WHEN 'march' THEN 3
+                        WHEN 'april' THEN 4 WHEN 'may' THEN 5 WHEN 'june' THEN 6
+                        WHEN 'july' THEN 7 WHEN 'august' THEN 8 WHEN 'september' THEN 9
+                        WHEN 'october' THEN 10 WHEN 'november' THEN 11 WHEN 'december' THEN 12
                     END DESC
             """)
             results = conn.execute(query).mappings().all()
 
-        # Convert to list of dictionaries
-        currency_rates = [dict(row) for row in results]
+        currency_rates = []
+        for row in results:
+            d = dict(row)
+            # normalize for frontend matching
+            d["user_currency"] = str(d.get("user_currency", "")).strip().lower()
+            d["country"] = str(d.get("country", "")).strip().lower()
+            d["selected_currency"] = str(d.get("selected_currency", "")).strip().lower()
+            currency_rates.append(d)
+
         return jsonify(currency_rates), 200
 
     except SQLAlchemyError as e:
-        print(f"SQLAlchemy Error: {str(e)}")
         return jsonify({'error': 'Database error', 'message': str(e)}), 500
     except Exception as e:
-        print(f"Unexpected Error: {str(e)}")
         return jsonify({'error': 'An error occurred while fetching currency rates', 'message': str(e)}), 500
 
 
+
+MONTHS = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december"
+]
+
+def get_previous_month(month: str, year: str):
+    m = month.strip().lower()
+    y = int(year)
+
+    if m not in MONTHS:
+        return None, None
+
+    idx = MONTHS.index(m)
+    if idx == 0:
+        return "december", str(y - 1)
+    return MONTHS[idx - 1], str(y)
+
+def is_valid_product_name(name):
+    if name is None:
+        return False
+    s = str(name).strip().lower()
+    return s not in ("", "nan", "none", "null", "total")
+
+def build_table_candidates(user_id, country, month, year):
+    """Return [requested_table, fallback_prev_month_table] (fallback may be None)."""
+    requested = f"skuwisemonthly_{user_id}_{country}_{month}{year}"
+    pm, py = get_previous_month(month, year)
+    fallback = f"skuwisemonthly_{user_id}_{country}_{pm}{py}" if pm and py else None
+    return requested, fallback
+
+def select_asp_query(asp_table):
+    """Return a SQLAlchemy select query based on available ASP-like columns."""
+    if hasattr(asp_table.c, 'asp'):
+        return select(asp_table.c.product_name, asp_table.c.asp)
+    if hasattr(asp_table.c, 'net_credits'):
+        return select(asp_table.c.product_name, asp_table.c.net_credits.label('asp'))
+    if hasattr(asp_table.c, 'average_selling_price'):
+        return select(asp_table.c.product_name, asp_table.c.average_selling_price.label('asp'))
+    return None
+
 @product_bp.route('/asp-data', methods=['GET'])
 def get_asp_data():
+    # ---------- AUTH ----------
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
@@ -402,138 +446,103 @@ def get_asp_data():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
-    # Get query parameters
-    country = request.args.get('country', '')
-    month = request.args.get('month', '')
-    year = request.args.get('year', '')
+    # ---------- PARAMS ----------
+    country = request.args.get('country', '').strip().lower()
+    month = request.args.get('month', '').strip().lower()
+    year = request.args.get('year', '').strip()
 
     if not all([country, month, year]):
         return jsonify({'error': 'Country, month, and year parameters are required'}), 400
 
+    if month not in MONTHS:
+        return jsonify({'error': 'Invalid month', 'allowed': MONTHS}), 400
+
     try:
-        # Connect to PostgreSQL
-        user_engine = create_engine(db_url)
-        inspector = inspect(user_engine)
-        
-        # Handle global country case - check multiple tables
-        if country.lower() == 'global':
-            # Try different country combinations for global
-            countries_to_try = ['uk', 'us', 'canada']
+        engine = create_engine(db_url)
+        inspector = inspect(engine)
+        all_tables = set(inspector.get_table_names())
+
+        # ---------- GLOBAL ----------
+        if country == 'global':
             asp_data = []
-            
-            for try_country in countries_to_try:
-                table_name = f"skuwisemonthly_{user_id}_{try_country}_{month}{year}"
-                
-                if table_name in inspector.get_table_names():
-                    try:
-                        metadata = MetaData()
-                        asp_table = Table(table_name, metadata, autoload_with=user_engine)
-                        
-                        with user_engine.connect() as conn:
-                            # Check for ASP column variants
-                            if hasattr(asp_table.c, 'asp'):
-                                query = select(asp_table.c.product_name, asp_table.c.asp)
-                            elif hasattr(asp_table.c, 'net_credits'):
-                                query = select(
-                                    asp_table.c.product_name,
-                                    asp_table.c.net_credits.label('asp')
-                                )
-                            elif hasattr(asp_table.c, 'average_selling_price'):
-                                query = select(
-                                    asp_table.c.product_name,
-                                    asp_table.c.average_selling_price.label('asp')
-                                )
-                            else:
-                                logger.warning(f"No ASP column found in table {table_name}")
-                                continue
-                                
-                            results = conn.execute(query).mappings().all()
-                            
-                            # Add country info to distinguish data
-                            for row in results:
-                                row_dict = dict(row)
-                                row_dict['source_country'] = try_country
-                                asp_data.append(row_dict)
-                                
-                    except Exception as e:
-                        logger.error(f"Error querying table {table_name}: {str(e)}")
+            countries_to_try = ['uk', 'us', 'canada']
+
+            for c in countries_to_try:
+                requested, fallback = build_table_candidates(user_id, c, month, year)
+
+                table_to_use = None
+                if requested in all_tables:
+                    table_to_use = requested
+                elif fallback and fallback in all_tables:
+                    table_to_use = fallback
+                else:
+                    continue
+
+                metadata = MetaData()
+                asp_table = Table(table_to_use, metadata, autoload_with=engine)
+
+                query = select_asp_query(asp_table)
+                if query is None:
+                    continue
+
+                with engine.connect() as conn:
+                    results = conn.execute(query).mappings().all()
+
+                for row in results:
+                    row_dict = dict(row)
+                    if not is_valid_product_name(row_dict.get("product_name")):
                         continue
-            
+                    row_dict['source_country'] = c
+                    asp_data.append(row_dict)
+
             if not asp_data:
-                logger.info(f"No ASP data found for global view - {month}{year}")
                 return jsonify({
                     'error': 'No ASP data found for global view',
-                    'details': f'No data available for {month} {year}',
-                    'suggestion': 'Try a previous month or check if data has been uploaded'
+                    'details': f'No data available for {month} {year}'
                 }), 404
-                
-            logger.info(f"Successfully retrieved ASP data for global view - {month}{year}")
+
             return jsonify(asp_data), 200
-        
+
+        # ---------- SINGLE COUNTRY ----------
+        requested, fallback = build_table_candidates(user_id, country, month, year)
+
+        if requested in all_tables:
+            table_to_use = requested
+        elif fallback and fallback in all_tables:
+            table_to_use = fallback
         else:
-            # Single country case
-            table_name = f"skuwisemonthly_{user_id}_{country}_{month}{year}"
-            
-            # Check if the table exists
-            if table_name not in inspector.get_table_names():
-                logger.warning(f"ASP data table {table_name} not found")
-                return jsonify({
-                    'error': f'ASP data table "{table_name}" not found',
-                    'details': f'No ASP data available for {country.upper()} in {month.capitalize()} {year}',
-                    'suggestion': 'Try a previous month or check if data has been uploaded'
-                }), 404
+            return jsonify({
+                'error': f'ASP data table "{requested}" not found',
+                'details': f'Also checked fallback "{fallback}"'
+            }), 404
 
-            # Load table metadata
-            metadata = MetaData()
-            asp_table = Table(table_name, metadata, autoload_with=user_engine)
+        metadata = MetaData()
+        asp_table = Table(table_to_use, metadata, autoload_with=engine)
 
-            # Query the table for ASP data
-            with user_engine.connect() as conn:
-                # Check for different possible ASP column names
-                if hasattr(asp_table.c, 'asp'):
-                    query = select(asp_table.c.product_name, asp_table.c.asp)
-                elif hasattr(asp_table.c, 'net_credits'):
-                    query = select(
-                        asp_table.c.product_name,
-                        asp_table.c.net_credits.label('asp')
-                    )
-                elif hasattr(asp_table.c, 'average_selling_price'):
-                    query = select(
-                        asp_table.c.product_name,
-                        asp_table.c.average_selling_price.label('asp')
-                    )
-                else:
-                    # Return available columns for debugging
-                    available_columns = [col.name for col in asp_table.columns]
-                    logger.error(f"Cannot determine ASP column in {table_name}. Available columns: {available_columns}")
-                    return jsonify({
-                        'error': 'Cannot determine ASP column',
-                        'available_columns': available_columns,
-                        'table_name': table_name,
-                        'suggestion': 'Check column names in the uploaded data'
-                    }), 404
-                    
-                results = conn.execute(query).mappings().all()
+        query = select_asp_query(asp_table)
+        if query is None:
+            return jsonify({
+                'error': 'Cannot determine ASP column',
+                'available_columns': [c.name for c in asp_table.columns],
+                'table_name': table_to_use
+            }), 404
 
-            # Convert to list of dictionaries
-            asp_data = [dict(row) for row in results]
-            logger.info(f"Successfully retrieved ASP data for {country} - {month}{year}")
-            return jsonify(asp_data), 200
+        with engine.connect() as conn:
+            results = conn.execute(query).mappings().all()
+
+        asp_data = []
+        for r in results:
+            d = dict(r)
+            if not is_valid_product_name(d.get("product_name")):
+                continue
+            asp_data.append(d)
+
+        return jsonify(asp_data), 200
 
     except SQLAlchemyError as e:
-        logger.error(f"SQLAlchemy Error in get_asp_data: {str(e)}")
-        return jsonify({
-            'error': 'Database error', 
-            'message': str(e),
-            'suggestion': 'Contact support if this persists'
-        }), 500
+        return jsonify({'error': 'Database error', 'message': str(e)}), 500
     except Exception as e:
-        logger.error(f"Unexpected Error in get_asp_data: {str(e)}")
-        return jsonify({
-            'error': 'An error occurred while fetching ASP data', 
-            'message': str(e),
-            'suggestion': 'Contact support if this persists'
-        }), 500
+        return jsonify({'error': 'Unexpected error', 'message': str(e)}), 500
 
     
 @product_bp.route('/skup', methods=['POST'])
