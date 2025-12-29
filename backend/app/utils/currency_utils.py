@@ -47,7 +47,7 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
                     "profit", "profit_percentage", "amazon_fee", "sales_mix", "profit_mix", "quantity",
                     "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
                     "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                    "asp", "rembursment_vs_cm2_margins", "product_name", "shipment_charges","unit_wise_profitability"
+                    "asp", "rembursment_vs_cm2_margins", "product_name", "shipment_charges","unit_wise_profitability","sku"
                 FROM {source_table}
                 WHERE year = '{year}' AND month = '{month}'
             """
@@ -62,7 +62,17 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
                 print(f"⚠️ No data found for {month}/{year} in {source_table}")
                 continue
 
-            print(df.columns)
+            # print(df.columns)
+
+            # ================= FIX PRODUCT NAME =================
+            df["product_name"] = df["product_name"].replace([None, np.nan], "")
+            df["product_name"] = df["product_name"].astype(str).str.strip()
+
+            # product_name agar blank / 0 / nan ho → sku se replace
+            mask = df["product_name"].isin(["", "0", "nan", "none"])
+            df.loc[mask, "product_name"] = df.loc[mask, "sku"].astype(str).str.strip()
+            # ====================================================
+
 
             # Group by product_name (global MTD)
             sku_grouped = df.groupby('product_name').agg({
@@ -102,38 +112,38 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
                 lambda row: (row["cm2_profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "cm2_margins"]])
+            # print(sku_grouped[["product_name", "cm2_margins"]])
             sku_grouped["acos"] = sku_grouped.apply(
                 lambda row: (row["advertising_total"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "acos"]])
+            # print(sku_grouped[["product_name", "acos"]])
             sku_grouped["rembursment_vs_cm2_margins"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["cm2_profit"]) * 100 if row["cm2_profit"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "rembursment_vs_cm2_margins"]])
+            # print(sku_grouped[["product_name", "rembursment_vs_cm2_margins"]])
             sku_grouped["reimbursement_vs_sales"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "reimbursement_vs_sales"]])
+            # print(sku_grouped[["product_name", "reimbursement_vs_sales"]])
             sku_grouped["profit_percentage"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "profit_percentage"]])
+            # print(sku_grouped[["product_name", "profit_percentage"]])
 
             sku_grouped["asp"] = sku_grouped.apply(
                 lambda row: (row["net_sales"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "asp"]])
+            # print(sku_grouped[["product_name", "asp"]])
             sku_grouped["unit_wise_profitability"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "unit_wise_profitability"]])
+            # print(sku_grouped[["product_name", "unit_wise_profitability"]])
 
             temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
 
@@ -156,10 +166,10 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
 
             
             
-            print(sku_grouped[["product_name", "profit_mix"]])
+            # print(sku_grouped[["product_name", "profit_mix"]])
             
             
-            print(sku_grouped[["product_name", "sales_mix"]])
+            # print(sku_grouped[["product_name", "sales_mix"]])
 
 
 
@@ -404,7 +414,7 @@ def process_global_quarterly_skuwise_data(user_id, country, month, year, q, db_u
                 "profit", "profit_percentage", "amazon_fee", "sales_mix", "profit_mix", "quantity",
                 "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
                 "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability"
+                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku"
                 FROM {source_table}
                 WHERE LOWER(month) IN ({placeholders}) AND year = %s
             """
@@ -413,6 +423,15 @@ def process_global_quarterly_skuwise_data(user_id, country, month, year, q, db_u
             if df.empty:
                 print(f"No data for selected months in {source_table}.")
                 continue
+
+            df["product_name"] = df["product_name"].replace([None, np.nan], "")
+            df["product_name"] = df["product_name"].astype(str).str.strip()
+
+            # product_name agar blank / 0 / nan ho → sku se replace
+            mask = df["product_name"].isin(["", "0", "nan", "none"])
+            df.loc[mask, "product_name"] = df.loc[mask, "sku"].astype(str).str.strip()
+            # ====================================================
+
 
             # ---------- AGGREGATION (same as tumhara) ----------
             sku_grouped = df.groupby('product_name').agg({
@@ -599,7 +618,7 @@ def process_global_yearly_skuwise_data(user_id, country, year):
                 "profit", "profit_percentage", "amazon_fee", "sales_mix", "profit_mix", "quantity",
                 "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
                 "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability"
+                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku"
                 FROM {source_table}
                 WHERE "year" = '{year}'
             """
@@ -612,10 +631,19 @@ def process_global_yearly_skuwise_data(user_id, country, year):
                 continue
 
             if df.empty:
-                print(f"⚠️ No data found for {month}/{year} in {source_table}")
+                print(f"⚠️ No data found for /{year} in {source_table}")
                 continue
 
-            print(df.columns)
+            # print(df.columns)
+
+            df["product_name"] = df["product_name"].replace([None, np.nan], "")
+            df["product_name"] = df["product_name"].astype(str).str.strip()
+
+            # product_name agar blank / 0 / nan ho → sku se replace
+            mask = df["product_name"].isin(["", "0", "nan", "none"])
+            df.loc[mask, "product_name"] = df.loc[mask, "sku"].astype(str).str.strip()
+            # ====================================================
+
         
     
         # Group by SKU for aggregation
@@ -663,39 +691,39 @@ def process_global_yearly_skuwise_data(user_id, country, year):
                 lambda row: (row["cm2_profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "cm2_margins"]])
+            # print(sku_grouped[["product_name", "cm2_margins"]])
             sku_grouped["acos"] = sku_grouped.apply(
                 lambda row: (row["advertising_total"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "acos"]])
+            # print(sku_grouped[["product_name", "acos"]])
             sku_grouped["rembursment_vs_cm2_margins"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["cm2_profit"]) * 100 if row["cm2_profit"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "rembursment_vs_cm2_margins"]])
+            # print(sku_grouped[["product_name", "rembursment_vs_cm2_margins"]])
             sku_grouped["reimbursement_vs_sales"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "reimbursement_vs_sales"]])
+            # print(sku_grouped[["product_name", "reimbursement_vs_sales"]])
 
             sku_grouped["profit_percentage"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "profit_percentage"]])
+            # print(sku_grouped[["product_name", "profit_percentage"]])
 
             sku_grouped["asp"] = sku_grouped.apply(
                 lambda row: (row["net_sales"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "asp"]])
+            # print(sku_grouped[["product_name", "asp"]])
             sku_grouped["unit_wise_profitability"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            print(sku_grouped[["product_name", "unit_wise_profitability"]])
+            # print(sku_grouped[["product_name", "unit_wise_profitability"]])
 
             temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
 
@@ -719,10 +747,10 @@ def process_global_yearly_skuwise_data(user_id, country, year):
 
             
             
-            print(sku_grouped[["product_name", "profit_mix"]])
+            # print(sku_grouped[["product_name", "profit_mix"]])
             
             
-            print(sku_grouped[["product_name", "sales_mix"]])
+            # print(sku_grouped[["product_name", "sales_mix"]])
 
 
 

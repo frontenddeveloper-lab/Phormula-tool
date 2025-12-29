@@ -16,6 +16,7 @@ from flask import request, jsonify, Blueprint
 from sqlalchemy.dialects.postgresql import insert, insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from app import db
+from sqlalchemy import delete
 from app.models.user_models import Inventory, CountryProfile, MonthwiseInventory , InventoryAged
 from app.routes.amazon_api_routes import amazon_client, _apply_region_and_marketplace_from_request
 from config import Config
@@ -909,13 +910,14 @@ def _attach_sku_product_names(objs: list["InventoryAged"], user_id: int | None) 
 def sync_inventory_aged():
     """
     Fetch GET_FBA_INVENTORY_PLANNING_DATA and store into inventory_aged.
-    Each row is tagged with user_id and product_name is taken from
-    public.sku_{user_id}_data_table (sku_uk → sku).
+    Old data for same snapshot_date + user_id + marketplace is deleted
+    before inserting new rows (prevents duplicates).
     """
 
-    # --- auth (same as inventory_all) ---
+    # ---------------- AUTH ----------------
     auth_header = request.headers.get("Authorization")
     user_id = None
+
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
         try:
@@ -926,14 +928,20 @@ def sync_inventory_aged():
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
 
-    # decide marketplace
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # ---------------- MARKETPLACE ----------------
     _apply_region_and_marketplace_from_request()
+
     if amazon_client.marketplace_id not in amazon_client.ALLOWED_MARKETPLACES:
         return jsonify({"success": False, "error": "Unsupported marketplace"}), 400
 
     mp = request.args.get("marketplace_id", amazon_client.marketplace_id)
 
     logger.info("Starting InventoryAged sync for marketplace %s", mp)
+
+    # ---------------- REQUEST REPORT ----------------
     report_id = _request_inventory_age_report(mp)
     if not report_id:
         return jsonify({
@@ -955,6 +963,7 @@ def sync_inventory_aged():
             "error": "Failed to download inventory health report document",
         }), 502
 
+    # ---------------- PARSE TSV ----------------
     text_content = content.decode("utf-8-sig", errors="replace")
     f = io.StringIO(text_content)
     reader = csv.DictReader(f, delimiter="\t")
@@ -967,21 +976,46 @@ def sync_inventory_aged():
 
     objs: list[InventoryAged] = []
     rows_count = 0
-    snapshot_dates = set()
+    snapshot_dates: set[date] = set()
 
     for row in reader:
         rows_count += 1
+
         inv = _row_to_inventory_aged(row)
-        if not inv.sku:
+        if not inv or not inv.sku:
             continue
-        inv.user_id = user_id          # 👈 tag the row with user_id
+
+        inv.user_id = user_id
+        inv.marketplace = mp
+
         objs.append(inv)
+
         if inv.snapshot_date:
             snapshot_dates.add(inv.snapshot_date)
 
-    # overwrite product_name using sku_{user_id}_data_table
+    # ---------------- DELETE OLD DATA (CRITICAL FIX) ----------------
+    try:
+        if snapshot_dates:
+            db.session.execute(
+                delete(InventoryAged).where(
+                    InventoryAged.user_id == user_id,
+                    InventoryAged.marketplace == mp,
+                    InventoryAged.snapshot_date.in_(snapshot_dates)
+                )
+            )
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.exception("Failed to delete old InventoryAged data")
+        return jsonify({
+            "success": False,
+            "error": f"Failed to cleanup old data: {str(e)}",
+        }), 500
+
+    # ---------------- ATTACH PRODUCT NAMES ----------------
     _attach_sku_product_names(objs, user_id)
 
+    # ---------------- INSERT NEW DATA ----------------
     try:
         if objs:
             db.session.bulk_save_objects(objs)
@@ -1004,6 +1038,7 @@ def sync_inventory_aged():
         "rows_saved": saved,
         "snapshot_dates": [d.isoformat() for d in snapshot_dates],
     }), 200
+
 
 
 @inventory_bp.route("/amazon_api/inventory/aged/columns", methods=["GET"])
