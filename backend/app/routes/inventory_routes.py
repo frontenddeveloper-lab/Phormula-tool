@@ -16,6 +16,7 @@ from flask import request, jsonify, Blueprint
 from sqlalchemy.dialects.postgresql import insert, insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from app import db
+from sqlalchemy import delete
 from app.models.user_models import Inventory, CountryProfile, MonthwiseInventory , InventoryAged
 from app.routes.amazon_api_routes import amazon_client, _apply_region_and_marketplace_from_request
 from config import Config
@@ -590,165 +591,17 @@ def _upsert_inventory_rows(rows: list[dict], user_id: int | None) -> int:
 
 # ----------------------------------- Route -----------------------------------
 
-# @inventory_bp.route("/amazon_api/inventory", methods=["GET"])
-# def inventory_all():
-#     """
-#     Fetch FBA inventory summaries (with details) for the given marketplace,
-#     enrich with Catalog titles AND inventory age (via GET_FBA_INVENTORY_PLANNING_DATA
-#     / FBA Manage Inventory Health Report), and upsert into the `inventory` table.
-#     """
-
-#     # --- auth ---
-#     auth_header = request.headers.get("Authorization")
-#     user_id = None
-#     if auth_header and auth_header.startswith("Bearer "):
-#         token = auth_header.split(" ")[1]
-#         try:
-#             payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-#             user_id = payload.get("user_id")
-#         except jwt.ExpiredSignatureError:
-#             return jsonify({"error": "Token has expired"}), 401
-#         except jwt.InvalidTokenError:
-#             return jsonify({"error": "Invalid token"}), 401
-
-#     _apply_region_and_marketplace_from_request()
-
-#     if amazon_client.marketplace_id not in amazon_client.ALLOWED_MARKETPLACES:
-#         return jsonify({"success": False, "error": "Unsupported marketplace"}), 400
-
-#     mp = request.args.get("marketplace_id", amazon_client.marketplace_id)
-#     store_in_db = request.args.get("store_in_db", "true").lower() != "false"
-#     refresh_names = request.args.get("refresh_names", "false").lower() == "true"
-#     skip_age_report = request.args.get("skip_age_report", "false").lower() == "true"
-
-#     # --- 1) fetch inventory summaries ---
-#     rows = _fetch_fba_inventory_summaries(mp)
-
-#     # --- 2) fetch inventory health/age data and attach inventory_age_days ---
-#     inventory_age_notice = None
-
-#     if not skip_age_report:
-#         try:
-#             age_by_sku = _fetch_inventory_age_by_sku(mp)
-#             if not age_by_sku:
-#                 inventory_age_notice = (
-#                     "Inventory health/age report failed or returned no data. "
-#                     "This may be due to Amazon API issues. "
-#                     "Inventory age data will be set to 0. "
-#                     "You can retry this request later or use skip_age_report=true "
-#                     "to skip this step."
-#                 )
-#             else:
-#                 for r in rows:
-#                     sku = r.get("seller_sku")
-#                     r["inventory_age_days"] = age_by_sku.get(sku, 0)
-
-#         except Exception as e:
-#             logger.error("Failed to fetch inventory health/age report: %s", e, exc_info=True)
-#             inventory_age_notice = (
-#                 f"Error fetching inventory age data: {str(e)}. "
-#                 "Inventory age will be set to 0."
-#             )
-#     else:
-#         logger.info("Skipping inventory health/age report as requested")
-#         inventory_age_notice = "Inventory health/age report skipped per request parameter."
-
-#     out = {
-#         "success": True,
-#         "marketplace_id": mp,
-#         "count": len(rows),
-#         "items": rows,
-#         "db": {"saved_inventory": 0},
-#     }
-#     if inventory_age_notice:
-#         out["inventory_age_notice"] = inventory_age_notice
-
-#     # --- 3) persist ---
-#     if store_in_db and rows:
-#         try:
-#             saved = _upsert_inventory_rows(rows, user_id)
-#             out["db"]["saved_inventory"] = saved
-#         except Exception as e:
-#             logger.exception("Failed to upsert inventory rows")
-#             out["db"]["error"] = str(e)
-
-#     if refresh_names:
-#         try:
-#             updated = backfill_inventory_product_names(mp)
-#             out["db"]["backfilled_names"] = updated
-#         except Exception as e:
-#             out["db"]["backfill_error"] = str(e)
-
-#     if not rows:
-#         out["empty_message"] = "No inventory found for this seller account."
-
-#     return jsonify(out), 200
-
-class AmazonClient:
-    ALLOWED_MARKETPLACES = {
-        "ATVPDKIKX0DER",   # US
-        "A1F83G8C2ARO7P",  # UK
-        "A1PA6795UKMFR9",  # DE
-        "A13V1IB3VIYZZH",  # FR
-    }
-
-    marketplace_id = "ATVPDKIKX0DER"
-
-amazon_client = AmazonClient()
-
-# ------------------------------------------------------------------
-# Helpers (replace with real implementations)
-# ------------------------------------------------------------------
-def _apply_region_and_marketplace_from_request():
-    mp = request.args.get("marketplace_id")
-    if mp:
-        amazon_client.marketplace_id = mp
-
-def _fetch_fba_inventory_summaries(marketplace_id):
-    # 🔹 Replace with SP-API FBA Inventory call
-    return [
-        {
-            "seller_sku": "SKU-UK-001",
-            "asin": "B0TEST123",
-            "available_quantity": 12
-        },
-        {
-            "seller_sku": "SKU-UK-002",
-            "asin": "B0TEST456",
-            "available_quantity": 4
-        }
-    ]
-
-def _fetch_inventory_age_by_sku(marketplace_id):
-    # 🔹 Replace with Inventory Health / Age report
-    return {
-        "SKU-UK-001": 28,
-        "SKU-UK-002": 61
-    }
-
-def _upsert_inventory_rows(rows, user_id):
-    # 🔹 Replace with DB logic
-    logger.info("Saving %d rows for user %s", len(rows), user_id)
-    return len(rows)
-
-def backfill_inventory_product_names(marketplace_id):
-    # 🔹 Replace with Catalog Items API
-    return 2
-
-# ------------------------------------------------------------------
-# Route
-# ------------------------------------------------------------------
 @inventory_bp.route("/amazon_api/inventory", methods=["GET"])
 def inventory_all():
     """
-    Fetch FBA inventory summaries, enrich with inventory age,
-    and optionally store in DB.
+    Fetch FBA inventory summaries (with details) for the given marketplace,
+    enrich with Catalog titles AND inventory age (via GET_FBA_INVENTORY_PLANNING_DATA
+    / FBA Manage Inventory Health Report), and upsert into the `inventory` table.
     """
 
-    # ------------------- AUTH -------------------
+    # --- auth ---
     auth_header = request.headers.get("Authorization")
     user_id = None
-
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
         try:
@@ -758,29 +611,21 @@ def inventory_all():
             return jsonify({"error": "Token has expired"}), 401
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
-    else:
-        return jsonify({"error": "Authorization header missing"}), 401
 
-    # ------------------- MARKETPLACE -------------------
     _apply_region_and_marketplace_from_request()
 
     if amazon_client.marketplace_id not in amazon_client.ALLOWED_MARKETPLACES:
-        return jsonify({
-            "success": False,
-            "error": "Unsupported marketplace",
-            "marketplace_id": amazon_client.marketplace_id
-        }), 400
+        return jsonify({"success": False, "error": "Unsupported marketplace"}), 400
 
-    mp = amazon_client.marketplace_id
-
-    # ------------------- QUERY PARAMS -------------------
+    mp = request.args.get("marketplace_id", amazon_client.marketplace_id)
     store_in_db = request.args.get("store_in_db", "true").lower() != "false"
     refresh_names = request.args.get("refresh_names", "false").lower() == "true"
     skip_age_report = request.args.get("skip_age_report", "false").lower() == "true"
 
-    # ------------------- FETCH INVENTORY -------------------
+    # --- 1) fetch inventory summaries ---
     rows = _fetch_fba_inventory_summaries(mp)
 
+    # --- 2) fetch inventory health/age data and attach inventory_age_days ---
     inventory_age_notice = None
 
     if not skip_age_report:
@@ -788,57 +633,58 @@ def inventory_all():
             age_by_sku = _fetch_inventory_age_by_sku(mp)
             if not age_by_sku:
                 inventory_age_notice = (
-                    "Inventory age report returned no data. "
-                    "inventory_age_days set to 0."
+                    "Inventory health/age report failed or returned no data. "
+                    "This may be due to Amazon API issues. "
+                    "Inventory age data will be set to 0. "
+                    "You can retry this request later or use skip_age_report=true "
+                    "to skip this step."
                 )
             else:
                 for r in rows:
                     sku = r.get("seller_sku")
                     r["inventory_age_days"] = age_by_sku.get(sku, 0)
-        except Exception as e:
-            logger.exception("Inventory age fetch failed")
-            inventory_age_notice = str(e)
-            for r in rows:
-                r["inventory_age_days"] = 0
-    else:
-        inventory_age_notice = "Inventory age report skipped."
 
-    # ------------------- RESPONSE -------------------
-    response = {
+        except Exception as e:
+            logger.error("Failed to fetch inventory health/age report: %s", e, exc_info=True)
+            inventory_age_notice = (
+                f"Error fetching inventory age data: {str(e)}. "
+                "Inventory age will be set to 0."
+            )
+    else:
+        logger.info("Skipping inventory health/age report as requested")
+        inventory_age_notice = "Inventory health/age report skipped per request parameter."
+
+    out = {
         "success": True,
         "marketplace_id": mp,
-        "user_id": user_id,
         "count": len(rows),
         "items": rows,
-        "db": {
-            "saved_inventory": 0
-        }
+        "db": {"saved_inventory": 0},
     }
-
     if inventory_age_notice:
-        response["inventory_age_notice"] = inventory_age_notice
+        out["inventory_age_notice"] = inventory_age_notice
 
-    # ------------------- DB SAVE -------------------
+    # --- 3) persist ---
     if store_in_db and rows:
         try:
             saved = _upsert_inventory_rows(rows, user_id)
-            response["db"]["saved_inventory"] = saved
+            out["db"]["saved_inventory"] = saved
         except Exception as e:
-            logger.exception("DB upsert failed")
-            response["db"]["error"] = str(e)
+            logger.exception("Failed to upsert inventory rows")
+            out["db"]["error"] = str(e)
 
-    # ------------------- NAME BACKFILL -------------------
     if refresh_names:
         try:
             updated = backfill_inventory_product_names(mp)
-            response["db"]["backfilled_names"] = updated
+            out["db"]["backfilled_names"] = updated
         except Exception as e:
-            response["db"]["backfill_error"] = str(e)
+            out["db"]["backfill_error"] = str(e)
 
     if not rows:
-        response["empty_message"] = "No inventory found."
+        out["empty_message"] = "No inventory found for this seller account."
 
-    return jsonify(response), 200
+    return jsonify(out), 200
+
 
 # --------------------------------------------- helpers ------------------------------------------
 
@@ -1064,13 +910,14 @@ def _attach_sku_product_names(objs: list["InventoryAged"], user_id: int | None) 
 def sync_inventory_aged():
     """
     Fetch GET_FBA_INVENTORY_PLANNING_DATA and store into inventory_aged.
-    Each row is tagged with user_id and product_name is taken from
-    public.sku_{user_id}_data_table (sku_uk → sku).
+    Old data for same snapshot_date + user_id + marketplace is deleted
+    before inserting new rows (prevents duplicates).
     """
 
-    # --- auth (same as inventory_all) ---
+    # ---------------- AUTH ----------------
     auth_header = request.headers.get("Authorization")
     user_id = None
+
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
         try:
@@ -1081,14 +928,20 @@ def sync_inventory_aged():
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
 
-    # decide marketplace
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # ---------------- MARKETPLACE ----------------
     _apply_region_and_marketplace_from_request()
+
     if amazon_client.marketplace_id not in amazon_client.ALLOWED_MARKETPLACES:
         return jsonify({"success": False, "error": "Unsupported marketplace"}), 400
 
     mp = request.args.get("marketplace_id", amazon_client.marketplace_id)
 
     logger.info("Starting InventoryAged sync for marketplace %s", mp)
+
+    # ---------------- REQUEST REPORT ----------------
     report_id = _request_inventory_age_report(mp)
     if not report_id:
         return jsonify({
@@ -1110,6 +963,7 @@ def sync_inventory_aged():
             "error": "Failed to download inventory health report document",
         }), 502
 
+    # ---------------- PARSE TSV ----------------
     text_content = content.decode("utf-8-sig", errors="replace")
     f = io.StringIO(text_content)
     reader = csv.DictReader(f, delimiter="\t")
@@ -1122,21 +976,46 @@ def sync_inventory_aged():
 
     objs: list[InventoryAged] = []
     rows_count = 0
-    snapshot_dates = set()
+    snapshot_dates: set[date] = set()
 
     for row in reader:
         rows_count += 1
+
         inv = _row_to_inventory_aged(row)
-        if not inv.sku:
+        if not inv or not inv.sku:
             continue
-        inv.user_id = user_id          # 👈 tag the row with user_id
+
+        inv.user_id = user_id
+        inv.marketplace = mp
+
         objs.append(inv)
+
         if inv.snapshot_date:
             snapshot_dates.add(inv.snapshot_date)
 
-    # overwrite product_name using sku_{user_id}_data_table
+    # ---------------- DELETE OLD DATA (CRITICAL FIX) ----------------
+    try:
+        if snapshot_dates:
+            db.session.execute(
+                delete(InventoryAged).where(
+                    InventoryAged.user_id == user_id,
+                    InventoryAged.marketplace == mp,
+                    InventoryAged.snapshot_date.in_(snapshot_dates)
+                )
+            )
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.exception("Failed to delete old InventoryAged data")
+        return jsonify({
+            "success": False,
+            "error": f"Failed to cleanup old data: {str(e)}",
+        }), 500
+
+    # ---------------- ATTACH PRODUCT NAMES ----------------
     _attach_sku_product_names(objs, user_id)
 
+    # ---------------- INSERT NEW DATA ----------------
     try:
         if objs:
             db.session.bulk_save_objects(objs)
@@ -1159,6 +1038,7 @@ def sync_inventory_aged():
         "rows_saved": saved,
         "snapshot_dates": [d.isoformat() for d in snapshot_dates],
     }), 200
+
 
 
 @inventory_bp.route("/amazon_api/inventory/aged/columns", methods=["GET"])
@@ -1188,7 +1068,7 @@ def get_inventory_aged_selected_columns():
     q = InventoryAged.query.filter(InventoryAged.user_id == user_id)
 
     if marketplace_id:
-        q = q.filter(InventoryAged.marketplace_id == marketplace_id)
+        q = q.filter(InventoryAged.marketplace == marketplace_id)
 
     if latest:
         latest_date = (
@@ -1216,11 +1096,11 @@ def get_inventory_aged_selected_columns():
             "condition": getattr(r, "condition", None),
             "available": getattr(r, "available", 0),
             "pending-removal-quantity": getattr(r, "pending_removal_quantity", 0),
-            "inv-age-0-to-90-days": getattr(r, "inv_age_0_to_90_days", 0),
-            "inv-age-91-to-180-days": getattr(r, "inv_age_91_to_180_days", 0),
-            "inv-age-181-to-270-days": getattr(r, "inv_age_181_to_270_days", 0),
-            "inv-age-271-to-365-days": getattr(r, "inv_age_271_to_365_days", 0),
-            "inv-age-365-plus-days": getattr(r, "inv_age_365_plus_days", 0),
+            "inv-age-0-to-90-days": getattr(r, "inv_age_0_90", 0),
+            "inv-age-91-to-180-days": getattr(r, "inv_age_91_180", 0),
+            "inv-age-181-to-270-days": getattr(r, "inv_age_181_270", 0),
+            "inv-age-271-to-365-days": getattr(r, "inv_age_271_365", 0),
+            "inv-age-365-plus-days": getattr(r, "inv_age_365_plus", 0),
             "currency": getattr(r, "currency", None),
             "estimated-storage-cost-next-month": getattr(r, "estimated_storage_cost_next_month", 0.0),
         })
@@ -1235,18 +1115,18 @@ def get_inventory_aged_selected_columns():
 @inventory_bp.route("/country-profile", methods=["POST"])
 def upsert_country_profile():
     # ---- Auth (JWT Bearer) ----
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return jsonify({"error": "Authorization token is missing or invalid"}), 401
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization token is missing or invalid'}), 401
 
-    token = auth_header.split(" ")[1]
+    token = auth_header.split(' ')[1]
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        user_id = payload["user_id"]
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
     except jwt.ExpiredSignatureError:
-        return jsonify({"error": "Token has expired"}), 401
+        return jsonify({'error': 'Token has expired'}), 401
     except jwt.InvalidTokenError:
-        return jsonify({"error": "Invalid token"}), 401
+        return jsonify({'error': 'Invalid token'}), 401
 
     # ---- Input JSON ----
     data = request.get_json(silent=True) or {}
@@ -1257,12 +1137,10 @@ def upsert_country_profile():
 
     # ---- Validation ----
     errors = {}
-
     if not country:
         errors["country"] = "country is required"
     if not marketplace:
         errors["marketplace"] = "marketplace is required"
-
     try:
         transit_time = int(transit_time)
         if transit_time <= 0:
@@ -1280,77 +1158,47 @@ def upsert_country_profile():
     if errors:
         return jsonify({"errors": errors}), 400
 
-    # ---- Normalize (prevents accidental duplicates) ----
-    country = country.lower()
-    marketplace = marketplace.lower()
-
-    # ---- Upsert: update ONLY transit_time & stock_unit for same user_id+country+marketplace ----
+    # ---- Upsert ----
     try:
+        profile = CountryProfile.query.filter_by(
+            user_id=user_id,
+            country=country,
+            marketplace=marketplace
+        ).first()
+
         created = False
-
-        # Prefer updating the placeholder row (0,0) if it exists
-        profile = (
-            CountryProfile.query.filter(
-                CountryProfile.user_id == user_id,
-                CountryProfile.country == country,
-                CountryProfile.marketplace == marketplace,
-                CountryProfile.transit_time == 0,
-                CountryProfile.stock_unit == 0,
-            )
-            .order_by(CountryProfile.id.asc())
-            .first()
-        )
-
-        # Otherwise update the latest existing row for the same key
-        if profile is None:
-            profile = (
-                CountryProfile.query.filter(
-                    CountryProfile.user_id == user_id,
-                    CountryProfile.country == country,
-                    CountryProfile.marketplace == marketplace,
-                )
-                .order_by(CountryProfile.id.desc())
-                .first()
-            )
-
-        # If none exists at all, create one
         if profile is None:
             profile = CountryProfile(
                 user_id=user_id,
                 country=country,
                 marketplace=marketplace,
                 transit_time=transit_time,
-                stock_unit=stock_unit,
+                stock_unit=stock_unit
             )
             db.session.add(profile)
             created = True
         else:
-            # Only update these two fields
             profile.transit_time = transit_time
             profile.stock_unit = stock_unit
 
         db.session.commit()
 
-        return (
-            jsonify(
-                {
-                    "created": created,
-                    "profile": {
-                        "id": profile.id,
-                        "user_id": profile.user_id,
-                        "country": profile.country,
-                        "marketplace": profile.marketplace,
-                        "transit_time": profile.transit_time,
-                        "stock_unit": profile.stock_unit,
-                    },
-                }
-            ),
-            201 if created else 200,
-        )
+        return jsonify({
+            "created": created,
+            "profile": {
+                "id": profile.id,
+                "user_id": profile.user_id,
+                "country": profile.country,
+                "marketplace": profile.marketplace,
+                "transit_time": profile.transit_time,
+                "stock_unit": profile.stock_unit
+            }
+        }), 201 if created else 200
 
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": "Database error", "detail": str(e)}), 500
+    
 #------------------------------------------------------------------------------ MonthwiseInventory upsert logic --------------------------------------
 
 def _upsert_monthwise_inventory_rows(

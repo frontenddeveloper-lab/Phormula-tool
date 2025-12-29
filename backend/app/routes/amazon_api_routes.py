@@ -346,165 +346,6 @@ class AmazonSPAPIClient:
      
     
 
-    # def make_api_call(
-    #     self,
-    #     endpoint: str,
-    #     method: str = "GET",
-    #     params: Optional[Dict[str, Any]] = None,
-    #     data: Optional[Dict[str, Any]] = None,
-    #     max_retries: int = 3,
-    # ) -> Dict[str, Any]:
-    #     token = self.get_access_token()
-    #     if not token:
-    #         return {"error": "No access token"}
-
-    #     base = f"{self.api_base_url}{endpoint}"
-    #     qs = urllib.parse.urlencode(params or {}, doseq=True, safe=":,")
-    #     url = f"{base}?{qs}" if qs else base
-
-    #     headers = {
-    #         "host": urllib.parse.urlparse(url).netloc,
-    #         "x-amz-access-token": token,
-    #         "user-agent": f"YourApp/1.0 (Python; region={self.region})",
-    #     }
-    #     body = json.dumps(data) if data else ""
-    #     if method.upper() != "GET":
-    #         headers["content-type"] = "application/json"
-
-    #     def _format_error_response(resp: requests.Response) -> Dict[str, Any]:
-    #         try:
-    #             j = resp.json()
-    #         except Exception:
-    #             j = None
-
-    #         # 🔹 Request ID from response headers
-    #         amzn_request_id = (
-    #             resp.headers.get("x-amzn-RequestId")
-    #             or resp.headers.get("x-amz-request-id")
-    #         )
-
-    #         # 🔹 Request timestamp (when WE made the call)
-    #         # (Note: we’ll compute it outside and pass in via closure)
-    #         return {
-    #             "error": "UpstreamError",
-    #             "status_code": resp.status_code,
-    #             "amzn_error_type": resp.headers.get("x-amzn-ErrorType"),
-    #             "amzn_request_id": amzn_request_id,
-    #             "response_json": j,
-    #             "response_text": (None if j is not None else resp.text),
-    #             "method": method.upper(),
-    #             "url": url,
-    #             "endpoint": endpoint,
-    #             "params": params,
-    #             "data": data,
-    #             "timestamp": request_timestamp,   # <- our request timestamp
-    #         }
-
-    #     for attempt in range(1, max_retries + 1):
-    #         # 🔹 Timestamp for this attempt
-    #         request_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-
-
-    #         try:
-    #             signed = self.sign_request(method, url, headers, body)
-    #             if method.upper() == "GET":
-    #                 resp = requests.get(url, headers=signed, timeout=30)
-    #             elif method.upper() == "DELETE":
-    #                 resp = requests.delete(url, headers=signed, timeout=30)
-    #             else:
-    #                 resp = requests.post(url, headers=signed, data=body, timeout=30)
-
-    #             # 🔹 Extract Request ID from SUCCESS or ERROR responses
-    #             amzn_request_id = (
-    #                 resp.headers.get("x-amzn-RequestId")
-    #                 or resp.headers.get("x-amz-request-id")
-    #             )
-
-    #             if resp.status_code in (429, 503) and attempt < max_retries:
-    #                 time.sleep(2 ** attempt)
-    #                 continue
-
-    #             if resp.status_code in (401, 403) and attempt == 1:
-    #                 self._access_token = None
-    #                 headers["x-amz-access-token"] = self.get_access_token() or ""
-    #                 continue
-
-    #             if 200 <= resp.status_code < 300:
-    #                 # ✅ SUCCESS: add meta info but keep the original payload structure
-    #                 try:
-    #                     payload = resp.json()
-    #                 except Exception:
-    #                     # If no JSON, still return meta
-    #                     return {
-    #                         "status_code": resp.status_code,
-    #                         "ok": True,
-    #                         "amzn_request_id": amzn_request_id,
-    #                         "timestamp": request_timestamp,
-    #                         "method": method.upper(),
-    #                         "url": url,
-    #                         "endpoint": endpoint,
-    #                         "params": params,
-    #                         "data": data,
-    #                         "response_text": resp.text,
-    #                     }
-
-    #                 if isinstance(payload, dict):
-    #                     # Attach meta under a reserved key to avoid breaking `.get("payload")`
-    #                     meta = payload.setdefault("_meta", {})
-    #                     meta.update(
-    #                         {
-    #                             "status_code": resp.status_code,
-    #                             "amzn_request_id": amzn_request_id,
-    #                             "timestamp": request_timestamp,
-    #                             "method": method.upper(),
-    #                             "url": url,
-    #                             "endpoint": endpoint,
-    #                             "params": params,
-    #                             "data": data,
-    #                         }
-    #                     )
-    #                     return payload
-    #                 else:
-    #                     # Non-dict JSON (list, etc.)
-    #                     return {
-    #                         "payload": payload,
-    #                         "_meta": {
-    #                             "status_code": resp.status_code,
-    #                             "amzn_request_id": amzn_request_id,
-    #                             "timestamp": request_timestamp,
-    #                             "method": method.upper(),
-    #                             "url": url,
-    #                             "endpoint": endpoint,
-    #                             "params": params,
-    #                             "data": data,
-    #                         },
-    #                     }
-
-    #             # ❌ Non-2xx -> error formatter (includes request_id & timestamp)
-    #             err = _format_error_response(resp)
-    #             logger.warning(
-    #                 "SP-API %s %s -> %s | %s | request_id=%s",
-    #                 method.upper(),
-    #                 endpoint,
-    #                 resp.status_code,
-    #                 err.get("response_json") or err.get("response_text"),
-    #                 err.get("amzn_request_id"),
-    #             )
-    #             return err
-
-    #         except requests.RequestException as e:
-    #             if attempt == max_retries:
-    #                 return {
-    #                     "error": "RequestException",
-    #                     "message": str(e),
-    #                     "method": method.upper(),
-    #                     "url": url,
-    #                     "timestamp": request_timestamp,
-    #                 }
-    #             time.sleep(2 ** attempt)
-
-    #     return {"error": "Unknown"}
-
 
 amazon_client = AmazonSPAPIClient()
 
@@ -1123,15 +964,18 @@ def run_upload_pipeline_from_df(
     if "price" in df.columns:
         df.drop(columns=["price"], inplace=True)
 
-    # Remove commas in object columns (safe)
+    # Remove commas in object columns (SAFE: does NOT convert None/NaN to "None"/"nan")
     for col in df.columns:
         if df[col].dtype == "object":
-            try:
-                df[col] = df[col].astype(str).str.replace(",", "", regex=False)
-            except Exception:
-                pass
+            df[col] = df[col].apply(
+                lambda x: x.replace(",", "") if isinstance(x, str) else x
+            )
 
-    df = df.apply(lambda x: pd.to_numeric(x, errors="ignore") if x.dtype == "object" else x)
+    # Keep numeric coercion logic
+    df = df.apply(
+        lambda x: pd.to_numeric(x, errors="ignore") if x.dtype == "object" else x
+    )
+
 
     # consolidated
     df_cons = df.copy()
@@ -2787,12 +2631,13 @@ def fetch_conversion_rate(country: str, year: int, month_name: str,
 
     with ADMIN_ENGINE.connect() as conn:
         row = conn.execute(sql, {
-            "country": (country or "").lower(),
+            "country": (country or "").strip().lower(),
             "year": int(year),
-            "month": (month_name or "").lower(),
-            "user_currency": (user_currency or "").upper(),
-            "selected_currency": (selected_currency or "").upper(),
+            "month": (month_name or "").strip().lower(),
+            "user_currency": (user_currency or "").strip().lower(),
+            "selected_currency": (selected_currency or "").strip().lower(),
         }).fetchone()
+
 
     try:
         return float(row[0]) if row and row[0] is not None else 1.0
@@ -3166,6 +3011,7 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
 
     cm2_profit = float(profit_total) - advertising_fee_total - platform_fee_total
     profit_percentage = (cm2_profit / net_sales_total * 100) if net_sales_total else 0.0
+    previous_net_reimbursement = compute_net_reimbursement_from_df(df)
 
     prev_totals = {
         "quantity": round(quantity_total, 2),
@@ -3179,6 +3025,8 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
         "platform_fee": round(platform_fee_total, 2),
         "advertising_fees": round(advertising_fee_total, 2),
         "cm2_profit": round(cm2_profit, 2),
+        # ✅ NEW
+        "previous_net_reimbursement": round(previous_net_reimbursement, 2),
     }
 
     # -------------------------
@@ -3229,6 +3077,34 @@ def get_previous_month_mtd_payload(user_id: int, country: str, now_utc: datetime
         "totals": prev_totals,      # ✅ total only
         "sku_metrics": sku_metrics, # keep if you need per-sku table
     }
+
+
+def compute_net_reimbursement_from_df(df: pd.DataFrame) -> float:
+    """
+    Net reimbursement = sum(Transfer/Disbursement totals) - abs(sum(DebtRecovery totals))
+    Adjust if your DebtRecovery totals are already negative (then abs() is still safe).
+    """
+    if df is None or df.empty:
+        return 0.0
+
+    tmp = df.copy()
+
+    # ensure cols exist
+    for col, default in [("type", ""), ("description", ""), ("total", 0.0)]:
+        if col not in tmp.columns:
+            tmp[col] = default
+
+    t = tmp["type"].astype(str).str.strip().str.lower()
+    d = tmp["description"].astype(str).str.strip().str.lower()
+    tot = safe_num(tmp["total"])
+
+    disb = float(tot[(t == "transfer") & (d == "disbursement")].sum())
+
+    # If you only want DebtRecovery/DebtPayment specifically, add (d=="debtpayment") too
+    debt = float(tot[t == "debtrecovery"].sum())
+
+    net = disb - abs(debt)
+    return float(net or 0.0)
 
 
 # ---------------------------------------------------------
@@ -3392,6 +3268,8 @@ def finances_mtd_transactions():
     advertising_fee_total = float(advertising_fee_total or 0.0)
     cm2_profit = profit - advertising_fee_total - platform_fee_total
     profit_percentage = (cm2_profit / net_sales * 100) if net_sales else 0.0
+    current_net_reimbursement = compute_net_reimbursement_from_df(df_all)
+
 
 
 
@@ -3405,6 +3283,9 @@ def finances_mtd_transactions():
         "profit": round(profit, 2),
         "cm2_profit": round(cm2_profit, 2),   
         "profit_percentage": round(profit_percentage, 2),
+        # ✅ NEW
+        "current_net_reimbursement": round(current_net_reimbursement, 2),
+
     }
 
 

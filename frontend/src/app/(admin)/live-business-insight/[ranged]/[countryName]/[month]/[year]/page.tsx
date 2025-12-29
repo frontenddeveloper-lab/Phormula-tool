@@ -15,6 +15,7 @@ import Loader from '@/components/loader/Loader';
 import DataTable, { ColumnDef } from '@/components/ui/table/DataTable';
 import DownloadIconButton from '@/components/ui/button/DownloadIconButton';
 import SegmentedToggle from '@/components/ui/SegmentedToggle';
+import { AiButton } from '@/components/ui/button/AiButton';
 
 // import DataTable, { ColumnDef, Row as DataTableRow } from '@/components/DataTable'; 
 
@@ -2106,6 +2107,14 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                       {loadingInsight ? 'Generating...' : 'AI Insights'}
                     </button>
 
+                    {/* <AiButton
+                      onClick={analyzeSkus}
+                      disabled={!hasAnySkus}
+                      loading={loadingInsight}
+                    >
+                      AI Insights
+                    </AiButton> */}
+
                     {/* <button
                       onClick={() => {
                         const prevShortName = prevShort || 'Prev';
@@ -2164,13 +2173,14 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 14,
+                    gap: 42,            
                     flexWrap: 'wrap',
                     fontSize: 14,
                     color: '#414042',
                     marginTop: 6,
                   }}
                 >
+
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#5EA68E', fontWeight: 700 }}>
                       <FaArrowUp size={12} /> High growth

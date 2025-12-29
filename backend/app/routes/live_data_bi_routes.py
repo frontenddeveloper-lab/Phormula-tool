@@ -623,10 +623,16 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
     def _calc_fees_from_liveorders(day_df: pd.DataFrame) -> tuple[float, float]:
         """
         Returns (platform_fee, advertising) as POSITIVE numbers.
-        Uses type/description patterns visible in your sample:
-          - ProductAdsPayment -> advertising
-          - ServiceFee / disposal / storage / fee -> platform_fee bucket
-        Excludes Transfer/Disbursement (cash movement) and Order Payment (sales).
+
+        Advertising (per your samples):
+        - ProductAdsPayment
+        - SellerDealPayment / SellerDealComplete
+        - CouponParticipationEvent / CouponPerformanceEvent (these are ServiceFee rows)
+
+        Platform fees:
+        - FBA storage / disposal / long-term storage
+        - Subscription
+        - Other operational Amazon fees (referral/commission etc.)
         """
         if day_df is None or day_df.empty:
             return 0.0, 0.0
@@ -642,24 +648,33 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
             | d.str.contains("order payment", na=False)
         )
 
-        # advertising patterns (your sample: ProductAdsPayment)
+        # --- Advertising bucket ---
+        # Matches your examples:
+        # ProductAdsPayment, SellerDealPayment/SellerDealComplete,
+        # ServiceFee CouponParticipationEvent/CouponPerformanceEvent
         is_ads = (
-            t.str.contains("productadspayment|ads|advert", na=False)
-            | d.str.contains("productadspayment|ads|advert", na=False)
-            | t.str.contains("sponsored", na=False)
-            | d.str.contains("sponsored", na=False)
+            t.str.contains(r"productadspayment|sellerdealpayment", na=False)
+            | d.str.contains(r"productadspayment|sellerdealcomplete", na=False)
+            | d.str.contains(r"couponparticipationevent|couponperformanceevent", na=False)
+            | d.str.contains(r"\bcoupon\b", na=False)  # optional: keeps coupon-related fees in ads
         ) & (~ignore)
 
-        # platform fee patterns (your sample: ServiceFee + FBADisposal)
+        # --- Platform fee bucket ---
+        # Matches your examples:
+        # FBADisposal, FBAStorageBilling, Subscription, FBALongTermStorageBilling
+        # (and other typical Amazon platform fees)
         is_platform_fee = (
-            t.str.contains("servicefee|fee", na=False)
-            | d.str.contains("fee|fba|disposal|storage|commission|referral", na=False)
+            (t.str.contains("servicefee", na=False) | d.str.contains(r"\bfee\b", na=False))
+            & d.str.contains(
+                r"fba|storage|disposal|subscription|longterm|long term|referral|commission",
+                na=False
+            )
         ) & (~ignore) & (~is_ads)
 
-        # sum signed amounts, return as positive expense
         ads_total = float(np.nansum(amt[is_ads].values))
-        pf_total = float(np.nansum(amt[is_platform_fee].values))
+        pf_total  = float(np.nansum(amt[is_platform_fee].values))
 
+        # return as positive expenses
         return abs(pf_total), abs(ads_total)
 
     # ----------------------------

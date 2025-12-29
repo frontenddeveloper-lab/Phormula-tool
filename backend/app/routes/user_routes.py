@@ -30,9 +30,6 @@ db_url = os.getenv('DATABASE_URL')
 db_url1= os.getenv('DATABASE_ADMIN_URL')
 
 
-
-
-
 user_bp = Blueprint('user', __name__)
 
 

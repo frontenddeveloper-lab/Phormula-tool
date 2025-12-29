@@ -18,6 +18,7 @@ import json
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import pmdarima as pm
 import re  # <-- added
+from multiprocessing import cpu_count
 
 
 
@@ -655,7 +656,7 @@ def classify_skus_from_inventory(user_id, country, mv, year, engine, sales_df=No
 # ============================== ARIMA (3-MONTH FORECAST with DEBUG LOGS) ==============================
 def forecast_next_two_months_with_append(sku_id, data, global_last_training_month=None):
     """
-    ARIMA generates exactly 3 months after the requested month.
+    ACCURACY VERSION B2 (model.fit on updated data, NO auto_arima search)
     """
     try:
         from pmdarima import auto_arima
@@ -670,13 +671,8 @@ def forecast_next_two_months_with_append(sku_id, data, global_last_training_mont
         sku_data = sku_data.resample('D').sum()
         sku_data['quantity'] = sku_data['quantity'].interpolate(method='linear').fillna(0)
 
-        last_obs_dt = sku_data.index.max()
-        print("\n[ARIMA] ==============================")
-        print(f"[ARIMA] SKU: {sku_id}")
-        print(f"[ARIMA] Last observed date: {last_obs_dt.strftime('%d-%b-%Y')}")
-
-        # Fit ARIMA
-        print(f"[ARIMA] Fitting model for {sku_id}...")
+        # Fit auto_arima ONCE to discover params
+        print(f"[ARIMA] Fitting auto_arima once for SKU: {sku_id}")
         auto_model = auto_arima(
             sku_data['quantity'],
             seasonal=True,
@@ -684,27 +680,33 @@ def forecast_next_two_months_with_append(sku_id, data, global_last_training_mont
             suppress_warnings=True,
             stepwise=True
         )
-        model = auto_model.fit(sku_data['quantity'])
-        print(f"[ARIMA] Model fit complete for SKU: {sku_id}")
+
+        # Extract discovered order params
+        order = auto_model.order
+        seasonal_order = auto_model.seasonal_order
+
+        # Fit a model using discovered params
+        model = auto_model
 
         current_data = sku_data['quantity'].copy()
         last_training_date = current_data.index[-1]
+        last_obs_period = (
+            global_last_training_month
+            if global_last_training_month is not None
+            else last_training_date.to_period('M')
+        )
 
-        if global_last_training_month is None:
-            req_period = last_training_date.to_period('M')
-        else:
-            req_period = global_last_training_month
+        # Month labels
+        req_anchor = datetime(last_obs_period.year, last_obs_period.month, 1)
+        intended_labels = [month_label(add_months(req_anchor, i)) for i in range(1, 4)]
 
-        req_anchor_dt = datetime(req_period.year, req_period.month, 1)
-        intended_labels = [month_label(add_months(req_anchor_dt, i)) for i in range(1, 4)]
-        print(f"[ARIMA] Intended labels: {intended_labels}")
-
-        third_month_start = add_months(req_anchor_dt, 3)
+        # Forecast horizon
+        third_month_start = add_months(req_anchor, 3)
         end_of_third_month = add_months(third_month_start, 1) - pd.Timedelta(days=1)
-        days_needed = max(0, (end_of_third_month - last_training_date).days) + 1
-        print(f"[ARIMA] Horizon end: {end_of_third_month.strftime('%d-%b-%Y')} (days_needed={days_needed})")
+        days_needed = (end_of_third_month - last_training_date).days + 1
 
         full_forecast = []
+
         for i in range(days_needed):
             next_val = float(model.predict(n_periods=1)[0])
             next_val = max(next_val, 0.0)
@@ -713,51 +715,42 @@ def forecast_next_two_months_with_append(sku_id, data, global_last_training_mont
             current_data.loc[next_date] = next_val
             full_forecast.append((next_date, next_val))
 
+            # Re-fit using updated data — but WITHOUT auto_arima search
             model = auto_arima(
                 current_data,
                 seasonal=True,
                 trace=False,
-                error_action='ignore',
                 suppress_warnings=True,
-                stepwise=True
-            ).fit(current_data)
+                stepwise=True,
+                start_p=order[0], max_p=order[0],
+                start_q=order[2], max_q=order[2],
+                start_P=seasonal_order[0], max_P=seasonal_order[0],
+                start_Q=seasonal_order[2], max_Q=seasonal_order[2],
+                d=order[1], D=seasonal_order[1],
+            )
 
-            if (i + 1) in (1, 30, 60, 90) or (i + 1) % 30 == 0 or (i + 1) == days_needed:
-                print(f"[ARIMA] Rolling append progress for {sku_id}: {i + 1} day(s)")
-
+        # Build output
         forecast_df = pd.DataFrame(full_forecast, columns=['Date', 'Forecast']).set_index('Date')
-        forecast_df_filtered = forecast_df[forecast_df.index.to_period('M') > req_period]
+        forecast_df_filtered = forecast_df[forecast_df.index.to_period('M') > last_obs_period]
 
         monthly_summary = (
-            forecast_df_filtered
-            .resample('M')
-            .agg({'Forecast': 'sum'})
+            forecast_df_filtered.resample('M').sum()
+            .rename(columns={'Forecast': 'Forecast'})
             .reset_index()
-            .rename(columns={'Date': 'Month'})
         )
-
-        monthly_summary['label'] = monthly_summary['Month'].dt.strftime("%b'%y")
-        monthly_summary = monthly_summary.set_index('label')
-        monthly_summary = monthly_summary.reindex(intended_labels, fill_value=0.0).reset_index()
-        monthly_summary.rename(columns={'index': 'label'}, inplace=True)
-
-        monthly_summary['Month'] = pd.to_datetime(monthly_summary['label'].str.replace("'", "", regex=False), format="%b%y")
+        monthly_summary['label'] = monthly_summary['Date'].dt.strftime("%b'%y")
+        monthly_summary = monthly_summary.set_index('label').reindex(intended_labels, fill_value=0).reset_index()
+        monthly_summary['Month'] = pd.to_datetime(monthly_summary['label'].str.replace("'", ""), format="%b%y")
         monthly_summary['sku'] = sku_id
-
-        # 🔧 INT ROUNDING
         monthly_summary['Forecast'] = np.rint(monthly_summary['Forecast']).astype(int)
-
-        actual_months = monthly_summary['label'].tolist()
-        actual_vals = monthly_summary['Forecast'].tolist()
-        print(f"[ARIMA] Months: {actual_months}")
-        print(f"[ARIMA] Values: {actual_vals}")
-        print("[ARIMA] ==============================\n")
 
         return sku_id, monthly_summary[['Month', 'Forecast', 'sku']], sku_data
 
     except Exception as e:
         print(f"[ARIMA][ERROR] SKU {sku_id}: {e}")
         return None
+
+
 
 # ============================== HYBRID (window = (T+S)-4, min 1) ==============================
 def _hybrid_forecast_for_sku(sku_id, data, transit_time: int, stock_unit: int):
@@ -1083,11 +1076,10 @@ def call_chatgpt_adjudicator(lastN_months: list, arima_months: list, hybrid_mont
 
 
 
-import logging
     
 
 
-from sqlalchemy import text, inspect
+
 
 # --- put these imports near your other imports ---
 import re
@@ -1099,74 +1091,197 @@ def _norm_sku(x: str) -> str:
     # remove all whitespace and upper-case so joins are robust
     return re.sub(r"\s+", "", str(x)).upper()
 
-def fetch_and_merge_inventory_hotfix(forecast_totals: pd.DataFrame, engine1) -> pd.DataFrame:
-    """
-    Returns forecast_totals with a new column 'Inventory at Month End'
-    joined from Amazon DB inventory (latest snapshot per SKU).
-    """
-    print("\n" + "="*60)
-    print("INVENTORY DATA FETCH (hotfix: latest per SKU, no window)")
-    print("="*60)
 
-    sql_latest_per_sku = """
-        SELECT DISTINCT ON (seller_sku)
-               seller_sku AS "SKU",
-               fulfillable_quantity AS "Ending Warehouse Balance",
-               synced_at
-        FROM public.inventory
-        ORDER BY seller_sku, synced_at DESC
+def fetch_and_merge_inventory_monthwise_sellable(
+    forecast_totals: pd.DataFrame,
+    engine1,
+    *,
+    forecast_sku_col: str = "sku",
+    forecast_marketplace_col: str | None = None,   # e.g. "marketplace_id" if present in forecast_totals
+    inventory_date: str | None = None,             # e.g. "2025-10-31" to force a specific month-end snapshot
+) -> pd.DataFrame:
+    """
+    Adds 'Inventory at Month End' to forecast_totals by pulling inventory from
+    public.monthwise_inventory and using ONLY disposition='SELLABLE'.
+
+    Rules:
+    - Source table: public.monthwise_inventory (msku, disposition, ending_warehouse_balance, date, marketplace_id)
+    - Only SELLABLE rows
+    - If inventory_date is provided: use that exact snapshot date
+      else: pick the latest snapshot per key
+        * key = (msku) if forecast_marketplace_col is None
+        * key = (msku, marketplace_id) if forecast_marketplace_col is provided
+
+    Merge:
+    - Merge on normalized SKU (_norm_sku) always
+    - If forecast_marketplace_col is provided, also merge marketplace_id
     """
 
-    inv_df = pd.read_sql(text(sql_latest_per_sku), con=engine1)
+    print("\n" + "=" * 70)
+    print("INVENTORY MERGE (monthwise_inventory -> SELLABLE only)")
+    print("=" * 70)
+
+    # --- validate inputs ---
+    if forecast_sku_col not in forecast_totals.columns:
+        raise KeyError(f"forecast_totals missing SKU column '{forecast_sku_col}'")
+
+    if forecast_marketplace_col is not None and forecast_marketplace_col not in forecast_totals.columns:
+        raise KeyError(
+            f"forecast_totals missing marketplace column '{forecast_marketplace_col}'. "
+            f"Pass forecast_marketplace_col=None or fix the column name."
+        )
+
+    use_marketplace = forecast_marketplace_col is not None
+
+    # --- build SQL ---
+    # If inventory_date given, we don't need DISTINCT ON / ordering logic.
+    if inventory_date:
+        if use_marketplace:
+            sql = """
+                SELECT
+                    msku AS "SKU",
+                    marketplace_id AS "marketplace_id",
+                    ending_warehouse_balance AS "Ending Warehouse Balance",
+                    date AS snapshot_date
+                FROM public.monthwise_inventory
+                WHERE disposition = 'SELLABLE'
+                  AND date = :inv_date
+            """
+        else:
+            sql = """
+                SELECT
+                    msku AS "SKU",
+                    ending_warehouse_balance AS "Ending Warehouse Balance",
+                    date AS snapshot_date
+                FROM public.monthwise_inventory
+                WHERE disposition = 'SELLABLE'
+                  AND date = :inv_date
+            """
+        params = {"inv_date": inventory_date}
+
+    else:
+        # Latest snapshot per key
+        if use_marketplace:
+            sql = """
+                SELECT DISTINCT ON (msku, marketplace_id)
+                    msku AS "SKU",
+                    marketplace_id AS "marketplace_id",
+                    ending_warehouse_balance AS "Ending Warehouse Balance",
+                    date AS snapshot_date
+                FROM public.monthwise_inventory
+                WHERE disposition = 'SELLABLE'
+                ORDER BY msku, marketplace_id, date DESC
+            """
+        else:
+            sql = """
+                SELECT DISTINCT ON (msku)
+                    msku AS "SKU",
+                    ending_warehouse_balance AS "Ending Warehouse Balance",
+                    date AS snapshot_date
+                FROM public.monthwise_inventory
+                WHERE disposition = 'SELLABLE'
+                ORDER BY msku, date DESC
+            """
+        params = {}
+
+    # --- fetch inventory ---
+    inv_df = pd.read_sql(text(sql), con=engine1, params=params)
     print(f"[INV] Rows fetched: {len(inv_df)}")
     if not inv_df.empty:
         print("[INV] Sample:")
-        print(inv_df.head(10).to_string())
+        print(inv_df.head(10).to_string(index=False))
 
-    # Prepare inventory frame
-    inventory_totals = inv_df[['SKU', 'Ending Warehouse Balance']].copy()
-    inventory_totals.rename(columns={'SKU': 'sku'}, inplace=True)
-    inventory_totals['Ending Warehouse Balance'] = pd.to_numeric(
-        inventory_totals['Ending Warehouse Balance'], errors='coerce'
-    ).fillna(0).astype(int)
-    inventory_totals['sku_norm'] = inventory_totals['sku'].map(_norm_sku)
+    # --- prepare inventory frame ---
+    keep_cols = ["SKU", "Ending Warehouse Balance"] + (["marketplace_id"] if use_marketplace else [])
+    inventory_totals = inv_df[keep_cols].copy()
 
-    # Prepare forecast side
+    inventory_totals.rename(columns={"SKU": "sku"}, inplace=True)
+    inventory_totals["Ending Warehouse Balance"] = (
+        pd.to_numeric(inventory_totals["Ending Warehouse Balance"], errors="coerce")
+          .fillna(0)
+          .astype(int)
+    )
+
+    # Normalize SKU for robust matching
+    inventory_totals["sku_norm"] = inventory_totals["sku"].map(_norm_sku)
+
+    # --- prepare forecast frame ---
     out = forecast_totals.copy()
-    out['sku_norm'] = out['sku'].map(_norm_sku)
+    out["sku_norm"] = out[forecast_sku_col].map(_norm_sku)
 
-    # Quick diagnostics
-    print(f"[MERGE] Forecast SKUs (unique norm): {out['sku_norm'].nunique()}")
-    print(f"[MERGE] Inventory SKUs (unique norm): {inventory_totals['sku_norm'].nunique()}")
-    common = set(out['sku_norm']) & set(inventory_totals['sku_norm'])
+    # --- diagnostics ---
+    print(f"[MERGE] Forecast unique sku_norm: {out['sku_norm'].nunique()}")
+    print(f"[MERGE] Inventory unique sku_norm: {inventory_totals['sku_norm'].nunique()}")
+    common = set(out["sku_norm"]) & set(inventory_totals["sku_norm"])
     print(f"[MERGE] Common normalized SKUs: {len(common)}")
     if common:
         print(f"[MERGE] Example keys: {list(sorted(common))[:10]}")
 
-    # Merge on normalized key
-    out = out.merge(
-        inventory_totals[['sku_norm', 'Ending Warehouse Balance']],
-        on='sku_norm', how='left'
-    )
-    out.drop(columns=['sku_norm'], inplace=True)
-    out.rename(columns={'Ending Warehouse Balance': 'Inventory at Month End'}, inplace=True)
-    out['Inventory at Month End'] = (
-        pd.to_numeric(out['Inventory at Month End'], errors='coerce').fillna(0).astype(int)
+    # --- merge ---
+    if use_marketplace:
+        # forecast marketplace col might not be named exactly marketplace_id
+        merge_left_cols = ["sku_norm", forecast_marketplace_col]
+        inv_merge = inventory_totals[["sku_norm", "marketplace_id", "Ending Warehouse Balance"]].copy()
+
+        out = out.merge(
+            inv_merge,
+            left_on=merge_left_cols,
+            right_on=["sku_norm", "marketplace_id"],
+            how="left"
+        )
+        # clean up right-side join key
+        out.drop(columns=["sku_norm", "marketplace_id"], inplace=True, errors="ignore")
+
+    else:
+        out = out.merge(
+            inventory_totals[["sku_norm", "Ending Warehouse Balance"]],
+            on="sku_norm",
+            how="left"
+        )
+        out.drop(columns=["sku_norm"], inplace=True, errors="ignore")
+
+    out.rename(columns={"Ending Warehouse Balance": "Inventory at Month End"}, inplace=True)
+    out["Inventory at Month End"] = (
+        pd.to_numeric(out["Inventory at Month End"], errors="coerce")
+          .fillna(0)
+          .astype(int)
     )
 
     print(f"[MERGE] ✓ After merge: {len(out)} rows")
     print(f"[MERGE] ✓ Non-zero 'Inventory at Month End': {(out['Inventory at Month End'] > 0).sum()}")
-    print(out[['sku', 'Inventory at Month End']].head(10).to_string())
+    preview_cols = [forecast_sku_col, "Inventory at Month End"]
+    if use_marketplace:
+        preview_cols.insert(1, forecast_marketplace_col)
+    print(out[preview_cols].head(15).to_string(index=False))
 
     return out
 
 
-
 def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool = True):
-    # --- imports used inside ---
-  
+    """
+    NOTE:
+    - This is your full generate_forecast with ONLY the inventory part fixed to use:
+        public.monthwise_inventory (msku) + disposition='SELLABLE'
+      and merged via fetch_and_merge_inventory_monthwise_sellable().
+
+    - All your other logic is kept the same.
+    - Assumes these are already imported/defined elsewhere in your codebase:
+        create_engine, MetaData, inspect, Table
+        np, pd, os, re
+        datetime, relativedelta
+        MONTHS_MAP, ROLLING_HISTORY_MONTHS
+        add_months, month_label, _mk_monthly
+        forecast_next_two_months_with_append, _hybrid_forecast_for_sku
+        call_chatgpt_adjudicator, _adjudicate_by_history_trend
+        CountryProfile (SQLAlchemy model)
+        classify_skus_from_inventory, calculate_remaining_months_v2
+        encode_file_to_base64, jsonify
+        UPLOAD_FOLDER, db_url, db_url2
+    """
+
+    
     engine = create_engine(db_url)
-    engine1 = create_engine(db_url2)  # Amazon DB - has inventory table
+    engine1 = create_engine(db_url2)  # Amazon DB (has monthwise_inventory)
     meta = MetaData()
     meta.reflect(bind=engine)
     meta.reflect(bind=engine1)
@@ -1199,7 +1314,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         return re.sub(r"\s+", "", str(x)).upper()
 
     def _unique_cols(cols):
-        # de-dupe while preserving order
         return list(dict.fromkeys(cols))
 
     def _to_monthly_series(df_m: pd.DataFrame) -> pd.Series:
@@ -1226,7 +1340,7 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     req_year = int(year)
     req_month_num = MONTHS_MAP[mv.lower()]
 
-    # 🔴 Anchor ARIMA on actual last training month from data (not on mv/year)
+    # 🔴 Anchor ARIMA on actual last training month from data (not mv/year)
     last_training_ts = new_df.index.max()
     global_last_training_month = last_training_ts.to_period('M')
     print(f"[ARIMA] global_last_training_month from data: {global_last_training_month}")
@@ -1247,41 +1361,69 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     print(f"Transit time: {transit_time}, Stock unit: {stock_unit}")
 
     # ----------------- ARIMA / HYBRID -----------------
+    # Prepare tasks
     tasks = [(sku, new_df.copy()) for sku in unique_skus]
     model_winner = {}
 
-    with ProcessPoolExecutor() as executor:
+    # ---------------------------------------------------------
+    # 🚀 Use MAX CPU POWER (cpu_count() - 1)
+    # ---------------------------------------------------------
+    max_workers = max(1, cpu_count() - 1)
+    print(f"[CPU] Using {max_workers} parallel workers for ARIMA & HYBRID")
+
+    # ---------------------------------------------------------
+    # 🔵 ARIMA PARALLEL EXECUTION
+    # ---------------------------------------------------------
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(
                 forecast_next_two_months_with_append, sku, df, global_last_training_month
             ): (sku, df)
             for sku, df in tasks
         }
+
         arima_results = {}
         for future in as_completed(futures):
             sku, df = futures[future]
-            result = future.result()
-            if result is not None:
-                arima_results[sku] = result
+            try:
+                result = future.result()
+                if result is not None:
+                    arima_results[sku] = result
+            except Exception as e:
+                print(f"[ARIMA][ERROR] SKU={sku}: {e}")
 
+    # ---------------------------------------------------------
+    # HYBRID ENABLE CHECK
+    # ---------------------------------------------------------
     months_in_df = new_df.index.to_period('M').nunique()
     hybrid_globally_enabled = hybrid_allowed
     print(f"[HYBRID Gate] distinct_months={months_in_df}, allowed_by_streak={hybrid_allowed} -> enabled={hybrid_globally_enabled}")
 
     hybrid_results = {}
+
+    # ---------------------------------------------------------
+    # 🔴 HYBRID PARALLEL EXECUTION
+    # ---------------------------------------------------------
     if hybrid_globally_enabled:
-        with ProcessPoolExecutor() as executor:
-            futs = {sku: executor.submit(_hybrid_forecast_for_sku, sku, new_df.copy(), transit_time, stock_unit)
-                    for sku in unique_skus}
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futs = {
+                sku: executor.submit(
+                    _hybrid_forecast_for_sku,
+                    sku, new_df.copy(), transit_time, stock_unit
+                )
+                for sku in unique_skus
+            }
+
             for sku, fut in futs.items():
                 try:
                     res = fut.result()
                     if res is not None:
                         hybrid_results[sku] = res
                     else:
-                        print(f"[HYBRID] SKU={sku}: returned None (will fall back to ARIMA if present)")
+                        print(f"[HYBRID] SKU={sku}: returned None (fallback to ARIMA)")
                 except Exception as e:
-                    print(f"[HYBRID][ERROR] SKU={sku}: {e} (will fall back to ARIMA if present)")
+                    print(f"[HYBRID][ERROR] SKU={sku}: {e} (fallback to ARIMA)")
+
     else:
         print("[HYBRID] Disabled — ARIMA-only path based on streak gate.")
 
@@ -1336,9 +1478,11 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
             model_winner[sku] = 'HYBRID'
             _, chosen_df, _ = hybrid_res
 
-        chosen_df_sorted = (chosen_df.sort_values('Month').copy()
-                            if chosen_df is not None and not chosen_df.empty
-                            else pd.DataFrame(columns=['Month','Forecast','sku']))
+        chosen_df_sorted = (
+            chosen_df.sort_values('Month').copy()
+            if chosen_df is not None and not chosen_df.empty
+            else pd.DataFrame(columns=['Month', 'Forecast', 'sku'])
+        )
         if model_winner.get(sku) == 'ARIMA':
             chosen_df_sorted = chosen_df_sorted.iloc[:3]
 
@@ -1357,7 +1501,7 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         )
 
         all_forecasts = pd.concat(
-            [all_forecasts, chosen_df_sorted[['Month','Forecast','sku','price_in_gbp']]],
+            [all_forecasts, chosen_df_sorted[['Month', 'Forecast', 'sku', 'price_in_gbp']]],
             ignore_index=True
         )
 
@@ -1390,68 +1534,29 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     forecast_totals = forecast_pivot[['sku'] + monthwise_forecast_cols].copy()
 
     # ============================================================
-    # INVENTORY FETCH (kept as-is)
+    # ✅ INVENTORY FETCH (NEW: monthwise_inventory SELLABLE only)
     # ============================================================
-    print("\n" + "="*60)
-    print("INVENTORY DATA FETCH (fixed)")
-    print("="*60)
-
     month_start = datetime(req_year, req_month_num, 1)
     month_end = (month_start + relativedelta(months=1)).replace(day=1)
 
-    print(f"[INV] Window: {month_start:%Y-%m-%d} -> {month_end:%Y-%m-%d}")
-    inv_sql_window = """
-        SELECT DISTINCT ON (seller_sku)
-               seller_sku AS "SKU",
-               fulfillable_quantity AS "Ending Warehouse Balance",
-               synced_at
-        FROM public.inventory
-        WHERE synced_at >= :start AND synced_at < :end
-        ORDER BY seller_sku, synced_at DESC
-    """
-    inv_sql_fallback = """
-        SELECT DISTINCT ON (seller_sku)
-               seller_sku AS "SKU",
-               fulfillable_quantity AS "Ending Warehouse Balance",
-               synced_at
-        FROM public.inventory
-        ORDER BY seller_sku, synced_at DESC
-    """
-    params = {"start": month_start, "end": month_end}
+    # month_end_date like your screenshot: 2025-10-31
+    snapshot_date = (month_end - relativedelta(days=1)).strftime("%Y-%m-%d")
+    print(f"\n[INV] monthwise_inventory snapshot_date = {snapshot_date}")
 
-    print("[INV] Executing windowed SQL…")
-    try:
-        inv_df = pd.read_sql(text(inv_sql_window), con=engine1, params=params)
-        if inv_df.empty:
-            print("[INV] No rows in the month window — falling back to latest overall snapshot.")
-            inv_df = pd.read_sql(text(inv_sql_fallback), con=engine1)
-        print(f"[INV] Rows fetched: {len(inv_df)}")
-        if not inv_df.empty:
-            print(inv_df.head(5).to_string())
-
-        inventory_totals = inv_df[['SKU', 'Ending Warehouse Balance']].copy()
-        inventory_totals.rename(columns={'SKU': 'sku'}, inplace=True)
-        inventory_totals['Ending Warehouse Balance'] = pd.to_numeric(
-            inventory_totals['Ending Warehouse Balance'], errors='coerce'
-        ).fillna(0).astype(int)
-        inventory_totals['sku_norm'] = inventory_totals['sku'].map(_norm_sku)
-        print(f"[INV] Unique normalized SKUs: {inventory_totals['sku_norm'].nunique()}")
-
-    except Exception as e:
-        print(f"[INV] ✗ ERROR querying inventory: {e}")
-        import traceback; traceback.print_exc()
-        inventory_totals = pd.DataFrame({"sku": [], "Ending Warehouse Balance": [], "sku_norm": []})
-
-    print("="*60 + "\n")
+    inventory_forecast = fetch_and_merge_inventory_monthwise_sellable(
+        forecast_totals,
+        engine1,
+        inventory_date=snapshot_date,   # ✅ force exact month-end
+        # forecast_marketplace_col="marketplace_id",  # uncomment only if forecast_totals has marketplace_id
+    )
 
     # ============================================================
     # SALES SUMMARY (FULL MONTH FROM DB — SAME LOGIC AS SEP & OCT)
     # ============================================================
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SALES SUMMARY (full-month from DB)")
-    print("="*60)
+    print("=" * 60)
 
-    # ----------------- FIND CORRECT SALES TABLE -----------------
     product_names = pd.DataFrame(columns=['sku', 'Product Name'])
     normalized_tables = {t.lower(): t for t in meta.tables.keys()}
 
@@ -1467,9 +1572,7 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     except Exception:
         train_full, train_year = None, None
 
-    candidate_table_names = [
-        f"user_{user_id}_{country}_{mv}{year}_data"
-    ]
+    candidate_table_names = [f"user_{user_id}_{country}_{mv}{year}_data"]
     if req_full:
         candidate_table_names.append(f"user_{user_id}_{country}_{req_full}{year}_data")
     if train_full and train_year:
@@ -1492,7 +1595,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
                 print(f"[SALES][WARN] Could not read {chosen_table}: {e}")
                 sales_data = None
 
-    # ----------------- PRODUCT NAMES -----------------
     if sales_data is not None and not sales_data.empty and 'product_name' in sales_data.columns:
         product_names = (
             sales_data.groupby('sku')['product_name']
@@ -1504,7 +1606,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     else:
         print("[SALES] Product names not found in DB tables; leaving blank.")
 
-    # ----------------- FULL MONTH SALES SUMMARY -----------------
     if sales_data is not None and not sales_data.empty and 'quantity' in sales_data.columns:
         sales_summary = (
             sales_data.groupby("sku")["quantity"]
@@ -1517,20 +1618,19 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         print("[SALES] No valid sales_data — setting Last Month Sales to 0.")
         sales_summary = pd.DataFrame(columns=["sku", "Last Month Sales(Units)"])
 
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     # ============================================================
     # MERGE INVENTORY + SALES + PRODUCT NAMES
     # ============================================================
-    print("\n" + "="*60)
-    print("MERGING FORECAST WITH INVENTORY (fixed)")
-    print("="*60)
+    print("\n" + "=" * 60)
+    print("MERGING FORECAST WITH INVENTORY (monthwise_inventory SELLABLE)")
+    print("=" * 60)
 
-    inventory_forecast = fetch_and_merge_inventory_hotfix(forecast_totals, engine1)
     inventory_forecast = inventory_forecast.merge(sales_summary, on='sku', how='left').fillna(0)
     inventory_forecast = inventory_forecast.merge(product_names, on='sku', how='left').fillna("")
 
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     # ----------------- Classification -----------------
     sku_classification = classify_skus_from_inventory(
@@ -1556,15 +1656,12 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     # ============================================================
     # SOLD COLUMNS - dynamically anchored to (first forecasted month - 1)
     # ============================================================
-    # First forecasted month is based on global_last_training_month + 1
     first_forecast_dt = add_months(global_last_training_month.to_timestamp(), 1)
-
-    # Last sold month is one month BEFORE the first forecast
     sold_anchor_dt = add_months(first_forecast_dt, -1)
 
-    sold_m1 = month_label(sold_anchor_dt)                   # Nov'25 (first forecast - 1)
-    sold_m2 = month_label(add_months(sold_anchor_dt, -1))   # Oct'25 (first forecast - 2)
-    sold_m3 = month_label(add_months(sold_anchor_dt, -2))   # Sep'25 (first forecast - 3)
+    sold_m1 = month_label(sold_anchor_dt)
+    sold_m2 = month_label(add_months(sold_anchor_dt, -1))
+    sold_m3 = month_label(add_months(sold_anchor_dt, -2))
     sold_labels = [sold_m3, sold_m2, sold_m1]
 
     print(f"[SOLD] First forecast month: {month_label(first_forecast_dt)}")
@@ -1589,20 +1686,18 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         on='sku', how='left'
     ).fillna(0)
 
-    # ✅ overwrite sold_m1 Sold with the sales_summary value, then drop internal column
     last_month_col = f"{sold_m1} Sold"
 
     # Compare values from new_df vs database
     if 'Last Month Sales(Units)' in inventory_forecast.columns and last_month_col in inventory_forecast.columns:
-        # Print comparison for debugging
         for idx, row in inventory_forecast.iterrows():
             if row['sku'] != 'Total':
                 from_df = row[last_month_col]
                 from_db = row['Last Month Sales(Units)']
                 if abs(from_df - from_db) > 0:
                     print(f"[DEBUG] SKU {row['sku']}: new_df={from_df}, database={from_db}")
-        
-        # Keep the new_df value (it's more reliable since it's your training data)
+
+        # Keep the new_df value (your original behavior)
         inventory_forecast.drop(columns=['Last Month Sales(Units)'], inplace=True)
     else:
         if last_month_col not in inventory_forecast.columns:
@@ -1629,43 +1724,44 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         user_id, country, inventory_forecast, transit_time, stock_unit, recent_hist_map,
         base_months_map=base_months_map,
         anchor_months_all=monthwise_forecast_cols,
-        last_month_col=last_month_col   # ✅ IMPORTANT: e.g. "Nov'25 Sold"
+        last_month_col=last_month_col
     )
-
 
     all_future_cols = future_month_columns[:]
     anchor_cols_sorted = monthwise_forecast_cols
 
-    # ----------------- Projected totals -----------------
-    projected_totals = []
-    for _, row in inventory_forecast.iterrows():
-        sku = row['sku']
-        if sku == 'Total':
-            projected_totals.append(0.0)
-            continue
+    # ----------------- Projected totals (ALL months) -----------------
 
-        base = 4 if model_winner.get(sku) == 'HYBRID' else 3
-        window = int(transit_time + stock_unit)
-        extra = max(window - base, 0)
+    # All forecast month columns = anchor + future
+    all_month_cols = _unique_cols(
+        anchor_cols_sorted + all_future_cols
+    )
 
-        base_cols = anchor_cols_sorted[:base]
-        base_sum = float(sum(row[c] if c in inventory_forecast.columns else 0.0 for c in base_cols))
+    inventory_forecast['Projected Sales Total'] = (
+        inventory_forecast[all_month_cols]
+        .apply(pd.to_numeric, errors='coerce')
+        .fillna(0)
+        .sum(axis=1)
+        .round()
+        .astype(int)
+    )
 
-        start_idx = 0 if base == 3 else 1
-        rem_cols = all_future_cols[start_idx:start_idx + extra]
-        rem_sum = float(sum(row[c] if c in inventory_forecast.columns else 0.0 for c in rem_cols)) if rem_cols else 0.0
+    # Keep Total row clean
+    inventory_forecast.loc[
+        inventory_forecast['sku'] == 'Total',
+        'Projected Sales Total'
+    ] = 0
 
-        projected_totals.append(base_sum + rem_sum)
-
-    inventory_forecast['Projected Sales Total'] = np.rint(projected_totals).astype(int)
 
     # ==== Dispatch & balances ====
     inventory_forecast['Dispatch'] = (
-        (inventory_forecast['Projected Sales Total'] - inventory_forecast['Inventory at Month End'])
+        (inventory_forecast['Projected Sales Total']
+        - inventory_forecast['Inventory at Month End'])
         .clip(lower=0)
-        .pipe(np.rint)
+        .round()
         .astype(int)
     )
+
     inventory_forecast['Current Inventory + Dispatch'] = (
         inventory_forecast['Dispatch'] + inventory_forecast['Inventory at Month End']
     ).astype(int)
@@ -1677,14 +1773,12 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
 
     # ----------------- Totals row -----------------
     sold_cols = [f"{sold_m3} Sold", f"{sold_m2} Sold", f"{sold_m1} Sold"]
-
     numeric_columns = (
         ['Projected Sales Total', 'Inventory at Month End', last_month_col]
         + sold_cols + monthwise_forecast_cols + future_month_columns
     )
     numeric_columns = _unique_cols([c for c in numeric_columns if c in inventory_forecast.columns])
 
-    # ✅ sum safely (and avoid dtype problems)
     sums = pd.to_numeric(inventory_forecast[numeric_columns].stack(), errors='coerce').unstack().fillna(0).sum()
     total_row = pd.DataFrame([np.rint(sums).astype(int)], columns=numeric_columns)
     total_row.insert(0, 'sku', 'Total')
@@ -1705,9 +1799,9 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     for c in int_cols:
         inventory_forecast[c] = (
             pd.to_numeric(inventory_forecast[c], errors='coerce')
-              .fillna(0)
-              .pipe(np.rint)
-              .astype(int)
+            .fillna(0)
+            .pipe(np.rint)
+            .astype(int)
         )
 
     inventory_forecast.drop(columns=['Inventory Projection'], errors='ignore', inplace=True)
@@ -1737,10 +1831,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
 
     inventory_forecast_base64 = encode_file_to_base64(inventory_output_path)
     return jsonify({'message': 'Inventory processed successfully', 'file_path': inventory_output_path}), 200
-
-
-
-
 
 
 # ============================== FILE ENCODER ==============================

@@ -7,6 +7,9 @@ import Modalmsg from '@/components/ui/modal/Modalmsg';
 import SkuMultiuseCountryUpload from '@/components/ui/modal/SkuMultiCountryUpload';
 import { IoDownload } from "react-icons/io5";
 import { FaCaretLeft, FaCaretRight } from "react-icons/fa";
+import MonthYearPickerTable from '@/components/filters/MonthYearPickerTable';
+import DataTable, { ColumnDef } from "@/components/ui/table/DataTable";
+
 
 
 /* ================= TYPES ================= */
@@ -71,17 +74,22 @@ export default function InputCostPage({ params }: Params) {
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
-  const [currencyRates, setCurrencyRates] = useState<Record<string, number>>({});
   const [aspData, setAspData] = useState<Record<string, number>>({});
   const [showMultiuseCountry, setShowMultiuseCountry] = useState(false);
+  const [currencyRates, setCurrencyRates] = useState<CurrencyRateRow[]>([]);
 
   /* ===== NEW AGEING STATE ===== */
   const [ageingMap, setAgeingMap] = useState<Record<string, any>>({});
   const [showAgeBreakup, setShowAgeBreakup] = useState(false);
   const [showSkuExpand, setShowSkuExpand] = useState(false);
+  const [ledgerMode, setLedgerMode] = useState(false);
+const [ledgerMap, setLedgerMap] = useState<Record<string, number>>({});
+const [month, setMonth] = useState('');
+const [year, setYear] = useState('');
+const [ledgerLoading, setLedgerLoading] = useState(false);
 
   
-  const normalizeSku = (v: any) => String(v ?? '').trim().toUpperCase();
+ 
 
 
   // ✅ Helper: match ageing row by SKU (most reliable for uploaded SKU table)
@@ -90,10 +98,107 @@ const getAgeingForRow = (row: SkuRow) => {
   return ageingMap[key] || {};
 };
 
+const currentMonthIndex = new Date().getMonth(); // 0-based
+const allMonths = [
+  'january','february','march','april','may','june',
+  'july','august','september','october','november','december'
+];
+
+const filteredMonths = allMonths.filter((_, i) => i !== currentMonthIndex);
+
 
   /* ================= COLUMN LOGIC ================= */
   const isColumnEmpty = (data: SkuRow[], columnName: string) =>
     data.every(r => !r[columnName]);
+
+  const fetchLedgerSnapshot = async () => {
+  if (!month || !year) return;
+
+  setLedgerLoading(true); // 🔥 start loader
+
+  try {
+    const monthMap: Record<string, number> = {
+      january: 1,
+      february: 2,
+      march: 3,
+      april: 4,
+      may: 5,
+      june: 6,
+      july: 7,
+      august: 8,
+      september: 9,
+      october: 10,
+      november: 11,
+      december: 12,
+    };
+
+    const m = monthMap[month.toLowerCase()];
+    if (!m) {
+      setLedgerLoading(false);
+      return;
+    }
+
+    // 🔥 Last date of selected month
+    const lastDate = new Date(Date.UTC(Number(year), m, 0))
+      .toISOString()
+      .split('T')[0];
+
+    const token = localStorage.getItem('jwtToken');
+    if (!token) {
+      setLedgerLoading(false);
+      return;
+    }
+
+    const res = await fetch(
+      `http://127.0.0.1:5000/amazon_api/inventory/ledger-summary` +
+        `?start_date=${lastDate}&end_date=${lastDate}&store_in_db=true`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error('Failed to fetch ledger snapshot');
+    }
+
+    const json = await res.json();
+    const items = Array.isArray(json?.items) ? json.items : [];
+
+    // 🔥 SKU → Ending Balance map
+    const map: Record<string, number> = {};
+
+    items.forEach((it: any) => {
+      if (
+        it.disposition === 'SELLABLE' &&
+        it.msku
+      ) {
+        const sku = it.msku.trim().toUpperCase();
+
+        map[sku] =
+          (map[sku] || 0) +
+          Number(it.ending_warehouse_balance || 0);
+      }
+    });
+
+    setLedgerMap(map);
+    setLedgerMode(true); // 🔥 switch to ledger view
+  } catch (error) {
+    console.error('Ledger snapshot error:', error);
+    alert('Failed to load ledger report. Please try again.');
+  } finally {
+    setLedgerLoading(false); // 🔥 stop loader
+  }
+};
+
+
+const cancelLedgerView = () => {
+  setLedgerMode(false);
+  setLedgerMap({});
+};
+
+
 
   
 
@@ -116,23 +221,73 @@ const getAgeingForRow = (row: SkuRow) => {
   };
 
   /* ================= FINANCE LOGIC (UNCHANGED) ================= */
-  const getCurrencyRate = (currency: string | undefined, country: string) =>
-    currencyRates[`${currency}_${country}`] ?? 1;
+  // const getCurrencyRate = (currency: string | undefined, country: string) =>
+  //   currencyRates[`${currency}_${country}`] ?? 1;
 
   const getAspForProduct = (product: string) =>
     aspData[product] ?? null;
+
+  type CurrencyRateRow = {
+    user_currency: string;
+    country: string;
+    conversion_rate: number;
+    selected_currency?: string;
+    month?: string;
+    year?: number;
+  };
+
+  const normalizeCountry = (c?: string) => {
+    const v = (c || "").trim().toLowerCase();
+    if (v === "uk" || v === "united kingdom" || v === "gb") return "uk";
+    if (v === "us" || v === "usa" || v === "united states") return "us";
+    if (v === "ca" || v === "can" || v === "canada") return "canada"; // your DB sometimes has "ca" & "canada"
+    if (v === "india" || v === "in") return "india";
+    return v;
+  };
+
+  const normalizeCurrency = (c?: string) => (c || "").trim().toLowerCase();
+
+  const getCurrencyRate = (
+    fromCurrency: string | undefined,
+    targetCountry: string,
+    currencyRates: CurrencyRateRow[]
+  ) => {
+    const from = normalizeCurrency(fromCurrency);
+    const toCountry = normalizeCountry(targetCountry);
+
+    // Try exact country match first
+    let row = currencyRates.find(
+      r => normalizeCurrency(r.user_currency) === from &&
+        normalizeCountry(r.country) === toCountry
+    );
+
+    // Fallback: because your DB has BOTH "ca" and "canada"
+    if (!row && toCountry === "canada") {
+      row = currencyRates.find(
+        r => normalizeCurrency(r.user_currency) === from &&
+          (normalizeCountry(r.country) === "ca" || normalizeCountry(r.country) === "canada")
+      );
+    }
+
+    return row?.conversion_rate ?? 1;
+  };
 
   const calculateGrossMargin = (
     price: number | undefined,
     currency: string | undefined,
     targetCountry: string,
-    productName: string
+    productName: string,
+    currencyRates: CurrencyRateRow[]
   ) => {
     const asp = getAspForProduct(productName);
-    if (!price || !asp) return 'N/A';
-    const converted = price * getCurrencyRate(currency, targetCountry);
+    if (!price || asp == null || asp === 0) return "N/A";
+
+    const rate = getCurrencyRate(currency, targetCountry, currencyRates);
+    const converted = price * rate;
+
     return (((asp - converted) / asp) * 100).toFixed(2);
   };
+
 
   /* ================= DATA FETCHERS ================= */
 
@@ -160,10 +315,10 @@ const getAgeingForRow = (row: SkuRow) => {
     });
 
     const rates = await res.json();
-    const map: Record<string, number> = {};
-    rates.forEach((r: any) => map[`${r.user_currency}_${r.country}`] = r.conversion_rate);
-    setCurrencyRates(map);
+
+   setCurrencyRates(Array.isArray(rates) ? rates : []);
   };
+  
 
   // ASP
   const fetchAspData = async () => {
@@ -267,7 +422,13 @@ const fetchAgeingInventory = async () => {
     const currentPrice =
       editedPrices[row.product_name] !== undefined ? editedPrices[row.product_name] : row.price;
     const currency = row.currency;
-    const grossMargin = calculateGrossMargin(currentPrice, currency, targetCountry, row.product_name);
+    const grossMargin = calculateGrossMargin(
+      currentPrice,
+      currency,
+      targetCountry,
+      row.product_name,
+      currencyRates
+    );
 
     if (grossMargin === 'N/A') return <span className="gross-margin-na">N/A</span>;
     const marginValue = parseFloat(grossMargin);
@@ -299,7 +460,8 @@ const fetchAgeingInventory = async () => {
             editedPrices[row.product_name] !== undefined ? editedPrices[row.product_name] : row.price,
             row.currency,
             c,
-            row.product_name
+            row.product_name,
+            currencyRates
           );
           filtered[String(getColumnDisplayName(col))] = gm !== 'N/A' ? `${gm}%` : 'N/A';
         } else if (col === 'price') {
@@ -335,6 +497,164 @@ const totalStorageCost = skuData.reduce((sum, row) => {
   const ageing = getAgeingForRow(row);
   return sum + Number(ageing['estimated-storage-cost-next-month'] || 0);
 }, 0);
+
+const totals = skuData.reduce(
+  (acc, row) => {
+    const ageing = getAgeingForRow(row);
+    const sku = String(row[`sku_${countryName}`] || '').toUpperCase();
+
+    acc.available += Number(ageing.available || 0);
+
+    acc.age180 +=
+      Number(ageing['inv-age-181-to-270-days'] || 0) +
+      Number(ageing['inv-age-271-to-365-days'] || 0) +
+      Number(ageing['inv-age-365-plus-days'] || 0);
+
+    acc.age0_90 += Number(ageing['inv-age-0-to-90-days'] || 0);
+    acc.age91_180 += Number(ageing['inv-age-91-to-180-days'] || 0);
+
+    acc.storageCost += Number(ageing['estimated-storage-cost-next-month'] || 0);
+
+    acc.endingBalance += Number(ledgerMap[sku] || 0);
+
+    return acc;
+  },
+  {
+    available: 0,
+    age180: 0,
+    age0_90: 0,
+    age91_180: 0,
+    storageCost: 0,
+    endingBalance: 0,
+  }
+);
+
+const formatNumber = (v: any) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString() : '-';
+};
+
+const tableRows = skuData.map((row, index) => {
+  const ageing = getAgeingForRow(row);
+  const sku = String(row[`sku_${countryName}`] || "").toUpperCase();
+
+  return {
+    s_no: row.s_no,
+    product_name: row.product_name,
+    sku: row[`sku_${countryName}`] ?? "-",
+    asin: row.asin ?? "-",
+    barcode: row.product_barcode ?? "-",
+    price: `${getCurrencySymbol(row.currency)} ${row.price}`,
+    margin: renderGrossMarginCell(row, `gross_margin_${countryName}`),
+
+    available: formatNumber(ageing.available),
+    age_0_90: formatNumber(ageing["inv-age-0-to-90-days"]),
+    age_91_180: formatNumber(ageing["inv-age-91-to-180-days"]),
+    age_180: formatNumber(
+      Number(ageing["inv-age-181-to-270-days"] || 0) +
+      Number(ageing["inv-age-271-to-365-days"] || 0)
+    ),
+
+    storage: formatNumber(
+      Number(ageing["estimated-storage-cost-next-month"] || 0).toFixed(2)
+    ),
+
+    ledger: ledgerMap[sku] ?? "-",
+  };
+});
+tableRows.push({
+  s_no: "",
+  product_name: "TOTAL",
+  sku: "",
+  asin: "",
+  barcode: "",
+  price: "",
+  margin: "",
+  available: formatNumber(totals.available),
+  age_0_90: formatNumber(totals.age0_90),
+  age_91_180: formatNumber(totals.age91_180),
+  age_180: formatNumber(totals.age180),
+  storage: formatNumber(totals.storageCost.toFixed(2)),
+  ledger: formatNumber(totals.endingBalance),
+  __isTotal: true,
+});
+
+const columns: ColumnDef<any>[] = [
+  { key: "s_no", header: "Sno.", width: "60px" },
+  {
+    key: "product_name",
+    header: "Product Name",
+    cellClassName: "text-left whitespace-normal",
+    width: "200px",
+  },
+
+  {
+  key: "sku",
+  header: (
+    <div
+      onClick={() => setShowSkuExpand(p => !p)}
+      className="relative cursor-pointer flex items-center justify-center gap-2"
+    >
+      <FaCaretLeft />
+      <span>SKU</span>
+      <FaCaretRight />
+    </div>
+  ),
+},
+
+  ...(showSkuExpand
+    ? [
+        { key: "asin", header: "ASIN" },
+        { key: "barcode", header: "Product Barcode" },
+      ]
+    : []),
+
+  { key: "price", header: "Landing Cost" },
+  { key: "margin", header: "Gross Margin (%)" },
+
+  ...(!ledgerMode
+    ? [
+        { key: "available", header: "Total Inventory" },
+
+        ...(showAgeBreakup
+          ? [
+              { key: "age_0_90", header: "0–90" },
+              { key: "age_91_180", header: "91–180" },
+            ]
+          : []),
+
+        {
+  key: "age_180",
+  header: (
+    <div
+      onClick={() => setShowAgeBreakup(p => !p)}
+      className="relative cursor-pointer flex items-center justify-center"
+    >
+      {/* LEFT ICON */}
+      <span className="absolute left-2">
+        {showAgeBreakup ? <FaCaretRight /> : <FaCaretLeft />}
+      </span>
+
+      {/* TEXT */}
+      <span className="px-6">
+        {showAgeBreakup ? "180+" : "Aged Inventory"}
+      </span>
+
+      {/* RIGHT ICON */}
+      <span className="absolute right-2">
+        {showAgeBreakup ? <FaCaretLeft /> : <FaCaretRight />}
+      </span>
+    </div>
+  ),
+},
+
+        { key: "storage", header: "Est. Storage Cost" },
+      ]
+    : [
+        { key: "ledger", header: "Ending Warehouse Balance" },
+      ]),
+];
+
 
 
 
@@ -379,13 +699,7 @@ const totalStorageCost = skuData.reduce((sum, row) => {
     font-weight: bold;
   }
 
-  .tablec tbody tr:nth-child(even) {
-    background-color: #5EA68E33;
-  }
-
-  .tablec tbody tr:nth-child(odd) {
-    background-color: #ffffff;
-  }
+  
 
   .left-align {
     text-align: left !important;
@@ -423,181 +737,66 @@ const totalStorageCost = skuData.reduce((sum, row) => {
     background-color: #4f9b84;
     cursor: pointer;
   }
+
+  .fetch-button { padding: 9px 16px; font-size: 0.9rem; border: none; border-radius: 6px; cursor: pointer; transition: background-color 0.2s ease; box-shadow: 0 3px 6px rgba(0,0,0,0.15); white-space: nowrap; font-family: 'Lato', sans-serif; background-color: #2c3e50; color: #f8edcf; font-weight: bold; }
+        .fetch-button:hover:not(:disabled) { background-color: #1f2a36; }
+        .fetch-button:disabled { background-color: #6b7280; cursor: not-allowed; opacity: 0.8; }
 `}</style>
 
 <h2 className='text-2xl text-[#414042] font-bold '>
-        Uploaded SKU Price Data - <span style={{ color: '#60a68e' }}> {countryName?.toUpperCase()}</span>
+        Inventory Summary - <span style={{ color: '#60a68e' }}> {countryName?.toUpperCase()}</span>
       </h2>
-      <div className="table-wrapper">
-        <table className="tablec">
-          <thead className="theadc">
-            <tr>
-              <th className="serial-no-col">Sno.</th>
-              <th>Product Name</th>
+     <div className="flex gap-4 items-center my-4">
+       <MonthYearPickerTable
+  month={month}
+  year={year}
+  months={filteredMonths}   // 👈 ADD THIS
+  yearOptions={[new Date().getFullYear(), new Date().getFullYear() - 1]}
+  onMonthChange={setMonth}
+  onYearChange={setYear}
+  valueMode="lower"
+/>
 
-             <th
-  onClick={() => setShowSkuExpand(p => !p)}
-  className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
+        {!ledgerMode && (
+          <div className="button-wrapper">
+         <button
+  className="fetch-button"
+  onClick={fetchLedgerSnapshot}
+  disabled={ledgerLoading}
 >
-  <span className="absolute left-2 top-1/2 -translate-y-1/2">
-    {showSkuExpand ? <FaCaretRight /> : <FaCaretLeft />}
-  </span>
+  {ledgerLoading ? 'Loading...' : 'Get Report'}
+</button>
+        </div>
+          
+        )}
 
-  <span>SKU</span>
-
-  <span className="absolute right-2 top-1/2 -translate-y-1/2">
-    {showSkuExpand ? <FaCaretLeft /> : <FaCaretRight />}
-  </span>
-</th>
-
-              {showSkuExpand && (
-                <>
-                  <th>ASIN</th>
-                  <th>Product Barcode</th>
-                </>
-              )}
-
-              <th>Landing Cost</th>
-              <th>Gross Margin (%)</th>
-              <th>Available Unit</th>
-
-             <th
-  onClick={() => setShowAgeBreakup(p => !p)}
-  className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
->
-  <span className="absolute left-2 top-1/2 -translate-y-1/2">
-    {showAgeBreakup ? <FaCaretRight /> : <FaCaretLeft />}
-  </span>
-
-  <span>180+</span>
-
-  <span className="absolute right-2 top-1/2 -translate-y-1/2">
-    {showAgeBreakup ? <FaCaretLeft /> : <FaCaretRight />}
-  </span>
-</th>
-
-
-              {showAgeBreakup && (
-                <>
-                  <th>0–90</th>
-                  <th>91–180</th>
-                </>
-              )}
-
-              <th>Est. Storage Cost</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {skuData.map((row, i) => {
-              const ageing = getAgeingForRow(row);
-              const age181_270 = Number(ageing['inv-age-181-to-270-days'] || 0);
-              const age271_365 = Number(ageing['inv-age-271-to-365-days'] || 0);
-
-              return (
-                <tr key={i}>
-                  <td className="serial-no-col">{row.s_no}</td>
-                  <td className="left-align">{row.product_name}</td>
-
-                  <td>{row[`sku_${countryName}`] ?? '-'}</td>
-
-                  {showSkuExpand && (
-                    <>
-                      <td>{row.asin ?? '-'}</td>
-                      <td>{row.product_barcode ?? '-'}</td>
-                    </>
-                  )}
-
-                  <td>{getCurrencySymbol(row.currency)} {row.price}</td>
-<td>
-  {renderGrossMarginCell(row, `gross_margin_${countryName}`)}
-</td>
-                  <td>{ageing.available ?? '-'}</td>
-
-                  <td>{age181_270 + age271_365 + Number(ageing['inv-age-365-plus-days'] || 0)}</td>
-
-                  {showAgeBreakup && (
-                    <>
-                      <td>{ageing['inv-age-0-to-90-days'] ?? '-'}</td>
-                      <td>{ageing['inv-age-91-to-180-days'] ?? '-'}</td>
-                    </>
-                  )}
-
-                  <td>{Number(ageing['estimated-storage-cost-next-month'] || 0).toFixed(2)}</td>
-                </tr>
-              );
-            })}
-            <tr style={{ backgroundColor: '#d9d9d9', fontWeight: 'bold' }}>
-  <td className="serial-no-col"></td>
-
-  {/* Product Name column */}
-  <td className="left-align">TOTAL</td>
-
-  {/* SKU */}
-  <td></td>
-
-  {showSkuExpand && (
-    <>
-      <td></td>
-      <td></td>
-    </>
-  )}
-
-  {/* Landing Cost */}
-  <td></td>
-
-  {/* Gross Margin */}
-  <td></td>
-
-  {/* ✅ Available Unit TOTAL */}
-  <td>{totalAvailableUnits}</td>
-
-  {/* 180+ */}
-  <td></td>
-
-  {showAgeBreakup && (
-    <>
-      <td></td>
-      <td></td>
-    </>
-  )}
-
-  {/* ✅ Est Storage Cost TOTAL */}
-  <td>{totalStorageCost.toFixed(2)}</td>
-</tr>
-
-
-          </tbody>
-        </table>
+        {ledgerMode && (
+          <button className="fetch-button " onClick={cancelLedgerView}>
+            Cancel
+          </button>
+        )}
       </div>
 
+      {/* ================= TABLE ================= */}
+     <DataTable
+  columns={columns}
+  data={tableRows}
+  loading={loading || ledgerLoading}
+  paginate
+  pageSize={20}
+  maxHeight="70vh"
+  zebra
+  stickyHeader
+  rowClassName={(row) =>
+    (row as any).__isTotal
+      ? "bg-[#D9D9D9] font-semibold"
+      : ""
+  }
+/>
 
 
-
-
-
-
-
-
-
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <button className="styled-button" onClick={() => setIsEditing(!isEditing)}>
-            {isEditing ? 'Discard Changes' : 'Edit'}
-          </button>
-          &nbsp;
-          {isEditing && (
-            <>
-              <button className="styled-button" onClick={saveChanges}>Save Changes</button>
-              &nbsp;
-            </>
-          )}
-          <button className="styled-button" onClick={() => setShowMultiuseCountry(true)}>
-            Re-Upload file
-          </button>
-        </div>
-
-        <div>
+      
+        <div className='flex justify-end items-end mt-4'>
            <button
                     onClick={handleDownloadXLSX}
                   className="bg-white border border-[#8B8585] px-1 rounded-sm py-1"
@@ -608,7 +807,7 @@ const totalStorageCost = skuData.reduce((sum, row) => {
                                            <IoDownload size={27} />
                   </button>
         </div>
-      </div>
+
 
       {showMultiuseCountry && (
         <div
