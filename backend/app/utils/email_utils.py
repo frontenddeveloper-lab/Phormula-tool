@@ -3,6 +3,11 @@ from app import mail
 import os
 from sqlalchemy import create_engine
 import re
+from sqlalchemy import text
+from datetime import datetime, timedelta
+from sqlalchemy.exc import SQLAlchemyError
+from app import db
+from app.models.user_models import Email
 
 
 db_url = os.getenv("DATABASE_URL")
@@ -403,53 +408,61 @@ def send_live_bi_email(
 
 
 
-from sqlalchemy import text
-from sqlalchemy.exc import ProgrammingError
+
 
 def has_recent_bi_email(user_id: int, country: str, hours: int = 24) -> bool:
-    query = text("""
-        SELECT 1
-        FROM bi_email_log
-        WHERE user_id = :uid
-          AND country = :country
-          AND sent_at >= (NOW() - (:hours * INTERVAL '1 hour'))
-        LIMIT 1
-    """)
+    """
+    Returns True if an email was sent within last `hours` for this user+country.
+    Uses ORM model Email (table: email).
+    """
     try:
-        with engine_hist.connect() as conn:
-            row = conn.execute(query, {
-                "uid": user_id,
-                "country": country.lower(),
-                "hours": hours,
-            }).fetchone()
-        return row is not None
-    except ProgrammingError as e:
-        # e.g. "relation \"bi_email_log\" does not exist"
-        print(f"[WARN] has_recent_bi_email failed (likely missing table): {e}")
-        # fallback: behave as if no recent email, but DON’T 500
-        return False
-    except Exception as e:
-        print(f"[WARN] has_recent_bi_email error: {e}")
-        return False
+        cutoff = datetime.utcnow() - timedelta(hours=hours)
+
+        rec = (
+            db.session.query(Email)
+            .filter(
+                Email.user_id == user_id,
+                Email.country == country.lower(),
+                Email.sent_at >= cutoff
+            )
+            .first()
+        )
+        return rec is not None
+
+    except SQLAlchemyError as e:
+        # Fail-safe: if DB has an issue, do NOT spam.
+        print(f"[WARN] has_recent_bi_email DB error (fail-safe=True): {e}")
+        return True
 
 
 def mark_bi_email_sent(user_id: int, country: str) -> None:
-    query = text("""
-        INSERT INTO bi_email_log (user_id, country, sent_at)
-        VALUES (:uid, :country, NOW())
-    """)
+    """
+    Upsert (one row per user+country).
+    Updates sent_at if exists else inserts.
+    """
     try:
-        with engine_hist.begin() as conn:
-            conn.execute(query, {
-                "uid": user_id,
-                "country": country.lower(),
-            })
-    except ProgrammingError as e:
-        print(f"[WARN] mark_bi_email_sent failed (likely missing table): {e}")
-    except Exception as e:
-        print(f"[WARN] mark_bi_email_sent error: {e}")
+        country = country.lower()
 
-from sqlalchemy import text
+        rec = (
+            db.session.query(Email)
+            .filter_by(user_id=user_id, country=country)
+            .first()
+        )
+
+        if rec:
+            rec.sent_at = datetime.utcnow()
+        else:
+            rec = Email(user_id=user_id, country=country)
+            db.session.add(rec)
+
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        print(f"[WARN] mark_bi_email_sent DB error: {e}")
+
+
+
 
 def get_user_email_by_id(user_id: int) -> str | None:
     """

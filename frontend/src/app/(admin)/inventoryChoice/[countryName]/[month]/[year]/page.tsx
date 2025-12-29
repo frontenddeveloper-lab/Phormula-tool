@@ -40,7 +40,14 @@ export default function InventoryChoicePage() {
   );
   const [transitTime, setTransitTime] = useState('');
   const [stockUnit, setStockUnit] = useState('');
-  const marketplace = 'amazon';
+  const MARKETPLACE_BY_COUNTRY: Record<'uk' | 'us', string> = {
+    us: "ATVPDKIKX0DER",
+    uk: "A1F83G8C2ARO7P",
+  };
+
+  const marketplace = MARKETPLACE_BY_COUNTRY[country];
+
+
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [apiError, setApiError] = useState('');
@@ -144,8 +151,6 @@ export default function InventoryChoicePage() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}` // jwtToken yahan use ho raha
-          // alternatively directly:
-          // Authorization: `Bearer ${localStorage.getItem('jwtToken')}`
         },
         body: JSON.stringify({
           country,
@@ -206,8 +211,8 @@ export default function InventoryChoicePage() {
                   onChange={(e) => setCountry(e.target.value as 'uk' | 'us')}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5EA68E]"
                 >
-                  <option value="UK">UK</option>
-                  <option value="US">US</option>
+                  <option value="uk">UK</option>
+                  <option value="us">US</option>
                 </select>
                 {errors.country && (
                   <p className="text-xs text-red-500 mt-1">{errors.country}</p>

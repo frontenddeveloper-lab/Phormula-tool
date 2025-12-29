@@ -778,7 +778,7 @@ export type FromCurrency = "USD" | "GBP" | "INR" | "CAD";
 const baseURL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
 
-const FX_ENDPOINT = `${baseURL}/currency-rate`;
+// const FX_ENDPOINT = `${baseURL}/currency-rate`;
 
 export function useFx() {
   // 👇 Default homeCurrency – will usually be overridden by profile

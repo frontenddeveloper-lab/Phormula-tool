@@ -280,6 +280,7 @@ type Props = {
   // ✅ NEW: range from dashboard picker
   selectedStartDay?: number | null;
   selectedEndDay?: number | null;
+  currencySymbol?: string;
 };
 
 const monthTickLabel = (p?: PeriodInfo) => {
@@ -317,118 +318,118 @@ const LiveLineChart: React.FC<{
   selectedStartDay,
   selectedEndDay,
 }) => {
-  const getDay = (dateStr: string) => Number(dateStr?.split("-")?.[2]);
+    const getDay = (dateStr: string) => Number(dateStr?.split("-")?.[2]);
 
-  const rangeActive = selectedStartDay != null && selectedEndDay != null;
-  const s = rangeActive ? clampDay(Math.min(selectedStartDay!, selectedEndDay!)) : null;
-  const e = rangeActive ? clampDay(Math.max(selectedStartDay!, selectedEndDay!)) : null;
+    const rangeActive = selectedStartDay != null && selectedEndDay != null;
+    const s = rangeActive ? clampDay(Math.min(selectedStartDay!, selectedEndDay!)) : null;
+    const e = rangeActive ? clampDay(Math.max(selectedStartDay!, selectedEndDay!)) : null;
 
-  // ✅ x-axis days forced to selected range, otherwise fallback to data min/max
-  const allDays = useMemo(() => {
-    if (rangeActive && s != null && e != null) {
-      return Array.from({ length: e - s + 1 }, (_, i) => s + i);
+    // ✅ x-axis days forced to selected range, otherwise fallback to data min/max
+    const allDays = useMemo(() => {
+      if (rangeActive && s != null && e != null) {
+        return Array.from({ length: e - s + 1 }, (_, i) => s + i);
+      }
+
+      const prevDays = dataPrev.map((d) => getDay(d.date)).filter(Number.isFinite);
+      const currDays = dataCurr.map((d) => getDay(d.date)).filter(Number.isFinite);
+      const allDaysRaw = [...prevDays, ...currDays].sort((a, b) => a - b);
+
+      if (!allDaysRaw.length) return [];
+
+      const minDay = allDaysRaw[0];
+      const maxDay = allDaysRaw[allDaysRaw.length - 1];
+      return Array.from({ length: maxDay - minDay + 1 }, (_, i) => minDay + i);
+    }, [rangeActive, s, e, dataPrev, dataCurr]);
+
+    if (!allDays.length) {
+      return <p className="text-xs text-gray-500">No daily data available.</p>;
     }
 
-    const prevDays = dataPrev.map((d) => getDay(d.date)).filter(Number.isFinite);
-    const currDays = dataCurr.map((d) => getDay(d.date)).filter(Number.isFinite);
-    const allDaysRaw = [...prevDays, ...currDays].sort((a, b) => a - b);
+    const buildSeries = (data: DailyPoint[]) =>
+      allDays.map((day) => {
+        const pt = data.find((d) => getDay(d.date) === day);
+        return pt ? (metric === "quantity" ? pt.quantity ?? null : pt.net_sales ?? null) : null;
+      });
 
-    if (!allDaysRaw.length) return [];
+    const yAxisName =
+      metric === "net_sales"
+        ? currencySymbol
+          ? `Sales (${currencySymbol})`
+          : "Sales"
+        : "Units";
 
-    const minDay = allDaysRaw[0];
-    const maxDay = allDaysRaw[allDaysRaw.length - 1];
-    return Array.from({ length: maxDay - minDay + 1 }, (_, i) => minDay + i);
-  }, [rangeActive, s, e, dataPrev, dataCurr]);
+    const option = {
+      color: ["#CECBC7", "#F47A00"],
+      tooltip: {
+        trigger: "axis",
+        formatter: (params: any) => {
+          const day = params?.[0]?.axisValue ?? "";
+          const lines = (params || []).map((p: any) => {
+            const val = p.data;
+            const shown =
+              val == null
+                ? "-"
+                : metric === "net_sales"
+                  ? `${Number(val).toFixed(2)}`
+                  : `${Number(val)}`;
+            return `${p.marker}${p.seriesName} <b>${shown}</b>`;
+          });
 
-  if (!allDays.length) {
-    return <p className="text-xs text-gray-500">No daily data available.</p>;
-  }
-
-  const buildSeries = (data: DailyPoint[]) =>
-    allDays.map((day) => {
-      const pt = data.find((d) => getDay(d.date) === day);
-      return pt ? (metric === "quantity" ? pt.quantity ?? null : pt.net_sales ?? null) : null;
-    });
-
-  const yAxisName =
-    metric === "net_sales"
-      ? currencySymbol
-        ? `Sales (${currencySymbol})`
-        : "Sales"
-      : "Units";
-
-  const option = {
-    color: ["#CECBC7", "#F47A00"],
-    tooltip: {
-      trigger: "axis",
-      formatter: (params: any) => {
-        const day = params?.[0]?.axisValue ?? "";
-        const lines = (params || []).map((p: any) => {
-          const val = p.data;
-          const shown =
-            val == null
-              ? "-"
-              : metric === "net_sales"
-              ? `${Number(val).toFixed(2)}`
-              : `${Number(val)}`;
-          return `${p.marker}${p.seriesName} <b>${shown}</b>`;
-        });
-
-        return [`Day ${day}`, ...lines].join("<br/>");
+          return [`Day ${day}`, ...lines].join("<br/>");
+        },
       },
-    },
-    legend: {
-      top: 4,
-      left: "left",
-      orient: "horizontal",
-      align: "left",
-      icon: "rect",
-      itemWidth: 12,
-      itemHeight: 12,
-      itemGap: 20,
-      textStyle: {
-        fontSize: 13,
-        lineHeight: 14,
-        color: "#6B7280",
-        padding: [0, 6, 0, 6],
+      legend: {
+        top: 4,
+        left: "left",
+        orient: "horizontal",
+        align: "left",
+        icon: "rect",
+        itemWidth: 12,
+        itemHeight: 12,
+        itemGap: 20,
+        textStyle: {
+          fontSize: 13,
+          lineHeight: 14,
+          color: "#6B7280",
+          padding: [0, 6, 0, 6],
+        },
+        data: [prevLabel || "Previous", currLabel || "Current"],
       },
-      data: [prevLabel || "Previous", currLabel || "Current"],
-    },
-    grid: { left: 40, right: 16, top: 50, bottom: 40 },
-    xAxis: {
-      type: "category",
-      data: allDays.map(String),
-      boundaryGap: false,
-      name: "Days",
-      nameLocation: "middle",
-      nameGap: 25,
-    },
-    yAxis: {
-      type: "value",
-      name: yAxisName,
-      nameLocation: "middle",
-      nameGap: 40,
-    },
-    series: [
-      {
-        name: prevLabel || "Previous",
-        type: "line",
-        data: buildSeries(dataPrev),
-        smooth: true,
-        showSymbol: false,
+      grid: { left: 40, right: 16, top: 50, bottom: 40 },
+      xAxis: {
+        type: "category",
+        data: allDays.map(String),
+        boundaryGap: false,
+        name: "Days",
+        nameLocation: "middle",
+        nameGap: 25,
       },
-      {
-        name: currLabel || "Current MTD",
-        type: "line",
-        data: buildSeries(dataCurr),
-        smooth: true,
-        showSymbol: false,
+      yAxis: {
+        type: "value",
+        name: yAxisName,
+        nameLocation: "middle",
+        nameGap: 40,
       },
-    ],
+      series: [
+        {
+          name: prevLabel || "Previous",
+          type: "line",
+          data: buildSeries(dataPrev),
+          smooth: true,
+          showSymbol: false,
+        },
+        {
+          name: currLabel || "Current MTD",
+          type: "line",
+          data: buildSeries(dataCurr),
+          smooth: true,
+          showSymbol: false,
+        },
+      ],
+    };
+
+    return <ReactECharts option={option} style={{ width: "100%", height: 260 }} />;
   };
-
-  return <ReactECharts option={option} style={{ width: "100%", height: 260 }} />;
-};
 
 export default function LiveBiLineChartPanel({
   dailySeries,
@@ -437,18 +438,17 @@ export default function LiveBiLineChartPanel({
   error,
   selectedStartDay,
   selectedEndDay,
+  currencySymbol
 }: Props) {
   const [chartMetric, setChartMetric] = useState<ChartMetric>("net_sales");
 
-  // ✅ platform comes from your sidebar selection (PlatformContext)
-  const { platform } = usePlatform() as { platform?: PlatformId };
+  // const { platform } = usePlatform() as { platform?: PlatformId };
 
   const prevLegend = useMemo(() => monthTickLabel(periods?.previous), [periods]);
   const currLegend = useMemo(() => monthTickLabel(periods?.current_mtd), [periods]);
 
-  // ✅ auto currency based on selected platform
-  const currencyCode = useMemo(() => platformToCurrencyCode(platform), [platform]);
-  const currencySymbol = useMemo(() => getCurrencySymbol(currencyCode), [currencyCode]);
+  // const currencyCode = useMemo(() => platformToCurrencyCode(platform), [platform]);
+  // const currencySymbol = useMemo(() => getCurrencySymbol(currencyCode), [currencyCode]);
 
   return (
     <div className="w-full">
@@ -482,10 +482,11 @@ export default function LiveBiLineChartPanel({
             metric={chartMetric}
             prevLabel={prevLegend}
             currLabel={currLegend}
-            currencySymbol={currencySymbol}
+            currencySymbol={currencySymbol}   // ✅ from props now
             selectedStartDay={selectedStartDay}
             selectedEndDay={selectedEndDay}
           />
+
         )}
 
         {!loading && !error && !dailySeries && (

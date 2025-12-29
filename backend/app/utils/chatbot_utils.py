@@ -2762,23 +2762,50 @@ class FormulaEngine:
         n = len(df)
         if n == 0:
             return pd.Series(dtype=float)
-        t = df["type"].astype(str).str.strip().str.lower() if "type" in df.columns else pd.Series([""]*n, index=df.index)
-        q_raw = df["quantity"].astype(str) if "quantity" in df.columns else pd.Series([""]*n, index=df.index)
+
+        # Normalize type column
+        if "type" in df.columns:
+            t = df["type"].astype(str).str.strip().str.lower()
+        else:
+            t = pd.Series([""] * n, index=df.index)
+
+        # Normalize quantity column
+        if "quantity" in df.columns:
+            q_raw = df["quantity"].astype(str)
+        else:
+            q_raw = pd.Series([""] * n, index=df.index)
+
         q = pd.to_numeric(q_raw.str.replace(",", "", regex=False), errors="coerce")
 
+        # SKU validity
         if "sku" in df.columns:
             has_sku = self._sku_mask(df)
         else:
-            has_sku = pd.Series([True]*n, index=df.index)
+            has_sku = pd.Series([True] * n, index=df.index)
 
-        is_order = t.str.startswith("order")
-        mask = is_order & has_sku
+        # ✅ UPDATED: allow both "order" and "shipment"
+        is_order_or_shipment = (
+            t.str.startswith("order") |
+            t.str.startswith("shipment")
+        )
 
+        mask = is_order_or_shipment & has_sku
+
+        # Units calculation
         units = pd.Series(0.0, index=df.index)
+
+        # Missing quantity → default to 1 (only for valid rows)
         q_filled = q.copy()
         q_filled[mask & q_filled.isna()] = 1.0
+
         units[mask] = q_filled[mask].fillna(0.0)
+
+        # 🔍 Optional debug (keep while validating)
+        # print("[DEBUG][_order_units_only] matched rows:", int(mask.sum()))
+        # print("[DEBUG][_order_units_only] type value counts:\n", t.value_counts().head(10))
+
         return units
+
 
     def _order_units_by_sku(self, df: pd.DataFrame) -> pd.DataFrame:
         if df.empty or "sku" not in df.columns:
@@ -5159,8 +5186,6 @@ Do not add any extra keys. Do not wrap in Markdown.
 
         return lines
 
-
-    
     # ---------- main: keyword-free, data-driven recommendations ----------
     @staticmethod
     def recommend(query: str, df_primary: pd.DataFrame, aux: dict | None = None) -> list[str]:
@@ -5181,11 +5206,23 @@ Do not add any extra keys. Do not wrap in Markdown.
         tr = aux.get("time_range")          # dict or string
 
         def _safe_float(x):
+            """
+            IMPORTANT:
+            - Return NaN (not 0) for non-numeric values so groupby sum ignores invalids.
+            - This prevents wiping out quantity when source data has blanks/NA strings.
+            """
             try:
+                if x is None:
+                    return np.nan
+                # handle common "empty" strings
+                if isinstance(x, str):
+                    s = x.strip()
+                    if s == "" or s.lower() in {"na", "n/a", "null", "none", "-", "—"}:
+                        return np.nan
                 f = float(x)
-                return f if np.isfinite(f) else 0.0
+                return f if np.isfinite(f) else np.nan
             except Exception:
-                return 0.0
+                return np.nan
 
         # ---- 1) Canonicalize columns --------------------------------------------
         alias_map = {
@@ -5235,27 +5272,38 @@ Do not add any extra keys. Do not wrap in Markdown.
             "other_txn_fees", "shipping_credits", "postage_credits",
             "gift_wrap_credits", "other", "net_total"
         ]
-        allowed_metrics = ["sales", "profit", "quantity", "asp", "fba_fees", "selling_fees"]
 
         # Defensive copy; handle empty
         if not isinstance(df_primary, pd.DataFrame) or df_primary.empty:
             d = pd.DataFrame()
             payload = {
-                "meta": {
-                    "scope": scope,
-                    "target": target,
-                    "country": country,
-                    "time_range": tr,
-                },
+                "meta": {"scope": scope, "target": target, "country": country, "time_range": tr},
                 "columns": [],
                 "samples": [],
                 "rollups": {},
             }
         else:
             d = df_primary.copy()
-            # Lowercase map
+
+            # ---- DEBUG: before rename, see what quantity-like columns exist ----------
+            try:
+                cols_l = [str(c).strip().lower() for c in d.columns]
+                qty_like = [c for c in d.columns if str(c).strip().lower() in {"quantity", "ordered_units", "units"}]
+                print("\n[DEBUG][Q0] input columns sample:", list(d.columns)[:30])
+                print("[DEBUG][Q0] quantity-like columns found:", qty_like)
+            except Exception:
+                pass
+
+            # Lowercase map (canonicalize)
             d = d.rename(columns={c: alias_map.get(str(c).strip().lower(), str(c).strip().lower())
-                                  for c in d.columns})
+                                for c in d.columns})
+
+            # ---- DEBUG: after rename, confirm 'quantity' exists ----------------------
+            try:
+                print("\n[DEBUG][Q0b] columns after rename:", list(d.columns)[:30])
+                print("[DEBUG][Q0b] has quantity:", "quantity" in d.columns)
+            except Exception:
+                pass
 
             # ---- 2) Period construction ------------------------------------------
             if "date_time" in d.columns:
@@ -5283,9 +5331,36 @@ Do not add any extra keys. Do not wrap in Markdown.
                 "product_sales_tax", "shipping_credits_tax",
                 "giftwrap_credits_tax", "promotional_rebates_tax",
             ]
+
+            # ---- DEBUG: show raw quantity values BEFORE conversion ------------------
+            if "quantity" in d.columns:
+                try:
+                    raw_q = d["quantity"]
+                    # show types + first values to detect strings like "—" etc.
+                    print("\n[DEBUG][Q1] quantity BEFORE _safe_float()")
+                    print("  dtype:", raw_q.dtype)
+                    print("  head raw:", raw_q.head(12).tolist())
+                    print("  sample unique raw:", pd.Series(raw_q.dropna().astype(str)).unique()[:12])
+                except Exception as e:
+                    print("[DEBUG][Q1] failed:", e)
+
             for c in numeric_like:
                 if c in d.columns:
                     d[c] = d[c].map(_safe_float)
+
+            # ---- DEBUG: quantity AFTER conversion ----------------------------------
+            if "quantity" in d.columns:
+                try:
+                    q = d["quantity"]
+                    print("\n[DEBUG][Q2] quantity AFTER _safe_float()")
+                    print("  dtype:", q.dtype)
+                    print("  non-null:", int(q.notna().sum()))
+                    print("  >0 count:", int((q > 0).sum()))
+                    print("  head:", q.head(12).tolist())
+                    print("  min/max:", (float(q.min()) if q.notna().any() else None),
+                        (float(q.max()) if q.notna().any() else None))
+                except Exception as e:
+                    print("[DEBUG][Q2] failed:", e)
 
             if "profit" not in d.columns:
                 sales = d["sales"] if "sales" in d.columns else 0.0
@@ -5317,25 +5392,33 @@ Do not add any extra keys. Do not wrap in Markdown.
 
             # ---- 4) Rollups -------------------------------------------------------
             payload = {
-                "meta": {
-                    "scope": scope,
-                    "target": target,
-                    "country": country,
-                    "time_range": tr,
-                },
+                "meta": {"scope": scope, "target": target, "country": country, "time_range": tr},
                 "columns": list(d.columns),
                 "samples": [],
                 "rollups": {},
             }
 
-            present = [c for c in ["sales", "profit", "quantity", "asp", "fba_fees", "selling_fees"]
-                       if c in d.columns]
+            present = [c for c in ["sales", "profit", "quantity", "asp", "fba_fees", "selling_fees"] if c in d.columns]
+
             if present:
                 totals = d[present].sum(numeric_only=True).to_dict()
                 payload["rollups"]["totals"] = {k: float(v) for k, v in totals.items()}
 
             if "period" in d.columns and present:
                 try:
+                    # ---- DEBUG: quantity by period BEFORE building payload -------------
+                    if "quantity" in d.columns:
+                        try:
+                            print("\n[DEBUG][Q3] quantity by period BEFORE by_period rollup:")
+                            print(
+                                d[["period", "quantity"]]
+                                .groupby("period")["quantity"]
+                                .agg(["count", "sum", "min", "max"])
+                                .sort_index()
+                            )
+                        except Exception as e:
+                            print("[DEBUG][Q3] failed:", e)
+
                     grp = d.groupby("period", dropna=True)[present].sum().reset_index()
 
                     # Ensure chronological order (robust)
@@ -5346,6 +5429,12 @@ Do not add any extra keys. Do not wrap in Markdown.
                         pass
 
                     payload["rollups"]["by_period"] = grp.to_dict(orient="records")
+
+                    # ---- DEBUG: by_period after build --------------------------------
+                    print("\n[DEBUG][Q4] by_period rollup (period → quantity):")
+                    for r in payload["rollups"]["by_period"]:
+                        print(" ", r.get("period"), "→", r.get("quantity"))
+
                 except Exception as e:
                     print("[DEBUG][advisor] failed building primary by_period rollup:", e)
 
@@ -5418,7 +5507,6 @@ Do not add any extra keys. Do not wrap in Markdown.
                 sku_tables = BusinessAdvisor._build_sku_tables(d, by_period, top_n=80)
             else:
                 # Single-period / no-period fallback:
-                # Use snapshot df to build per-SKU metrics so LLM still gets SKUs.
                 print("[DEBUG][advisor] using single-period SKU fallback (no usable prev/curr periods)")
 
                 key_col = None
@@ -5431,7 +5519,6 @@ Do not add any extra keys. Do not wrap in Markdown.
                     print("[DEBUG][advisor] fallback SKU builder: not enough columns, returning empty sku_tables")
                     sku_tables = {"all_skus": []}
                 else:
-                    # Aggregate across the available range (treated as "current")
                     agg_kwargs = {}
                     if "product" in d.columns:
                         agg_kwargs["product_name"] = ("product", "first")
@@ -5447,7 +5534,6 @@ Do not add any extra keys. Do not wrap in Markdown.
                     if "profit" in d.columns:
                         agg_kwargs["profit"] = ("profit", "sum")
                     else:
-                        # simple proxy if profit missing
                         agg_kwargs["profit"] = ("sales", "sum")
 
                     agg_df = d.groupby(key_col, dropna=True).agg(**agg_kwargs).reset_index()
@@ -5463,7 +5549,6 @@ Do not add any extra keys. Do not wrap in Markdown.
                         q_curr = float(row.get("quantity", 0.0) or 0.0)
                         p_curr = float(row.get("profit", 0.0) or 0.0)
 
-                        # No previous period → we keep prev values at 0 and all % growth as None
                         ns_prev = 0.0
                         q_prev = 0.0
                         p_prev = 0.0
@@ -5473,8 +5558,6 @@ Do not add any extra keys. Do not wrap in Markdown.
 
                         up_curr = (p_curr / q_curr) if q_curr > 0 else 0.0
                         up_prev = 0.0
-
-                        mix_curr = (ns_curr / curr_tot_sales) if curr_tot_sales > 0 else 0.0
 
                         r = {
                             "sku": key,
@@ -5491,20 +5574,17 @@ Do not add any extra keys. Do not wrap in Markdown.
                             "profit_per_unit_prev": up_prev,
                             "profit_per_unit_curr": up_curr,
 
-                            # No real previous period → % metrics are None ("no data")
                             "Net Sales Growth (%)": BusinessAdvisor._safe_pct(None, ns_curr),
                             "Unit Growth (%)": BusinessAdvisor._safe_pct(None, q_curr),
                             "Profit Growth (%)": BusinessAdvisor._safe_pct(None, p_curr),
                             "ASP Growth (%)": BusinessAdvisor._safe_pct(None, asp_curr),
                             "Profit Per Unit Growth (%)": BusinessAdvisor._safe_pct(None, up_curr),
 
-                            # We only know current mix, not mix change
                             "Sales Mix Change (%)": None,
                         }
 
                         rows.append(r)
 
-                    # Fallback urgency_score: use current sales so high-impact SKUs still surface
                     for r in rows:
                         try:
                             r["urgency_score"] = float(r.get("net_sales_curr", 0.0) or 0.0)
@@ -5514,7 +5594,7 @@ Do not add any extra keys. Do not wrap in Markdown.
                     rows_sorted = sorted(
                         rows,
                         key=lambda r: (float(r.get("urgency_score", 0.0) or 0.0),
-                                       float(r.get("net_sales_curr", 0.0) or 0.0)),
+                                    float(r.get("net_sales_curr", 0.0) or 0.0)),
                         reverse=True,
                     )
 
@@ -5551,6 +5631,7 @@ Do not add any extra keys. Do not wrap in Markdown.
         except Exception as e:
             print("[DEBUG][advisor] portfolio JSON advisor failed:", e)
             return ["I wasn’t able to generate recommendations right now. Please try again."]
+
 
 
 
@@ -5786,6 +5867,11 @@ class FollowupMemory:
                 if v and not merged.get(k):
                     merged[k] = v
         return merged
+
+
+
+
+
 
 
 

@@ -1,1431 +1,3 @@
-// "use client";
-
-// import React, { useCallback, useEffect, useMemo, useState } from "react";
-// import { useSelector } from "react-redux";
-// import ExcelJS from "exceljs";
-// import { saveAs } from "file-saver";
-
-// import PageBreadcrumb from "@/components/common/PageBreadCrumb";
-// import Loader from "@/components/loader/Loader";
-// import DownloadIconButton from "@/components/ui/button/DownloadIconButton";
-// import SegmentedToggle from "@/components/ui/SegmentedToggle";
-// import DashboardBargraphCard from "@/components/dashboard/DashboardBargraphCard";
-// import SalesTargetCard from "@/components/dashboard/SalesTargetCard";
-// import AmazonStatCard from "@/components/dashboard/AmazonStatCard";
-// import CurrentInventorySection from "@/components/dashboard/CurrentInventorySection";
-
-// import { RootState } from "@/lib/store";
-// import { useAmazonConnections } from "@/lib/utils/useAmazonConnections";
-
-// import {
-//   getISTYearMonth,
-//   getPrevISTYearMonth,
-//   getPrevMonthShortLabel,
-//   getISTDayInfo,
-// } from "@/lib/dashboard/date";
-
-// import {
-//   fmtGBP,
-//   fmtUSD,
-//   fmtNum,
-//   fmtPct,
-//   fmtInt,
-//   toNumberSafe,
-// } from "@/lib/dashboard/format";
-
-// import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
-
-// import { useGetUserDataQuery } from "@/lib/api/profileApi";
-// import { usePlatform } from "@/components/context/PlatformContext";
-// import type { PlatformId } from "@/lib/utils/platforms";
-// import MonthsforBI from "./live-business-insight/[ranged]/[countryName]/[month]/[year]/page";
-// import { useParams } from "next/navigation";
-// import LiveBiLineGraph from "@/components/businessInsight/LiveBiLineChartPanel";
-
-// type CurrencyCode = "USD" | "GBP" | "INR" | "CAD";
-
-// /* ===================== ENV & ENDPOINTS ===================== */
-// const baseURL =
-//   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
-
-// const API_URL = `${baseURL}/amazon_api/orders`;
-// const SHOPIFY_DROPDOWN_ENDPOINT = `${baseURL}/shopify/dropdown`;
-// const FX_ENDPOINT = `${baseURL}/currency-rate`;
-
-// /** 💵 FX defaults (used until backend answers) */
-// const GBP_TO_USD_ENV = Number(process.env.NEXT_PUBLIC_GBP_TO_USD || "1.25");
-// const INR_TO_USD_ENV = Number(process.env.NEXT_PUBLIC_INR_TO_USD || "0.01128");
-// const CAD_TO_USD_ENV = Number(process.env.NEXT_PUBLIC_CAD_TO_USD || "0.74");
-
-// const USE_MANUAL_LAST_MONTH =
-//   (process.env.NEXT_PUBLIC_USE_MANUAL_LAST_MONTH || "false").toLowerCase() ===
-//   "true";
-
-// const MANUAL_LAST_MONTH_USD_GLOBAL = Number(
-//   process.env.NEXT_PUBLIC_MANUAL_LAST_MONTH_USD_GLOBAL || "0"
-// );
-// const MANUAL_LAST_MONTH_USD_UK = Number(
-//   process.env.NEXT_PUBLIC_MANUAL_LAST_MONTH_USD_UK || "0"
-// );
-// const MANUAL_LAST_MONTH_USD_US = Number(
-//   process.env.NEXT_PUBLIC_MANUAL_LAST_MONTH_USD_US || "0"
-// );
-// const MANUAL_LAST_MONTH_USD_CA = Number(
-//   process.env.NEXT_PUBLIC_MANUAL_LAST_MONTH_USD_CA || "0"
-// );
-
-// /* ===================== LOCAL HELPERS ===================== */
-// const parsePercentToNumber = (
-//   value: string | number | null | undefined
-// ): number | null => {
-//   if (value == null) return null;
-//   const raw = typeof value === "number" ? String(value) : value;
-//   const cleaned = raw.replace("%", "").trim();
-//   const n = Number(cleaned);
-//   return Number.isNaN(n) ? null : n;
-// };
-
-
-
-// export default function DashboardPage() {
-//   const { platform } = usePlatform();
-//   const { data: userData } = useGetUserDataQuery();
-//   const params = useParams();
-
-//   const isCountryMode = platform !== "global" && platform !== "shopify";
-
-//   const countryName = useMemo(() => {
-//     switch (platform) {
-//       case "amazon-uk":
-//         return "uk";
-//       case "amazon-us":
-//         return "us";
-//       case "amazon-ca":
-//         return "ca";
-//       default:
-//         return "global";
-//     }
-//   }, [platform]);
-
-//   const showLiveBI = isCountryMode;
-
-//   const brandName = useSelector((state: RootState) => state.auth.user?.brand_name);
-
-//   /* ===================== PLATFORM → DISPLAY CURRENCY ===================== */
-//   const profileHomeCurrency = ((userData?.homeCurrency || "USD").toUpperCase() as CurrencyCode);
-
-//   const displayCurrency: CurrencyCode = useMemo(() => {
-//     switch (platform as PlatformId) {
-//       case "global":
-//         return profileHomeCurrency;
-//       case "amazon-uk":
-//         return "GBP";
-//       case "amazon-us":
-//         return "USD";
-//       case "amazon-ca":
-//         return "CAD";
-//       case "shopify":
-//         return "INR"; // change to profileHomeCurrency if desired
-//       default:
-//         return profileHomeCurrency;
-//     }
-//   }, [platform, profileHomeCurrency]);
-
-//   /* ===================== AMAZON / SHOPIFY STATE ===================== */
-//   const [loading, setLoading] = useState(false);
-//   const [unauthorized, setUnauthorized] = useState(false);
-//   const [error, setError] = useState<string | null>(null);
-//   const [data, setData] = useState<any>(null);
-
-//   const { connections: amazonConnections } = useAmazonConnections();
-
-//   // Shopify (current month)
-//   const [shopifyLoading, setShopifyLoading] = useState(false);
-//   const [shopifyError, setShopifyError] = useState<string | null>(null);
-//   const [shopifyRows, setShopifyRows] = useState<any[]>([]);
-//   const shopify = shopifyRows?.[0] || null;
-//   const [shopifyPrevRows, setShopifyPrevRows] = useState<any[]>([]);
-//   const [shopifyStore, setShopifyStore] = useState<any | null>(null);
-//   const [amazonRegion, setAmazonRegion] = useState<RegionKey>("Global");
-//   const [graphRegion, setGraphRegion] = useState<RegionKey>("Global");
-
-//   const chartRef = React.useRef<HTMLDivElement | null>(null);
-//   const prevLabel = useMemo(() => getPrevMonthShortLabel(), []);
-
-//   /* ===================== FX RATES ===================== */
-//   const [gbpToUsd, setGbpToUsd] = useState(GBP_TO_USD_ENV);
-//   const [inrToUsd, setInrToUsd] = useState(INR_TO_USD_ENV);
-//   const [cadToUsd, setCadToUsd] = useState(CAD_TO_USD_ENV);
-//   const [fxLoading, setFxLoading] = useState(false);
-
-//   const fetchFxRates = useCallback(async () => {
-//     try {
-//       setFxLoading(true);
-
-//       const token =
-//         typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
-
-//       const headers: HeadersInit = {
-//         "Content-Type": "application/json",
-//         Accept: "application/json",
-//       };
-//       if (token) (headers as any).Authorization = `Bearer ${token}`;
-
-//       const { monthName, year } = getISTYearMonth();
-//       const month = monthName.toLowerCase();
-
-//       const commonBody = { month, year, fetch_if_missing: true };
-
-//       const [ukRes, inrRes, cadRes] = await Promise.all([
-//         fetch(FX_ENDPOINT, {
-//           method: "POST",
-//           headers,
-//           body: JSON.stringify({
-//             ...commonBody,
-//             user_currency: "GBP",
-//             country: "uk",
-//             selected_currency: "USD",
-//           }),
-//         }),
-//         fetch(FX_ENDPOINT, {
-//           method: "POST",
-//           headers,
-//           body: JSON.stringify({
-//             ...commonBody,
-//             user_currency: "INR",
-//             country: "india",
-//             selected_currency: "USD",
-//           }),
-//         }),
-//         fetch(FX_ENDPOINT, {
-//           method: "POST",
-//           headers,
-//           body: JSON.stringify({
-//             ...commonBody,
-//             user_currency: "CAD",
-//             country: "ca",
-//             selected_currency: "USD",
-//           }),
-//         }),
-//       ]);
-
-//       if (ukRes.ok) {
-//         const json = await ukRes.json();
-//         const rate = json?.record?.conversion_rate;
-//         if (json?.success && rate != null) setGbpToUsd(Number(rate));
-//       }
-
-//       if (inrRes.ok) {
-//         const json = await inrRes.json();
-//         const rate = json?.record?.conversion_rate;
-//         if (json?.success && rate != null) setInrToUsd(Number(rate));
-//       }
-
-//       if (cadRes.ok) {
-//         const json = await cadRes.json();
-//         const rate = json?.record?.conversion_rate;
-//         if (json?.success && rate != null) setCadToUsd(Number(rate));
-//       }
-//     } catch (err) {
-//       console.error("Failed to fetch FX rates", err);
-//     } finally {
-//       setFxLoading(false);
-//     }
-//   }, []);
-
-//   useEffect(() => {
-//     fetchFxRates();
-//   }, [fetchFxRates]);
-
-
-
-//   const forcedRegion: RegionKey = useMemo(() => {
-//     switch (platform) {
-//       case "amazon-uk":
-//         return "UK";
-//       case "amazon-us":
-//         return "US";
-//       case "amazon-ca":
-//         return "CA";
-//       default:
-//         return "Global";
-//     }
-//   }, [platform]);
-
-//   const graphRegionToUse: RegionKey = isCountryMode ? forcedRegion : graphRegion;
-
-//   useEffect(() => {
-//     if (!isCountryMode) return;
-//     setGraphRegion(forcedRegion);
-//     setAmazonRegion(forcedRegion);
-//   }, [isCountryMode, forcedRegion]);
-
-
-//   /* ===================== CONVERSION + FORMATTING (DISPLAY CURRENCY) ===================== */
-//   const convertToDisplayCurrency = useCallback(
-//     (value: number | null | undefined, from: CurrencyCode) => {
-//       const n = toNumberSafe(value ?? 0);
-//       if (!n) return 0;
-
-//       // from -> USD
-//       let usd = n;
-//       if (from === "GBP") usd = n * gbpToUsd;
-//       if (from === "INR") usd = n * inrToUsd;
-//       if (from === "CAD") usd = n * cadToUsd;
-
-//       // USD -> displayCurrency
-//       if (displayCurrency === "USD") return usd;
-//       if (displayCurrency === "GBP") return gbpToUsd ? usd / gbpToUsd : usd;
-//       if (displayCurrency === "INR") return inrToUsd ? usd / inrToUsd : usd;
-//       if (displayCurrency === "CAD") return cadToUsd ? usd / cadToUsd : usd;
-
-//       return usd;
-//     },
-//     [displayCurrency, gbpToUsd, inrToUsd, cadToUsd]
-//   );
-
-//   const formatDisplayAmount = useCallback(
-//     (value: number | null | undefined) => {
-//       const n = toNumberSafe(value ?? 0);
-
-//       switch (displayCurrency) {
-//         case "USD":
-//           return fmtUSD(n);
-//         case "GBP":
-//           return fmtGBP(n);
-//         case "CAD":
-//           return new Intl.NumberFormat("en-CA", {
-//             style: "currency",
-//             currency: "CAD",
-//           }).format(n);
-//         case "INR":
-//           return new Intl.NumberFormat("en-IN", {
-//             style: "currency",
-//             currency: "INR",
-//           }).format(n);
-//         default:
-//           return fmtNum(n);
-//       }
-//     },
-//     [displayCurrency]
-//   );
-
-//   const formatDisplayK = useCallback(
-//     (value: number | null | undefined) => {
-//       const n = toNumberSafe(value ?? 0);
-//       const abs = Math.abs(n);
-//       const isK = abs >= 1000;
-
-//       const displayVal = isK ? n / 1000 : n;
-//       const suffix = isK ? "k" : "";
-
-//       return `${formatDisplayAmount(displayVal)}${suffix}`;
-//     },
-//     [formatDisplayAmount]
-//   );
-
-//   const currencySymbol =
-//     displayCurrency === "USD"
-//       ? "$"
-//       : displayCurrency === "GBP"
-//         ? "£"
-//         : displayCurrency === "CAD"
-//           ? "CA$"
-//           : displayCurrency === "INR"
-//             ? "₹"
-//             : "¤";
-
-//   /* ===================== AMAZON FETCH ===================== */
-//   const fetchAmazon = useCallback(async () => {
-//     setLoading(true);
-//     setUnauthorized(false);
-//     setError(null);
-//     try {
-//       const token =
-//         typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
-//       if (!token) {
-//         setUnauthorized(true);
-//         throw new Error("No token found. Please sign in.");
-//       }
-//       const res = await fetch(API_URL, {
-//         method: "GET",
-//         headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
-//         credentials: "omit",
-//       });
-//       if (res.status === 401) {
-//         setUnauthorized(true);
-//         throw new Error("Unauthorized — token missing/invalid/expired.");
-//       }
-//       if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-//       const json = await res.json();
-//       setData(json);
-//     } catch (e: any) {
-//       setError(e?.message || "Failed to load data");
-//       setData(null);
-//     } finally {
-//       setLoading(false);
-//     }
-//   }, []);
-
-//   /* ===================== SHOPIFY STORE INFO ===================== */
-//   useEffect(() => {
-//     const fetchShopifyStore = async () => {
-//       try {
-//         const token =
-//           typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
-//         if (!token) return;
-
-//         const res = await fetch(`${baseURL}/shopify/store`, {
-//           headers: { Authorization: `Bearer ${token}` },
-//         });
-
-//         const ct = res.headers.get("content-type") || "";
-//         if (!ct.includes("application/json")) return;
-
-//         const d = await res.json();
-//         if (!res.ok || d?.error) return;
-
-//         setShopifyStore(d);
-//       } catch (err) {
-//         console.error("Error fetching Shopify store in Dashboard:", err);
-//       }
-//     };
-//     fetchShopifyStore();
-//   }, []);
-
-//   /* ===================== SHOPIFY CURRENT MONTH ===================== */
-//   const fetchShopify = useCallback(async () => {
-//     setShopifyLoading(true);
-//     setShopifyError(null);
-//     try {
-//       const user_token =
-//         typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
-//       if (!user_token) throw new Error("No token found. Please sign in.");
-
-//       if (!shopifyStore?.shop_name || !shopifyStore?.access_token) {
-//         throw new Error("Shopify store not connected.");
-//       }
-
-//       const { monthName, year } = getISTYearMonth();
-
-//       const params = new URLSearchParams({
-//         range: "monthly",
-//         month: monthName.toLowerCase(),
-//         year: String(year),
-//         user_token,
-//         shop: shopifyStore.shop_name,
-//         token: shopifyStore.access_token,
-//       });
-
-//       const url = `${SHOPIFY_DROPDOWN_ENDPOINT}?${params.toString()}`;
-
-//       const res = await fetch(url, {
-//         method: "GET",
-//         headers: { Accept: "application/json", Authorization: `Bearer ${user_token}` },
-//         credentials: "omit",
-//       });
-
-//       if (res.status === 401) throw new Error("Unauthorized — token missing/invalid/expired.");
-//       if (!res.ok) throw new Error(`Shopify request failed: ${res.status}`);
-
-//       const json = await res.json();
-//       const row = json?.last_row_data ? json.last_row_data : null;
-//       setShopifyRows(row ? [row] : []);
-//     } catch (e: any) {
-//       setShopifyError(e?.message || "Failed to load Shopify data");
-//       setShopifyRows([]);
-//     } finally {
-//       setShopifyLoading(false);
-//     }
-//   }, [shopifyStore]);
-
-//   /* ===================== SHOPIFY PREVIOUS MONTH ===================== */
-//   const fetchShopifyPrev = useCallback(async () => {
-//     try {
-//       const user_token =
-//         typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
-//       if (!user_token) throw new Error("No token found. Please sign in.");
-
-//       if (!shopifyStore?.shop_name || !shopifyStore?.access_token) {
-//         throw new Error("Shopify store not connected.");
-//       }
-
-//       const { year, monthName } = getPrevISTYearMonth();
-
-//       const params = new URLSearchParams({
-//         range: "monthly",
-//         month: monthName.toLowerCase(),
-//         year: String(year),
-//         user_token,
-//         shop: shopifyStore.shop_name,
-//         token: shopifyStore.access_token,
-//       });
-
-//       const url = `${SHOPIFY_DROPDOWN_ENDPOINT}?${params.toString()}`;
-
-//       const res = await fetch(url, {
-//         method: "GET",
-//         headers: { Accept: "application/json", Authorization: `Bearer ${user_token}` },
-//         credentials: "omit",
-//       });
-
-//       if (res.status === 401) throw new Error("Unauthorized — token missing/invalid/expired.");
-//       if (!res.ok) throw new Error(`Shopify (prev) request failed: ${res.status}`);
-
-//       const json = await res.json();
-//       const row = json?.last_row_data ? json.last_row_data : null;
-//       setShopifyPrevRows(row ? [row] : []);
-//     } catch (e: any) {
-//       console.warn("Shopify prev-month fetch failed:", e?.message);
-//       setShopifyPrevRows([]);
-//     }
-//   }, [shopifyStore]);
-
-//   /* ===================== REFRESH ALL ===================== */
-//   const refreshAll = useCallback(async () => {
-//     await fetchAmazon();
-//     if (shopifyStore?.shop_name && shopifyStore?.access_token) {
-//       await Promise.all([fetchShopify(), fetchShopifyPrev()]);
-//     }
-//   }, [fetchAmazon, fetchShopify, fetchShopifyPrev, shopifyStore]);
-
-//   useEffect(() => {
-//     refreshAll();
-//   }, [refreshAll]);
-
-//   /* ===================== AMAZON DERIVED DATA ===================== */
-//   const cms = data?.current_month_summary || null;
-//   const cmp = data?.current_month_profit || null;
-//   const skuTotals = data?.current_month_skuwise_totals || null;
-
-//   const uk = useMemo(() => {
-//     const netSalesGBP =
-//       cms?.net_sales?.GBP != null ? toNumberSafe(cms.net_sales.GBP) : null;
-
-//     const aspGBP = cms?.asp?.GBP != null ? toNumberSafe(cms.asp.GBP) : null;
-
-//     const breakdownGBP = cmp?.breakdown?.GBP || {};
-
-//     const cogsGBP = breakdownGBP.cogs !== undefined ? toNumberSafe(breakdownGBP.cogs) : 0;
-//     const fbaFeesGBP = breakdownGBP.fba_fees !== undefined ? toNumberSafe(breakdownGBP.fba_fees) : 0;
-//     const sellingFeesGBP = breakdownGBP.selling_fees !== undefined ? toNumberSafe(breakdownGBP.selling_fees) : 0;
-//     const amazonFeesGBP = fbaFeesGBP + sellingFeesGBP;
-
-//     const advertisingGBP =
-//       skuTotals?.advertising_total !== undefined ? toNumberSafe(skuTotals.advertising_total) : 0;
-
-//     const platformFeeGBP =
-//       skuTotals?.platform_fee_total !== undefined ? toNumberSafe(skuTotals.platform_fee_total) : 0;
-
-//     let profitGBP: number | null = null;
-//     if (cmp?.profit && typeof cmp.profit === "object" && cmp.profit.GBP !== undefined) {
-//       profitGBP = toNumberSafe(cmp.profit.GBP);
-//     } else if ((typeof cmp?.profit === "number" || typeof cmp?.profit === "string") && netSalesGBP !== null) {
-//       profitGBP = toNumberSafe(cmp.profit);
-//     }
-
-//     let unitsGBP: number | null = null;
-//     if (breakdownGBP.quantity !== undefined) unitsGBP = toNumberSafe(breakdownGBP.quantity);
-
-//     let profitPctGBP: number | null = null;
-//     if (profitGBP !== null && netSalesGBP && netSalesGBP !== 0) {
-//       profitPctGBP = (profitGBP / netSalesGBP) * 100;
-//     }
-
-//     return {
-//       unitsGBP,
-//       netSalesGBP,
-//       aspGBP,
-//       profitGBP,
-//       profitPctGBP,
-//       cogsGBP,
-//       amazonFeesGBP,
-//       advertisingGBP,
-//       platformFeeGBP,
-//     };
-//   }, [cms, cmp, skuTotals]);
-
-//   /* ===================== INTEGRATION FLAGS ===================== */
-//   const shopifyDeriv = useMemo(() => {
-//     if (!shopify) return null;
-//     const totalOrders = toNumberSafe(shopify.total_orders);
-//     const netSales = toNumberSafe(shopify.net_sales);
-//     return { totalOrders, netSales };
-//   }, [shopify]);
-
-//   const shopifyPrevDeriv = useMemo(() => {
-//     const row = shopifyPrevRows?.[0];
-//     if (!row) return null;
-//     const netSales = toNumberSafe(row.net_sales);
-//     const totalOrders = toNumberSafe(row.total_orders);
-//     return { netSales, totalOrders };
-//   }, [shopifyPrevRows]);
-
-//   const shopifyNotConnected =
-//     !shopifyStore?.shop_name ||
-//     !shopifyStore?.access_token ||
-//     (shopifyError &&
-//       (shopifyError.toLowerCase().includes("shopify store not connected") ||
-//         shopifyError.toLowerCase().includes("no token")));
-
-//   const shopifyIntegrated = !shopifyNotConnected && !!shopify;
-
-//   const amazonIntegrated =
-//     Array.isArray(amazonConnections) && amazonConnections.length > 0;
-
-//   const noIntegrations = !amazonIntegrated && !shopifyIntegrated;
-
-//   /* ===================== GLOBAL / FX COMBINED (BASE USD DATA) ===================== */
-//   const amazonUK_USD = useMemo(() => {
-//     const amazonUK_GBP = toNumberSafe(uk.netSalesGBP);
-//     return amazonUK_GBP * gbpToUsd;
-//   }, [uk.netSalesGBP, gbpToUsd]);
-
-//   const combinedUSD = useMemo(() => {
-//     const aUK = amazonUK_USD;
-//     const shopifyUSD = toNumberSafe(shopifyDeriv?.netSales) * inrToUsd;
-//     return aUK + shopifyUSD;
-//   }, [amazonUK_USD, shopifyDeriv?.netSales, inrToUsd]);
-
-//   const prevAmazonUKTotalUSD = useMemo(() => {
-//     const prevTotalGBP = toNumberSafe(data?.previous_month_total_net_sales?.total);
-//     return prevTotalGBP * gbpToUsd;
-//   }, [data?.previous_month_total_net_sales?.total, gbpToUsd]);
-
-//   const prevShopifyTotalUSD = useMemo(() => {
-//     const prevINRTotal = toNumberSafe(shopifyPrevDeriv?.netSales);
-//     return prevINRTotal * inrToUsd;
-//   }, [shopifyPrevDeriv, inrToUsd]);
-
-//   const globalPrevTotalUSD = prevShopifyTotalUSD + prevAmazonUKTotalUSD;
-
-//   const chooseLastMonthTotal = (manualUSD: number, computedUSD: number) =>
-//     USE_MANUAL_LAST_MONTH && manualUSD > 0 ? manualUSD : computedUSD;
-
-//   const prorateToDate = (lastMonthTotalUSD: number) => {
-//     const { todayDay, daysInPrevMonth } = getISTDayInfo();
-//     return daysInPrevMonth > 0 ? (lastMonthTotalUSD * todayDay) / daysInPrevMonth : 0;
-//   };
-
-//   const regions = useMemo(() => {
-//     const globalLastMonthTotal = chooseLastMonthTotal(
-//       MANUAL_LAST_MONTH_USD_GLOBAL,
-//       globalPrevTotalUSD
-//     );
-
-//     const global: RegionMetrics = {
-//       mtdUSD: combinedUSD,
-//       lastMonthToDateUSD: prorateToDate(globalLastMonthTotal),
-//       lastMonthTotalUSD: globalLastMonthTotal,
-//       targetUSD: globalLastMonthTotal,
-//     };
-
-//     const ukLastMonthTotal = chooseLastMonthTotal(
-//       MANUAL_LAST_MONTH_USD_UK,
-//       prevAmazonUKTotalUSD
-//     );
-//     const ukRegion: RegionMetrics = {
-//       mtdUSD: amazonUK_USD,
-//       lastMonthToDateUSD: prorateToDate(ukLastMonthTotal),
-//       lastMonthTotalUSD: ukLastMonthTotal,
-//       targetUSD: ukLastMonthTotal,
-//     };
-
-//     const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
-//     const usRegion: RegionMetrics = {
-//       mtdUSD: 0,
-//       lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
-//       lastMonthTotalUSD: usLastMonthTotal,
-//       targetUSD: usLastMonthTotal,
-//     };
-
-//     const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
-//     const caRegion: RegionMetrics = {
-//       mtdUSD: 0,
-//       lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
-//       lastMonthTotalUSD: caLastMonthTotal,
-//       targetUSD: caLastMonthTotal,
-//     };
-
-//     return {
-//       Global: global,
-//       UK: ukRegion,
-//       US: usRegion,
-//       CA: caRegion,
-//     } as Record<RegionKey, RegionMetrics>;
-//   }, [combinedUSD, amazonUK_USD, globalPrevTotalUSD, prevAmazonUKTotalUSD]);
-
-//   const anyLoading = loading || shopifyLoading;
-
-//   const amazonTabs = useMemo<RegionKey[]>(() => {
-//     const tabs: RegionKey[] = [];
-//     (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
-//       const r = regions[key];
-//       if (!r) return;
-//       if (r.mtdUSD || r.lastMonthToDateUSD || r.lastMonthTotalUSD || r.targetUSD) tabs.push(key);
-//     });
-//     return tabs;
-//   }, [regions]);
-
-//   useEffect(() => {
-//     if (amazonTabs.length && !amazonTabs.includes(amazonRegion)) setAmazonRegion(amazonTabs[0]);
-//   }, [amazonTabs, amazonRegion]);
-
-//   const graphRegions = useMemo<RegionKey[]>(() => {
-//     const list: RegionKey[] = ["Global"];
-//     (["UK", "US", "CA"] as RegionKey[]).forEach((key) => {
-//       const r = regions[key];
-//       if (!r) return;
-//       if (r.mtdUSD || r.lastMonthToDateUSD || r.lastMonthTotalUSD || r.targetUSD) list.push(key);
-//     });
-//     return list;
-//   }, [regions]);
-
-//   useEffect(() => {
-//     if (!graphRegions.includes(graphRegion)) setGraphRegion("Global");
-//   }, [graphRegions, graphRegion]);
-
-//   const onlyAmazon = amazonIntegrated && !shopifyIntegrated;
-//   const onlyShopify = shopifyIntegrated && !amazonIntegrated;
-
-//   /* ===================== P&L ITEMS (DISPLAY CURRENCY OUTPUT) ===================== */
-//   // const plItems = useMemo(() => {
-//   //   // Global P&L sales shown as combined USD -> displayCurrency
-//   //   if (graphRegion === "Global") {
-//   //     const sales = convertToDisplayCurrency(combinedUSD, "USD");
-//   //     return [
-//   //       { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
-//   //       { label: "Amazon Fees", raw: 0, display: formatDisplayAmount(0) },
-//   //       { label: "COGS", raw: 0, display: formatDisplayAmount(0) },
-//   //       { label: "Advertisements", raw: 0, display: formatDisplayAmount(0) },
-//   //       { label: "Other Charges", raw: 0, display: formatDisplayAmount(0) },
-//   //       { label: "Profit", raw: 0, display: formatDisplayAmount(0) },
-//   //     ];
-//   //   }
-
-//   //   // UK P&L is in GBP in backend, then converted to displayCurrency
-//   //   const sales = convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP");
-//   //   const fees = convertToDisplayCurrency(uk.amazonFeesGBP ?? 0, "GBP");
-//   //   const cogs = convertToDisplayCurrency(uk.cogsGBP ?? 0, "GBP");
-//   //   const adv = convertToDisplayCurrency(uk.advertisingGBP ?? 0, "GBP");
-//   //   const platformFee = convertToDisplayCurrency(uk.platformFeeGBP ?? 0, "GBP");
-//   //   const profit = convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP");
-
-//   //   return [
-//   //     { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
-//   //     { label: "Amazon Fees", raw: fees, display: formatDisplayAmount(fees) },
-//   //     { label: "COGS", raw: cogs, display: formatDisplayAmount(cogs) },
-//   //     { label: "Advertisements", raw: adv, display: formatDisplayAmount(adv) },
-//   //     { label: "Platform Fees", raw: platformFee, display: formatDisplayAmount(platformFee) },
-//   //     { label: "Profit", raw: profit, display: formatDisplayAmount(profit) },
-//   //   ];
-//   // }, [
-//   //   graphRegion,
-//   //   combinedUSD,
-//   //   uk.netSalesGBP,
-//   //   uk.amazonFeesGBP,
-//   //   uk.cogsGBP,
-//   //   uk.advertisingGBP,
-//   //   uk.platformFeeGBP,
-//   //   uk.profitGBP,
-//   //   convertToDisplayCurrency,
-//   //   formatDisplayAmount,
-//   // ]);
-
-
-//   const plItems = useMemo(() => {
-//     // Helper for UK P&L (used by UK tab + Global when onlyAmazon)
-//     const ukPl = () => {
-//       const sales = convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP");
-//       const fees = convertToDisplayCurrency(uk.amazonFeesGBP ?? 0, "GBP");
-//       const cogs = convertToDisplayCurrency(uk.cogsGBP ?? 0, "GBP");
-//       const adv = convertToDisplayCurrency(uk.advertisingGBP ?? 0, "GBP");
-//       const platformFee = convertToDisplayCurrency(uk.platformFeeGBP ?? 0, "GBP");
-//       const profit = convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP");
-
-//       return [
-//         { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
-//         { label: "Amazon Fees", raw: fees, display: formatDisplayAmount(fees) },
-//         { label: "COGS", raw: cogs, display: formatDisplayAmount(cogs) },
-//         { label: "Advertisements", raw: adv, display: formatDisplayAmount(adv) },
-//         { label: "Platform Fees", raw: platformFee, display: formatDisplayAmount(platformFee) },
-//         { label: "Profit", raw: profit, display: formatDisplayAmount(profit) },
-//       ];
-//     };
-
-//     // ✅ GLOBAL VIEW (when graphRegionToUse is Global)
-//     if (graphRegionToUse === "Global") {
-//       // ✅ If only Amazon UK connected → Global should match UK exactly
-//       if (onlyAmazon) return ukPl();
-
-//       // ✅ If only Shopify connected → Global is Shopify-only Sales
-//       if (onlyShopify) {
-//         const sales = convertToDisplayCurrency(shopifyDeriv?.netSales ?? 0, "INR");
-//         return [
-//           { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
-//           { label: "Amazon Fees", raw: 0, display: formatDisplayAmount(0) },
-//           { label: "COGS", raw: 0, display: formatDisplayAmount(0) },
-//           { label: "Advertisements", raw: 0, display: formatDisplayAmount(0) },
-//           { label: "Other Charges", raw: 0, display: formatDisplayAmount(0) },
-//           { label: "Profit", raw: 0, display: formatDisplayAmount(0) },
-//         ];
-//       }
-
-//       // ✅ Both connected → Sales combined, costs unknown (keep your current behavior)
-//       const sales = convertToDisplayCurrency(combinedUSD, "USD");
-//       return [
-//         { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
-//         { label: "Amazon Fees", raw: 0, display: formatDisplayAmount(0) },
-//         { label: "COGS", raw: 0, display: formatDisplayAmount(0) },
-//         { label: "Advertisements", raw: 0, display: formatDisplayAmount(0) },
-//         { label: "Other Charges", raw: 0, display: formatDisplayAmount(0) },
-//         { label: "Profit", raw: 0, display: formatDisplayAmount(0) },
-//       ];
-//     }
-
-//     // ✅ REGION VIEW
-//     if (graphRegionToUse === "UK") return ukPl();
-
-//     // (Optional placeholders until you implement US/CA breakdowns)
-//     const zero = formatDisplayAmount(0);
-//     return [
-//       { label: "Sales", raw: 0, display: zero },
-//       { label: "Amazon Fees", raw: 0, display: zero },
-//       { label: "COGS", raw: 0, display: zero },
-//       { label: "Advertisements", raw: 0, display: zero },
-//       { label: "Other Charges", raw: 0, display: zero },
-//       { label: "Profit", raw: 0, display: zero },
-//     ];
-//   }, [
-//     graphRegionToUse,          // ✅ changed
-//     onlyAmazon,
-//     onlyShopify,
-//     combinedUSD,
-//     uk.netSalesGBP,
-//     uk.amazonFeesGBP,
-//     uk.cogsGBP,
-//     uk.advertisingGBP,
-//     uk.platformFeeGBP,
-//     uk.profitGBP,
-//     shopifyDeriv?.netSales,
-//     convertToDisplayCurrency,
-//     formatDisplayAmount,
-//   ]);
-
-//   const labels = plItems.map((i) => i.label);
-//   const values = plItems.map((i) => i.raw);
-
-//   const colorMapping: Record<string, string> = {
-//     Sales: "#2CA9E0",
-//     "Amazon Fees": "#ff5c5c",
-//     COGS: "#AB64B5",
-//     Advertisements: "#F47A00",
-//     "Other Charges": "#00627D",
-//     "Platform Fees": "#154B9B",
-//     Profit: "#87AD12",
-//   };
-//   const colors = labels.map(
-//     (label) => colorMapping[label] || "#2CA9E0"
-//   );
-
-//   const allValuesZero = values.every((v) => !v || v === 0);
-
-//   /* ===================== EXCEL EXPORT (USES displayCurrency symbol) ===================== */
-//   const captureChartPng = useCallback(async () => {
-//     const container = chartRef.current;
-//     if (!container) return null;
-
-//     const canvas = container.querySelector("canvas") as HTMLCanvasElement | null;
-//     if (canvas) {
-//       try {
-//         const tmpCanvas = document.createElement("canvas");
-//         tmpCanvas.width = canvas.width;
-//         tmpCanvas.height = canvas.height;
-//         const ctx = tmpCanvas.getContext("2d");
-//         if (!ctx) return null;
-
-//         ctx.fillStyle = "#ffffff";
-//         ctx.fillRect(0, 0, tmpCanvas.width, tmpCanvas.height);
-//         ctx.drawImage(canvas, 0, 0);
-
-//         return tmpCanvas.toDataURL("image/png");
-//       } catch {
-//         return null;
-//       }
-//     }
-//     return null;
-//   }, []);
-
-//   const { monthName: currMonthName, year: currYear } = getISTYearMonth();
-//   const shortMonForGraph = new Date(`${currMonthName} 1, ${currYear}`).toLocaleString("en-US", {
-//     month: "short",
-//     timeZone: "Asia/Kolkata",
-//   });
-//   const formattedMonthYear = `${shortMonForGraph}'${String(currYear).slice(-2)}`;
-
-//   const countryNameForGraph =
-//     graphRegionToUse === "Global" ? "global" : graphRegionToUse.toLowerCase();
-
-
-//   const handleDownload = useCallback(async () => {
-//     try {
-//       const pngDataUrl = await captureChartPng();
-
-//       const workbook = new ExcelJS.Workbook();
-//       const sheet = workbook.addWorksheet("Amazon P&L");
-
-//       sheet.addRow([brandName || "Brand"]);
-//       sheet.addRow([`Amazon P&L - ${formattedMonthYear}`]);
-//       sheet.addRow([`Country: ${countryNameForGraph.toUpperCase()}`]);
-//       sheet.addRow([`Currency: ${currencySymbol}`]);
-//       sheet.addRow([""]);
-
-//       sheet.addRow(["Metric", "", `Amount (${currencySymbol})`]);
-
-//       const signs: Record<string, string> = {
-//         Sales: "(+)",
-//         "Amazon Fees": "(-)",
-//         COGS: "(-)",
-//         Advertisements: "(-)",
-//         "Other Charges": "(-)",
-//         "Platform Fees": "(-)",
-//         Profit: "",
-//       };
-
-//       values.forEach((v, idx) => {
-//         const label = labels[idx];
-//         const sign = signs[label] || "";
-//         const num = Number(v || 0);
-//         sheet.addRow([label, sign, Number(num.toFixed(2))]);
-//       });
-
-//       const totalValue = values.reduce((acc, v) => acc + (Number(v) || 0), 0);
-//       sheet.addRow(["Total", "", Number(totalValue.toFixed(2))]);
-
-//       if (pngDataUrl) {
-//         const base64 = pngDataUrl.replace(/^data:image\/png;base64,/, "");
-//         const imageId = workbook.addImage({ base64, extension: "png" });
-
-//         sheet.addImage(
-//           imageId,
-//           { tl: { col: 0, row: 9 } as any, br: { col: 8, row: 28 } as any, editAs: "oneCell" } as any
-//         );
-//       }
-
-//       const buffer = await workbook.xlsx.writeBuffer();
-//       const blob = new Blob([buffer], {
-//         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-//       });
-//       saveAs(blob, `Amazon-PnL-${formattedMonthYear}.xlsx`);
-//     } catch (err) {
-//       console.error("Error generating Excel with chart", err);
-//     }
-//   }, [
-//     brandName,
-//     formattedMonthYear,
-//     countryNameForGraph,
-//     currencySymbol,
-//     captureChartPng,
-//     labels,
-//     values,
-//   ]);
-
-//   /* ===================== RENDER ===================== */
-//   const hasAnyGraphData = amazonIntegrated || shopifyIntegrated;
-//   const hasGlobalCard = !noIntegrations;
-//   const hasAmazonCard = amazonIntegrated;
-//   const hasShopifyCard = !shopifyNotConnected;
-
-//   const leftColumnHeightClass = !hasShopifyCard ? "lg:min-h-[520px]" : "";
-
-//   return (
-//     <div className="relative">
-//       {(loading || shopifyLoading) && !data && !shopify && (
-//         <>
-//           <div className="fixed inset-0 z-40 bg-white/70" />
-//           <div className="fixed inset-0 z-50 flex items-center justify-center">
-//             <Loader
-//               src="/infinity-unscreen.gif"
-//               label="Loading sales dashboard…"
-//               size={120}
-//               roundedClass="rounded-xl"
-//               backgroundClass="bg-transparent"
-//               respectReducedMotion
-//             />
-//           </div>
-//         </>
-//       )}
-
-//       <div className="">
-//         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-//           <div className="flex flex-col leading-tight">
-//             <p className="text-lg text-charcoal-500 mb-1">
-//               Let&apos;s get started, <span className="text-green-500">{brandName}!</span>
-//             </p>
-
-//             <div className="flex items-center gap-2">
-//               <PageBreadcrumb
-//                 pageTitle="Sales Dashboard -"
-//                 variant="page"
-//                 textSize="2xl"
-//                 className="text-2xl font-semibold"
-//               />
-
-//               <span className="text-lg sm:text-2xl md:text-2xl font-semibold text-[#5EA68E]">
-//                 {formattedMonthYear}
-//               </span>
-
-//             </div>
-//           </div>
-
-//           <button
-//             onClick={refreshAll}
-//             disabled={loading || shopifyLoading}
-//             className={`w-full rounded-md border px-3 py-1.5 text-sm shadow-sm active:scale-[.99] sm:w-auto ${loading || shopifyLoading
-//               ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
-//               : "border-gray-300 bg-white hover:bg-gray-50"
-//               }`}
-//           >
-//             {loading || shopifyLoading ? "Refreshing…" : "Refresh"}
-//           </button>
-//         </div>
-
-//         <div className={`grid grid-cols-12 gap-6 ${!noIntegrations ? "items-stretch" : ""}`}>
-//           {/* LEFT COLUMN */}
-//           <div className={`col-span-12 lg:col-span-8 order-2 lg:order-1 flex flex-col gap-6 ${leftColumnHeightClass}`}>
-//             {/* GLOBAL CARD */}
-//             {!isCountryMode && hasGlobalCard && (
-//               <div className="flex lg:flex-1">
-//                 <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
-//                   <div className="mb-4">
-//                     <div className="flex items-baseline gap-2">
-//                       <PageBreadcrumb pageTitle="Global" variant="page" align="left" />
-//                     </div>
-//                     <p className="mt-1 text-sm text-charcoal-500">
-//                       Real-time data from Amazon &amp; Shopify
-//                     </p>
-//                   </div>
-
-//                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-//                     <AmazonStatCard
-//                       label="Sales"
-//                       current={convertToDisplayCurrency(combinedUSD, "USD")}
-//                       previous={convertToDisplayCurrency(globalPrevTotalUSD, "USD")}
-//                       loading={loading || shopifyLoading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#87AD12] bg-[#87AD1226]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Units"
-//                       current={(toNumberSafe(cms?.total_quantity ?? 0) + toNumberSafe(shopifyDeriv?.totalOrders ?? 0))}
-//                       previous={(toNumberSafe(shopifyPrevDeriv?.totalOrders ?? 0))}
-//                       loading={loading || shopifyLoading}
-//                       formatter={fmtInt}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#F47A00] bg-[#F47A0026]"
-//                     />
-//                     <AmazonStatCard
-//                       label="ASP"
-//                       current={(() => {
-//                         const units = toNumberSafe(cms?.total_quantity ?? 0) + toNumberSafe(shopifyDeriv?.totalOrders ?? 0);
-//                         const sales = convertToDisplayCurrency(combinedUSD, "USD");
-//                         return units > 0 ? sales / units : 0;
-//                       })()}
-//                       previous={0}
-//                       loading={loading || shopifyLoading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#2CA9E0] bg-[#2CA9E026]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Profit"
-//                       current={convertToDisplayCurrency((toNumberSafe(uk.profitGBP ?? 0) * gbpToUsd), "USD")}
-//                       previous={0}
-//                       loading={loading || shopifyLoading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#AB64B5] bg-[#AB64B526]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Profit %"
-//                       current={0}
-//                       previous={0}
-//                       loading={loading || shopifyLoading}
-//                       formatter={fmtPct}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#00627B] bg-[#00627B26]"
-//                     />
-//                   </div>
-//                 </div>
-//               </div>
-//             )}
-
-//             {/* AMAZON CARD */}
-//             {/* {hasAmazonCard && (
-//               <div className="flex lg:flex-1">
-//                 <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
-//                   <div className="mb-4 flex flex-row gap-4 items-start md:items-start md:justify-between">
-//                     <div className="flex flex-col flex-1 min-w-0">
-//                       <div className="flex flex-wrap items-baseline gap-2">
-//                         <PageBreadcrumb pageTitle="Amazon" variant="page" align="left" />
-//                       </div>
-//                       <p className="mt-1 text-sm text-charcoal-500">Real-time data from Amazon</p>
-//                     </div>
-
-//                     {!isCountryMode && amazonTabs.length > 0 && (
-//                       <SegmentedToggle<RegionKey>
-//                         value={amazonRegion}
-//                         options={amazonTabs.map((r) => ({ value: r }))}
-//                         onChange={setAmazonRegion}
-//                       />
-//                     )}
-
-//                   </div>
-
-//                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-//                     <AmazonStatCard
-//                       label="Sales"
-//                       current={convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP")}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#87AD12] bg-[#87AD1226]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Units"
-//                       current={cms?.total_quantity ?? 0}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={fmtInt}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#F47A00] bg-[#F47A0026]"
-//                     />
-//                     <AmazonStatCard
-//                       label="ASP"
-//                       current={convertToDisplayCurrency(uk.aspGBP ?? 0, "GBP")}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#2CA9E0] bg-[#2CA9E026]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Profit"
-//                       current={convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP")}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#AB64B5] bg-[#AB64B526]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Profit %"
-//                       current={uk.profitPctGBP ?? 0}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={fmtPct}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#00627B] bg-[#00627B26]"
-//                     />
-//                   </div>
-//                   {showLiveBI && (
-//                     <div className="mt-6">
-//                       <LiveBiLineGraph
-//                         countryName={countryName}      
-//                         ranged="MTD"
-//                         month={currMonthName.toLowerCase()}
-//                         year={String(currYear)}
-//                       />
-//                     </div>
-//                   )}
-//                 </div>
-
-//               </div>
-//             )} */}
-
-//             {/* AMAZON SECTION */}
-//             {hasAmazonCard && (
-//               <div className="flex flex-col lg:flex-1 gap-4">
-//                 {/* KPI Card (Amazon header + stat grid) */}
-//                 <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
-//                   <div className="mb-4 flex flex-row gap-4 items-start md:items-start md:justify-between">
-//                     <div className="flex flex-col flex-1 min-w-0">
-//                       <div className="flex flex-wrap items-baseline gap-2">
-//                         <PageBreadcrumb pageTitle="Amazon" variant="page" align="left" />
-//                       </div>
-//                       <p className="mt-1 text-sm text-charcoal-500">Real-time data from Amazon</p>
-//                     </div>
-
-//                     {!isCountryMode && amazonTabs.length > 0 && (
-//                       <SegmentedToggle<RegionKey>
-//                         value={amazonRegion}
-//                         options={amazonTabs.map((r) => ({ value: r }))}
-//                         onChange={setAmazonRegion}
-//                       />
-//                     )}
-//                   </div>
-
-//                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-//                     <AmazonStatCard
-//                       label="Sales"
-//                       current={convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP")}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#87AD12] bg-[#87AD1226]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Units"
-//                       current={cms?.total_quantity ?? 0}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={fmtInt}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#F47A00] bg-[#F47A0026]"
-//                     />
-//                     <AmazonStatCard
-//                       label="ASP"
-//                       current={convertToDisplayCurrency(uk.aspGBP ?? 0, "GBP")}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#2CA9E0] bg-[#2CA9E026]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Profit"
-//                       current={convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP")}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={formatDisplayAmount}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#AB64B5] bg-[#AB64B526]"
-//                     />
-//                     <AmazonStatCard
-//                       label="Profit %"
-//                       current={uk.profitPctGBP ?? 0}
-//                       previous={0}
-//                       loading={loading}
-//                       formatter={fmtPct}
-//                       bottomLabel={prevLabel}
-//                       className="border-[#00627B] bg-[#00627B26]"
-//                     />
-//                   </div>
-//                 </div>
-
-//                 {/* Chart BELOW as its own card */}
-//                 {showLiveBI && (
-//                   <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
-//                     <LiveBiLineGraph
-//                       countryName={countryName}
-//                       ranged="MTD"
-//                       month={currMonthName.toLowerCase()}
-//                       year={String(currYear)}
-//                     />
-//                   </div>
-//                 )}
-//               </div>
-//             )}
-
-
-//             {/* SHOPIFY CARD */}
-//             {!isCountryMode && hasShopifyCard && (
-//               <div className="flex lg:flex-1">
-//                 <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
-//                   <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-//                     <div className="flex flex-col">
-//                       <div className="flex items-baseline gap-2">
-//                         <PageBreadcrumb pageTitle="Shopify" variant="page" align="left" textSize="2xl" />
-//                       </div>
-//                       <p className="mt-1 text-sm text-charcoal-500">Real-time data from Shopify</p>
-//                     </div>
-//                   </div>
-
-//                   {shopifyLoading ? (
-//                     <div className="mt-3 text-sm text-gray-500">Loading Shopify…</div>
-//                   ) : shopify ? (
-//                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-//                       <AmazonStatCard
-//                         label="Sales"
-//                         current={convertToDisplayCurrency(shopifyDeriv?.netSales ?? 0, "INR")}
-//                         previous={convertToDisplayCurrency(shopifyPrevDeriv?.netSales ?? 0, "INR")}
-//                         loading={shopifyLoading}
-//                         formatter={formatDisplayAmount}
-//                         bottomLabel={prevLabel}
-//                         className="border-[#87AD12] bg-[#87AD1226]"
-//                       />
-//                       <AmazonStatCard
-//                         label="Units"
-//                         current={shopifyDeriv?.totalOrders ?? 0}
-//                         previous={shopifyPrevDeriv?.totalOrders ?? 0}
-//                         loading={shopifyLoading}
-//                         formatter={fmtInt}
-//                         bottomLabel={prevLabel}
-//                         className="border-[#F47A00] bg-[#F47A0026]"
-//                       />
-//                       <AmazonStatCard
-//                         label="ASP"
-//                         current={(() => {
-//                           const units = shopifyDeriv?.totalOrders ?? 0;
-//                           if (!units) return 0;
-//                           const net = convertToDisplayCurrency(shopifyDeriv?.netSales ?? 0, "INR");
-//                           return net / units;
-//                         })()}
-//                         previous={0}
-//                         loading={shopifyLoading}
-//                         formatter={formatDisplayAmount}
-//                         bottomLabel={prevLabel}
-//                         className="border-[#2CA9E0] bg-[#2CA9E026]"
-//                       />
-//                     </div>
-//                   ) : (
-//                     <div className="mt-2 text-sm text-gray-500">No Shopify data for the current month.</div>
-//                   )}
-//                 </div>
-//               </div>
-//             )}
-//           </div>
-
-//           {/* RIGHT COLUMN: Sales Target */}
-//           <aside className="col-span-12 lg:col-span-4 order-1 lg:order-2 flex">
-//             <div className="w-full flex">
-//               <div className="w-full lg:sticky lg:top-6 self-start flex">
-//                 <div className="w-full h-full ">
-//                   <SalesTargetCard
-//                     regions={regions}
-//                     defaultRegion={isCountryMode ? forcedRegion : "Global"}
-//                     hideTabs={isCountryMode}
-//                     homeCurrency={displayCurrency}
-//                     convertToHomeCurrency={(v, from) => convertToDisplayCurrency(v, from)}
-//                     formatHomeK={formatDisplayK}
-//                   />
-//                 </div>
-//               </div>
-//             </div>
-//           </aside>
-
-//         </div>
-
-//         <div className="mt-4">
-
-//           {showLiveBI && (
-//             <MonthsforBI
-//               countryName={countryName}
-//               ranged="MTD"
-//               month={currMonthName.toLowerCase()}
-//               year={String(currYear)}
-//             />
-//           )}
-//         </div>
-
-//         {hasAnyGraphData && (
-//           <>
-//             <div className="mt-8 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
-//               <div className="mb-3 flex items-center justify-between">
-//                 <div className="text-sm text-gray-500">
-//                   <PageBreadcrumb pageTitle="Amazon" align="left" textSize="2xl" variant="page" />
-//                   <p className="text-charcoal-500">
-//                     Real-time data{" "}
-//                     {graphRegionToUse === "Global" ? "Global" : graphRegionToUse}
-
-//                   </p>
-//                 </div>
-
-//                 {!isCountryMode && (
-//                   <div className="flex items-center gap-3">
-//                     <SegmentedToggle<RegionKey>
-//                       value={graphRegion}
-//                       options={graphRegions.map((r) => ({ value: r }))}
-//                       onChange={setGraphRegion}
-//                     />
-//                     <DownloadIconButton onClick={handleDownload} />
-//                   </div>
-//                 )}
-//               </div>
-
-//               <div ref={chartRef}>
-//                 <DashboardBargraphCard
-//                   countryName={countryNameForGraph}
-//                   formattedMonthYear={formattedMonthYear}
-//                   currencySymbol={currencySymbol}
-//                   labels={labels}
-//                   values={values}
-//                   colors={colors}
-//                   loading={loading}
-//                   allValuesZero={allValuesZero}
-//                 />
-//               </div>
-//             </div>
-
-
-
-
-//              {amazonIntegrated && <CurrentInventorySection region={graphRegionToUse} />
-// } 
-//           </>
-//         )}
-//       </div>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1482,7 +54,7 @@ const baseURL =
 // const API_URL = `${baseURL}/amazon_api/orders`;
 const FIN_MTD_TX_ENDPOINT = `${baseURL}/amazon_api/finances/mtd_transactions`;
 const SHOPIFY_DROPDOWN_ENDPOINT = `${baseURL}/shopify/dropdown`;
-const FX_ENDPOINT = `${baseURL}/currency-rate`;
+// const FX_ENDPOINT = `${baseURL}/currency-rate`;
 
 // ✅ BI endpoint (same one your graph uses)
 const LIVE_MTD_BI_ENDPOINT = `${baseURL}/live_mtd_bi`;
@@ -1556,8 +128,12 @@ type BiAlignedTotals = {
   previous_cm2_profit?: number;
   total_current_profit_percentage?: number;
   total_previous_profit_percentage?: number;
-};
 
+  // ✅ add these
+  total_previous_net_sales_full_month?: number;
+  total_previous_net_sales?: number;
+  total_current_net_sales?: number;
+};
 
 /* ===================== SMALL HELPERS ===================== */
 const getShort = (label?: string) => (label ? label.split(" ")[0] || label : "");
@@ -1571,6 +147,14 @@ const currencyForCountry = (countryName: string): CurrencyCode => {
   if (c === "india") return "INR";
   return "USD";
 };
+
+const safeDeltaPctFromPct = (currentPct: number, previousPct: number) => {
+  const c = Number(currentPct) || 0;
+  const p = Number(previousPct) || 0;
+  if (!p) return null;
+  return ((c - p) / Math.abs(p)) * 100;
+};
+
 
 /* ===================== RANGE PICKER (moved above graph) ===================== */
 function RangePicker({
@@ -1746,11 +330,26 @@ export default function DashboardPage() {
     }
   }, [platform]);
 
-  const showLiveBI = isCountryMode;
+  // const showLiveBI = isCountryMode;
+  const showLiveBI = isCountryMode || platform === "global";
+
 
   const brandName = useSelector(
     (state: RootState) => state.auth.user?.brand_name
   );
+
+  const biCountryName = useMemo(() => {
+    if (platform === "global") return "uk";
+    return countryName;
+  }, [platform, countryName]);
+
+  const biDataCurrency = useMemo(() => currencyForCountry(biCountryName), [biCountryName]);
+
+  const biSourceCurrency: CurrencyCode = useMemo(
+    () => currencyForCountry(biCountryName),
+    [biCountryName]
+  );
+
 
   /* ===================== PLATFORM → DISPLAY CURRENCY ===================== */
   const profileHomeCurrency = ((userData?.homeCurrency || "USD").toUpperCase() as CurrencyCode);
@@ -1963,6 +562,36 @@ export default function DashboardPage() {
     [displayCurrency, gbpToUsd, inrToUsd, cadToUsd]
   );
 
+  const prevFullMonthNetSalesDisp = useMemo(() => {
+    const v = liveBiPayload?.aligned_totals?.total_previous_net_sales_full_month;
+    if (v == null) return 0;
+    return convertToDisplayCurrency(Number(v) || 0, biSourceCurrency);
+  }, [liveBiPayload, convertToDisplayCurrency, biSourceCurrency]);
+
+  /* ===================== INTEGRATION FLAGS ===================== */
+  const shopifyDeriv = useMemo(() => {
+    if (!shopify) return null;
+    const totalOrders = toNumberSafe(shopify.total_orders);
+    const netSales = toNumberSafe(shopify.net_sales);
+    return { totalOrders, netSales };
+  }, [shopify]);
+
+  const shopifyPrevDeriv = useMemo(() => {
+    const row = shopifyPrevRows?.[0];
+    if (!row) return null;
+    const netSales = toNumberSafe(row.net_sales);
+    const totalOrders = toNumberSafe(row.total_orders);
+    return { netSales, totalOrders };
+  }, [shopifyPrevRows]);
+
+  // ✅ Global FULL month target = Amazon(previous full month from BI) + Shopify(previous month total)
+  const globalPrevFullMonthNetSalesDisp = useMemo(() => {
+    const amazonFull = prevFullMonthNetSalesDisp; // already in display currency
+    const shopifyFull = convertToDisplayCurrency(shopifyPrevDeriv?.netSales ?? 0, "INR");
+    return amazonFull + shopifyFull;
+  }, [prevFullMonthNetSalesDisp, shopifyPrevDeriv?.netSales, convertToDisplayCurrency]);
+
+
   const formatDisplayAmount = useCallback(
     (value: number | null | undefined) => {
       const n = toNumberSafe(value ?? 0);
@@ -2016,6 +645,24 @@ export default function DashboardPage() {
           : displayCurrency === "INR"
             ? "₹"
             : "¤";
+
+  const biDailySeriesHome = useMemo(() => {
+    if (!biDailySeries) return null;
+
+    const convPoint = (p: DailyPoint): DailyPoint => ({
+      ...p,
+      net_sales: p.net_sales != null ? convertToDisplayCurrency(p.net_sales, biDataCurrency) : p.net_sales,
+      product_sales: p.product_sales != null ? convertToDisplayCurrency(p.product_sales, biDataCurrency) : p.product_sales,
+      profit: p.profit != null ? convertToDisplayCurrency(p.profit, biDataCurrency) : p.profit,
+      cm2_profit: p.cm2_profit != null ? convertToDisplayCurrency(p.cm2_profit, biDataCurrency) : p.cm2_profit,
+    });
+
+    return {
+      previous: (biDailySeries.previous || []).map(convPoint),
+      current_mtd: (biDailySeries.current_mtd || []).map(convPoint),
+    };
+  }, [biDailySeries, convertToDisplayCurrency, biDataCurrency]);
+
 
   /* ===================== AMAZON FETCH ===================== */
   const fetchAmazon = useCallback(async () => {
@@ -2209,145 +856,80 @@ export default function DashboardPage() {
 
   const lastBiKeyRef = useRef<string>("");
 
-  // const fetchBiSeries = useCallback(
-  //   async (startDay?: number | null, endDay?: number | null) => {
-  //     if (!showLiveBI) return;
-
-  //     const normalized = (countryName || "").toLowerCase();
-  //     if (!normalized || normalized === "global") return;
 
 
-  //     const key = JSON.stringify({
-  //       country: normalized,
-  //       ranged: "MTD",
-  //       month: currMonthName.toLowerCase(),
-  //       year: currYear,
-  //       startDay: startDay ?? null,
-  //       endDay: endDay ?? null,
-  //     });
+  const fetchBiSeries = useCallback(
+    async (startDay?: number | null, endDay?: number | null) => {
+      if (!showLiveBI) return;
 
-  //     if (lastBiKeyRef.current === key) return;
-  //     lastBiKeyRef.current = key;
-  //     // ✅ END ADD
+      const normalized = (biCountryName || "").toLowerCase();
+
+      if (!normalized || normalized === "global") return;
 
 
-  //     setBiLoading(true);
-  //     setBiError(null);
-  //     // ✅ clear range-based totals so UI doesn't show previous values
-  //     setBiAlignedTotals(null);
+      const rangeActive = startDay != null && endDay != null;
 
-  //     try {
-  //       const token =
-  //         typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
-
-  //       const params = new URLSearchParams({
-  //         countryName: normalized,
-  //         ranged: "MTD",
-  //         month: currMonthName.toLowerCase(),
-  //         year: String(currYear),
-  //         generate_ai_insights: "false",
-  //       });
-
-  //       if (startDay != null) params.set("start_day", String(startDay));
-  //       if (endDay != null) params.set("end_day", String(endDay));
-
-  //       const res = await fetch(`${LIVE_MTD_BI_ENDPOINT}?${params.toString()}`, {
-  //         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  //       });
-
-  //       const json: BiApiResponse = await res.json();
-  //       if (!res.ok) throw new Error((json as any)?.error || "Failed to load BI series");
-
-  //       setLiveBiPayload(json);
-  //       setBiPeriods(json?.periods || null);
-  //       setBiDailySeries(json?.daily_series || null);
-  //       setBiAlignedTotals(json?.aligned_totals || null);
-  //     } catch (e: any) {
-  //       setBiPeriods(null);
-  //       setBiDailySeries(null);
-  //       setBiAlignedTotals(null);
-  //       setBiError(e?.message || "Failed to load BI series");
-  //     } finally {
-  //       setBiLoading(false);
-  //     }
-  //   },
-  //   [showLiveBI, countryName, currMonthName, currYear]
-  // );
-
-const fetchBiSeries = useCallback(
-  async (startDay?: number | null, endDay?: number | null) => {
-    if (!showLiveBI) return;
-
-    const normalized = (countryName || "").toLowerCase();
-    if (!normalized || normalized === "global") return;
-
-    // ✅ only treat it as "range mode" if BOTH exist
-    const rangeActive = startDay != null && endDay != null;
-
-    const key = JSON.stringify({
-      country: normalized,
-      ranged: "MTD",
-      month: currMonthName.toLowerCase(),
-      year: currYear,
-      startDay: rangeActive ? startDay : null,
-      endDay: rangeActive ? endDay : null,
-    });
-
-    if (lastBiKeyRef.current === key) return;
-    lastBiKeyRef.current = key;
-
-    setBiLoading(true);
-    setBiError(null);
-
-    // ✅ IMPORTANT:
-    // Clear BI aligned totals ONLY when a range is active.
-    // If you clear it always, your UI shows 0 CM2 even when no range is selected.
-    if (rangeActive) {
-      setBiAlignedTotals(null);
-    }
-
-    try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
-
-      const params = new URLSearchParams({
-        countryName: normalized,
+      const key = JSON.stringify({
+        country: normalized,
         ranged: "MTD",
         month: currMonthName.toLowerCase(),
-        year: String(currYear),
-        generate_ai_insights: "false",
+        year: currYear,
+        startDay: rangeActive ? startDay : null,
+        endDay: rangeActive ? endDay : null,
       });
 
-      // ✅ only send range params when rangeActive
-      if (rangeActive) {
-        params.set("start_day", String(startDay));
-        params.set("end_day", String(endDay));
+      if (lastBiKeyRef.current === key) return;
+      lastBiKeyRef.current = key;
+
+      setBiLoading(true);
+      setBiError(null);
+
+      // if (rangeActive) {
+      //   setBiAlignedTotals(null);
+      // }
+
+      try {
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
+
+        const params = new URLSearchParams({
+          countryName: normalized,
+          ranged: "MTD",
+          month: currMonthName.toLowerCase(),
+          year: String(currYear),
+          generate_ai_insights: "false",
+        });
+
+        // ✅ only send range params when rangeActive
+        if (rangeActive) {
+          params.set("start_day", String(startDay));
+          params.set("end_day", String(endDay));
+        }
+
+        const res = await fetch(`${LIVE_MTD_BI_ENDPOINT}?${params.toString()}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+
+        const json: BiApiResponse = await res.json();
+        if (!res.ok) throw new Error((json as any)?.error || "Failed to load BI series");
+
+        setLiveBiPayload(json);
+        setBiPeriods(json?.periods || null);
+        setBiDailySeries(json?.daily_series || null);
+
+        setBiAlignedTotals(json?.aligned_totals || null);
+      } catch (e: any) {
+        setBiPeriods(null);
+        setBiDailySeries(null);
+        setBiAlignedTotals(null);
+        setBiError(e?.message || "Failed to load BI series");
+      } finally {
+        setBiLoading(false);
       }
+    },
+    [showLiveBI, biCountryName, currMonthName, currYear]
 
-      const res = await fetch(`${LIVE_MTD_BI_ENDPOINT}?${params.toString()}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-
-      const json: BiApiResponse = await res.json();
-      if (!res.ok) throw new Error((json as any)?.error || "Failed to load BI series");
-
-      setLiveBiPayload(json);
-      setBiPeriods(json?.periods || null);
-      setBiDailySeries(json?.daily_series || null);
-
-      // ✅ store aligned totals (used ONLY when rangeActive in UI)
-      setBiAlignedTotals(json?.aligned_totals || null);
-    } catch (e: any) {
-      setBiPeriods(null);
-      setBiDailySeries(null);
-      setBiAlignedTotals(null);
-      setBiError(e?.message || "Failed to load BI series");
-    } finally {
-      setBiLoading(false);
-    }
-  },
-  [showLiveBI, countryName, currMonthName, currYear]
-);
+  );
 
 
   useEffect(() => {
@@ -2415,10 +997,6 @@ const fetchBiSeries = useCallback(
 
     const unitsGBP = totals?.quantity != null ? toNumberSafe(totals.quantity) : null;
 
-    // let profitPctGBP: number | null = null;
-    // if (profitGBP !== null && netSalesGBP && netSalesGBP !== 0) {
-    //   profitPctGBP = (profitGBP / netSalesGBP) * 100;
-    // }
 
     let profitPctGBP: number | null = null;
     if (cm2ProfitGBP !== null && netSalesGBP && netSalesGBP !== 0) {
@@ -2451,7 +1029,6 @@ const fetchBiSeries = useCallback(
     };
   }, [totals, derived]);
 
-  // helpers (return null => AmazonStatCard shows "—")
   const safeDeltaPct = (current: number, previous: number) => {
     const c = Number(current) || 0;
     const p = Number(previous) || 0;
@@ -2503,49 +1080,50 @@ const fetchBiSeries = useCallback(
     };
   }, [curr, prev]);
 
+  const deltaPctPoints = (currentPct: number, previousPct: number) => {
+    const c = Number(currentPct) || 0;
+    const p = Number(previousPct) || 0;
+    return c - p; // percentage points
+  };
 
 
   /* ===================== ✅ RANGE KPIs FOR CARDS (FROM SAME BI DATA AS GRAPH) ===================== */
-  // const rangeKpis = useMemo(() => {
-  //   if (!biDailySeries?.current_mtd?.length) return { sales: 0, units: 0, asp: 0 };
+  // useEffect(() => {
+  //   const pts = biDailySeriesHome?.current_mtd || [];
+  //   if (!pts.length) return;
 
-  //   const sales = biDailySeries.current_mtd.reduce(
-  //     (a, d) => a + (Number(d.net_sales) || 0),
-  //     0
-  //   );
-  //   const units = biDailySeries.current_mtd.reduce(
-  //     (a, d) => a + (Number(d.quantity) || 0),
-  //     0
-  //   );
-  //   const asp = units > 0 ? sales / units : 0;
+  //   const todayDay = getDayOfMonthIST();
 
-  //   return { sales, units, asp };
-  // }, [biDailySeries]);
+  //   const todayPoint = pts.find((p) => Number(p.date?.slice(8, 10)) === todayDay);
 
+  //   if (todayPoint?.net_sales != null) {
+  //     setTodaySalesRaw(Number(todayPoint.net_sales) || 0); // now "raw" is actually HOME currency
+  //   }
+  // }, [biDailySeriesHome]);
 
   useEffect(() => {
-    if (!biDailySeries?.current_mtd?.length) return;
+    const pts = biDailySeriesHome?.current_mtd || [];
+    if (!pts.length) return;
 
     const todayDay = getDayOfMonthIST();
 
-    // find the point for the real calendar day (e.g. 10th)
-    const todayPoint = biDailySeries.current_mtd.find((p) => {
-      const d = Number(p.date?.slice(8, 10));
-      return d === todayDay;
-    });
-
-    // ✅ only update if that day exists in series (prevents changing when you select a range not containing today)
-    if (todayPoint?.net_sales != null) {
-      setTodaySalesRaw(Number(todayPoint.net_sales) || 0);
+    // try exact today
+    const exact = pts.find((p) => Number(p.date?.slice(8, 10)) === todayDay);
+    if (exact?.net_sales != null) {
+      setTodaySalesRaw(Number(exact.net_sales) || 0);
+      return;
     }
-  }, [biDailySeries]);
+
+    // fallback: latest available day in series
+    const latest = [...pts].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
+    setTodaySalesRaw(Number(latest?.net_sales) || 0);
+  }, [biDailySeriesHome]);
 
 
   const biCardKpis = useMemo(() => {
-    const currAll = biDailySeries?.current_mtd || [];
-    const prevAll = biDailySeries?.previous || [];
+    const currAll = biDailySeriesHome?.current_mtd || [];
+    const prevAll = biDailySeriesHome?.previous || [];
 
-    // always slice both when range is active
     const currPts = sliceByDayRange(currAll, selectedStartDay, selectedEndDay);
     const prevPts = sliceByDayRange(prevAll, selectedStartDay, selectedEndDay);
 
@@ -2565,6 +1143,7 @@ const fetchBiSeries = useCallback(
       netSales: sum(prevPts, "net_sales"),
       grossSales: sum(prevPts, "product_sales"),
       profit: sum(prevPts, "profit"),
+      cm2Profit: sum(prevPts, "cm2_profit"),
     };
 
     const currAsp = curr.units > 0 ? curr.netSales / curr.units : 0;
@@ -2572,7 +1151,6 @@ const fetchBiSeries = useCallback(
 
     const currProfitPct = curr.netSales !== 0 ? (curr.cm2Profit / curr.netSales) * 100 : 0;
     const prevProfitPct = prev.netSales !== 0 ? (prev.cm2Profit / prev.netSales) * 100 : 0;
-
 
     const deltaPct = (c: number, p: number) => (p ? ((c - p) / p) * 100 : null);
 
@@ -2585,11 +1163,11 @@ const fetchBiSeries = useCallback(
         grossSales: deltaPct(curr.grossSales, prev.grossSales),
         asp: deltaPct(currAsp, prevAsp),
         profit: deltaPct(curr.profit, prev.profit),
-        profitPctPts: currProfitPct - prevProfitPct, // ✅ percentage-points
+        profitPct: safeDeltaPctFromPct(currProfitPct, prevProfitPct),
+
       },
     };
-  }, [biDailySeries, selectedStartDay, selectedEndDay]);
-
+  }, [biDailySeriesHome, selectedStartDay, selectedEndDay]);
 
   // const rangeActive = selectedStartDay != null && selectedEndDay != null;
   const rangeActive = selectedStartDay != null && selectedEndDay != null;
@@ -2600,22 +1178,9 @@ const fetchBiSeries = useCallback(
   // BI values are usable only when rangeActive + finished loading + response present
   const cm2Ready = useBiCm2 && !biLoading && !!biAlignedTotals;
 
-
-  /* ===================== INTEGRATION FLAGS ===================== */
-  const shopifyDeriv = useMemo(() => {
-    if (!shopify) return null;
-    const totalOrders = toNumberSafe(shopify.total_orders);
-    const netSales = toNumberSafe(shopify.net_sales);
-    return { totalOrders, netSales };
-  }, [shopify]);
-
-  const shopifyPrevDeriv = useMemo(() => {
-    const row = shopifyPrevRows?.[0];
-    if (!row) return null;
-    const netSales = toNumberSafe(row.net_sales);
-    const totalOrders = toNumberSafe(row.total_orders);
-    return { netSales, totalOrders };
-  }, [shopifyPrevRows]);
+  const globalRangeCurrency = currencyForCountry(biCountryName); // global -> "uk" -> "GBP"
+  const globalUseBi = platform === "global" && showLiveBI && rangeActive;
+  const globalCm2Ready = globalUseBi && !biLoading && !!biAlignedTotals;
 
   const shopifyNotConnected =
     !shopifyStore?.shop_name ||
@@ -2703,6 +1268,37 @@ const fetchBiSeries = useCallback(
     return daysInPrevMonth > 0 ? (lastMonthTotalUSD * todayDay) / daysInPrevMonth : 0;
   };
 
+  // ---------- NET SALES (DISPLAY CURRENCY) ----------
+
+  // Amazon current & prev net sales (already correct source)
+  const amazonCurrNetDisp = useMemo(
+    () => convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP"),
+    [uk.netSalesGBP, convertToDisplayCurrency]
+  );
+
+  const amazonPrevNetDisp = useMemo(
+    () => convertToDisplayCurrency(prev.netSales ?? 0, "GBP"),
+    [prev.netSales, convertToDisplayCurrency]
+  );
+
+  // Global = Amazon + Shopify (NET SALES ONLY)
+  const globalCurrNetDisp = useMemo(() => {
+    const amazon = amazonCurrNetDisp;
+    const shopify = convertToDisplayCurrency(
+      shopifyDeriv?.netSales ?? 0,
+      "INR"
+    );
+    return amazon + shopify;
+  }, [amazonCurrNetDisp, shopifyDeriv?.netSales, convertToDisplayCurrency]);
+
+  const globalPrevNetDisp = useMemo(() => {
+    const amazon = amazonPrevNetDisp;
+    const shopify = convertToDisplayCurrency(
+      shopifyPrevDeriv?.netSales ?? 0,
+      "INR"
+    );
+    return amazon + shopify;
+  }, [amazonPrevNetDisp, shopifyPrevDeriv?.netSales, convertToDisplayCurrency]);
 
 
   const regions = useMemo(() => {
@@ -2711,24 +1307,32 @@ const fetchBiSeries = useCallback(
       globalPrevTotalUSD
     );
 
+    const globalTarget =
+      globalPrevFullMonthNetSalesDisp > 0 ? globalPrevFullMonthNetSalesDisp : globalPrevNetDisp;
+
     const global: RegionMetrics = {
-      mtdUSD: combinedUSD,
-      lastMonthToDateUSD: prorateToDate(globalLastMonthTotal),
-      lastMonthTotalUSD: globalLastMonthTotal,
-      targetUSD: globalLastMonthTotal > 0 ? globalLastMonthTotal : combinedUSD,
+      mtdUSD: globalCurrNetDisp,
+      lastMonthToDateUSD: globalPrevNetDisp,   // prev MTD
+      lastMonthTotalUSD: globalTarget,         // ✅ prev FULL month total
+      targetUSD: globalTarget,                 // ✅ target = prev FULL month total
     };
+
+    const ukTarget =
+      prevFullMonthNetSalesDisp > 0 ? prevFullMonthNetSalesDisp : amazonPrevNetDisp;
+
+    const ukRegion: RegionMetrics = {
+      mtdUSD: amazonCurrNetDisp,
+      lastMonthToDateUSD: amazonPrevNetDisp,
+      lastMonthTotalUSD: ukTarget,
+      targetUSD: ukTarget,
+    };
+
 
     const ukLastMonthTotal = chooseLastMonthTotal(
       MANUAL_LAST_MONTH_USD_UK,
       prevAmazonUKTotalUSD
     );
 
-    const ukRegion: RegionMetrics = {
-      mtdUSD: amazonUK_USD,
-      lastMonthToDateUSD: prevAmazonMtdSalesUSD, // ✅ actual prev-month MTD sales
-      lastMonthTotalUSD: ukLastMonthTotal,
-      targetUSD: ukLastMonthTotal > 0 ? ukLastMonthTotal : fallbackTargetUSD,
-    };
 
 
     const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
@@ -2753,7 +1357,14 @@ const fetchBiSeries = useCallback(
       US: usRegion,
       CA: caRegion,
     } as Record<RegionKey, RegionMetrics>;
-  }, [combinedUSD, amazonUK_USD, globalPrevTotalUSD, prevAmazonUKTotalUSD, prevAmazonMtdSalesUSD]);
+  }, [
+    globalCurrNetDisp,
+    globalPrevNetDisp,
+    amazonCurrNetDisp,
+    amazonPrevNetDisp,
+    prevFullMonthNetSalesDisp,
+    globalPrevFullMonthNetSalesDisp,
+  ]);
 
 
   const anyLoading = loading || shopifyLoading;
@@ -2791,25 +1402,6 @@ const fetchBiSeries = useCallback(
 
   /* ===================== P&L ITEMS (DISPLAY CURRENCY OUTPUT) ===================== */
   const plItems = useMemo(() => {
-    // const ukPl = () => {
-    //   const sales = convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP");
-    //   const fees = convertToDisplayCurrency(uk.amazonFeesGBP ?? 0, "GBP");
-    //   const cogs = convertToDisplayCurrency(uk.cogsGBP ?? 0, "GBP");
-    //   const adv = convertToDisplayCurrency(uk.advertisingGBP ?? 0, "GBP");
-    //   const platformFee = convertToDisplayCurrency(uk.platformFeeGBP ?? 0, "GBP");
-    //   const profit = convertToDisplayCurrency(uk.profitGBP ?? 0, "GBP");
-    //   const cm2 = convertToDisplayCurrency(uk.cm2ProfitGBP ?? 0, "GBP");
-    //   return [
-    //     { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
-    //     { label: "COGS", raw: cogs, display: formatDisplayAmount(cogs) },
-    //     { label: "Amazon Fees", raw: fees, display: formatDisplayAmount(fees) },
-    //     { label: "CM1 Profit", raw: profit, display: formatDisplayAmount(profit) },
-    //     { label: "Advertisements", raw: adv, display: formatDisplayAmount(adv) },
-    //     { label: "Others", raw: platformFee, display: formatDisplayAmount(platformFee) },
-    //     { label: "CM2 Profit", raw: cm2, display: formatDisplayAmount(cm2) },
-    //   ];
-    // };
-
     const ukPl = () => {
       const sales = convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP");
       const fees = convertToDisplayCurrency(uk.amazonFeesGBP ?? 0, "GBP");
@@ -2827,7 +1419,7 @@ const fetchBiSeries = useCallback(
       );
 
       return [
-        { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
+        { label: "Net Sales", raw: sales, display: formatDisplayAmount(sales) },
         { label: "COGS", raw: cogs, display: formatDisplayAmount(cogs) },
         { label: "Amazon Fees", raw: fees, display: formatDisplayAmount(fees) },
         { label: "Tax & Credits", raw: taxCredits, display: formatDisplayAmount(taxCredits) },
@@ -2845,7 +1437,7 @@ const fetchBiSeries = useCallback(
       if (onlyShopify) {
         const sales = convertToDisplayCurrency(shopifyDeriv?.netSales ?? 0, "INR");
         return [
-          { label: "Sales", raw: sales, display: formatDisplayAmount(sales) },
+          { label: "Net Sales", raw: sales, display: formatDisplayAmount(sales) },
           { label: "Amazon Fees", raw: 0, display: formatDisplayAmount(0) },
           { label: "COGS", raw: 0, display: formatDisplayAmount(0) },
           { label: "Advertisements", raw: 0, display: formatDisplayAmount(0) },
@@ -2906,7 +1498,7 @@ const fetchBiSeries = useCallback(
   const values = chartItems.map((i) => Number(i.raw ?? 0));
 
   const colorMapping: Record<string, string> = {
-    Sales: "#2CA9E0",
+    "Net Sales": "#2CA9E0",
     "Amazon Fees": "#ff5c5c",
     COGS: "#AB64B5",
     Advertisements: "#F47A00",
@@ -2974,7 +1566,7 @@ const fetchBiSeries = useCallback(
       sheet.addRow(["Metric", "", `Amount (${currencySymbol})`]);
 
       const signs: Record<string, string> = {
-        Sales: "(+)",
+        "Net Sales": "(+)",
         "Amazon Fees": "(-)",
         COGS: "(-)",
         Advertisements: "(-)",
@@ -3040,6 +1632,8 @@ const fetchBiSeries = useCallback(
     return Number(last?.net_sales) || 0;
   }, [biDailySeries, rangeActive, selectedStartDay, selectedEndDay]);
 
+  const useBiForAmazonCards =
+    showLiveBI && rangeActive && (isCountryMode || platform === "global");
 
 
   /* ===================== ✅ GLOBAL CARD: prev/current + deltas ===================== */
@@ -3068,6 +1662,39 @@ const fetchBiSeries = useCallback(
   const globalPrevAsp = useMemo(() => {
     return globalPrevUnits > 0 ? globalPrevSalesDisp / globalPrevUnits : 0;
   }, [globalPrevSalesDisp, globalPrevUnits]);
+
+
+
+  // ✅ Global card "Nov'25" should use previous_period (prev.*), not previous_month_total_net_sales/globalPrevTotalUSD.
+  // When only Amazon is connected, Global == Amazon UK.
+
+  const globalCurrNetSalesDisp = useMemo(() => {
+    if (onlyAmazon) return convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP");
+    return convertToDisplayCurrency(combinedUSD, "USD");
+  }, [onlyAmazon, uk.netSalesGBP, combinedUSD, convertToDisplayCurrency]);
+
+  const globalPrevNetSalesDisp = useMemo(() => {
+    if (onlyAmazon) return convertToDisplayCurrency(prev.netSales ?? 0, "GBP");
+    // (optional) if Shopify prev exists, add it here later; for now keep your existing globalPrevTotalUSD
+    return convertToDisplayCurrency(globalPrevTotalUSD, "USD");
+  }, [onlyAmazon, prev.netSales, globalPrevTotalUSD, convertToDisplayCurrency]);
+
+  const globalCurrAspDisp = useMemo(() => {
+    return globalCurrUnits > 0 ? globalCurrNetSalesDisp / globalCurrUnits : 0;
+  }, [globalCurrUnits, globalCurrNetSalesDisp]);
+
+  const globalPrevAspDisp = useMemo(() => {
+    return globalPrevUnits > 0 ? globalPrevNetSalesDisp / globalPrevUnits : 0;
+  }, [globalPrevUnits, globalPrevNetSalesDisp]);
+
+
+  const globalCurrCm2Disp = useMemo(() => {
+    return convertToDisplayCurrency(uk.cm2ProfitGBP ?? 0, "GBP");
+  }, [uk.cm2ProfitGBP, convertToDisplayCurrency]);
+
+  const globalPrevCm2Disp = useMemo(() => {
+    return convertToDisplayCurrency(prev.cm2Profit ?? 0, "GBP");
+  }, [prev.cm2Profit, convertToDisplayCurrency]);
 
 
   // Global Profit (you currently show Amazon profit only in global card)
@@ -3134,6 +1761,9 @@ const fetchBiSeries = useCallback(
     return "GBP"; // amazon-uk OR global default
   }, [platform]);
 
+  const identityConvert = useCallback((v: number, _from?: any) => v, []);
+
+
 
   return (
     <div className="relative overflow-x-hidden">
@@ -3197,23 +1827,46 @@ const fetchBiSeries = useCallback(
             {!isCountryMode && hasGlobalCard && (
               <div className="flex lg:flex-1">
                 <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
-                  <div className="mb-4">
+                  {/* <div className="mb-4">
                     <div className="flex items-baseline gap-2">
                       <PageBreadcrumb pageTitle="Global" variant="page" align="left" />
                     </div>
-                    {/* <p className="mt-1 text-sm text-charcoal-500">
-                      Real-time data from Amazon &amp; Shopify
-                    </p> */}
+                  </div> */}
+
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="flex items-baseline gap-2">
+                      <PageBreadcrumb pageTitle="Global" variant="page" align="left" />
+                    </div>
+
+                    {showLiveBI && platform === "global" && (
+                      <RangePicker
+                        selectedStartDay={selectedStartDay}
+                        selectedEndDay={selectedEndDay}
+                        onSubmit={(s, e) => {
+                          setSelectedStartDay(s);
+                          setSelectedEndDay(e);
+                        }}
+                        onClear={() => {
+                          setSelectedStartDay(null);
+                          setSelectedEndDay(null);
+                        }}
+                        onCloseReset={() => {
+                          setSelectedStartDay(null);
+                          setSelectedEndDay(null);
+                        }}
+                      />
+                    )}
                   </div>
+
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6 gap-3 auto-rows-fr">
 
                     <AmazonStatCard
                       label="Units"
-                      current={globalCurrUnits}
-                      previous={globalPrevUnits}
-                      deltaPct={globalDeltas.units}
-                      loading={loading || shopifyLoading}
+                      current={globalUseBi ? biCardKpis.curr.units : globalCurrUnits}
+                      previous={globalUseBi ? biCardKpis.prev.units : globalPrevUnits}
+                      deltaPct={globalUseBi ? biCardKpis.deltas.units : globalDeltas.units}
+                      loading={loading || shopifyLoading || biLoading}
                       formatter={fmtInt}
                       bottomLabel={prevLabel}
                       className="border-[#F47A00] bg-[#F47A0026]"
@@ -3221,24 +1874,24 @@ const fetchBiSeries = useCallback(
 
                     <AmazonStatCard
                       label="Gross Sales"
-                      current={globalCurrGrossDisp}
-                      previous={globalPrevGrossDisp}
-                      deltaPct={safeDeltaPct(combinedGrossUSD, prevGlobalGrossUSD)}
-                      loading={loading || shopifyLoading}
+                      current={globalUseBi ? biCardKpis.curr.grossSales : globalCurrGrossDisp}
+                      previous={globalUseBi ? biCardKpis.prev.grossSales : globalPrevGrossDisp}
+
+                      deltaPct={globalUseBi ? biCardKpis.deltas.grossSales : safeDeltaPct(combinedGrossUSD, prevGlobalGrossUSD)}
+                      loading={loading || shopifyLoading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
                       className="border-[#FFD54F] bg-[#FFD54F26]"
                     />
 
+
                     <AmazonStatCard
                       label="Net Sales"
-                      current={convertToDisplayCurrency(combinedUSD, "USD")}
-                      previous={convertToDisplayCurrency(globalPrevTotalUSD, "USD")}
-                      deltaPct={safeDeltaPct(
-                        convertToDisplayCurrency(combinedUSD, "USD"),
-                        convertToDisplayCurrency(globalPrevTotalUSD, "USD")
-                      )}
-                      loading={loading || shopifyLoading}
+                      current={globalUseBi ? biCardKpis.curr.netSales : globalCurrNetSalesDisp}
+                      previous={globalUseBi ? biCardKpis.prev.netSales : globalPrevNetSalesDisp}
+
+                      deltaPct={globalUseBi ? biCardKpis.deltas.netSales : safeDeltaPct(globalCurrNetSalesDisp, globalPrevNetSalesDisp)}
+                      loading={loading || shopifyLoading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
                       className="border-[#87AD12] bg-[#87AD1226]"
@@ -3246,36 +1899,85 @@ const fetchBiSeries = useCallback(
 
                     <AmazonStatCard
                       label="ASP"
-                      current={globalCurrAsp}
-                      previous={globalPrevAsp}
-                      deltaPct={safeDeltaPct(globalCurrAsp, globalPrevAsp)}
-                      loading={loading || shopifyLoading}
+                      current={globalUseBi ? biCardKpis.curr.asp : globalCurrAspDisp}
+                      previous={globalUseBi ? biCardKpis.prev.asp : globalPrevAspDisp}
+                      deltaPct={
+                        globalUseBi
+                          ? biCardKpis.deltas.asp
+                          : safeDeltaPct(globalCurrAspDisp, globalPrevAspDisp)
+                      }
+                      loading={loading || shopifyLoading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
                       className="border-[#2CA9E0] bg-[#2CA9E026]"
                     />
 
+
+
                     <AmazonStatCard
                       label="CM2 Profit"
-                      current={globalCurrProfit}
-                      previous={globalPrevProfit}
-                      deltaPct={globalDeltas.profit}
-                      loading={loading || shopifyLoading}
+                      current={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? convertToDisplayCurrency(biAlignedTotals?.current_cm2_profit ?? 0, biSourceCurrency)
+                            : 0)
+                          : globalCurrCm2Disp
+                      }
+                      previous={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? convertToDisplayCurrency(biAlignedTotals?.previous_cm2_profit ?? 0, biSourceCurrency)
+                            : 0)
+                          : globalPrevCm2Disp
+                      }
+
+                      deltaPct={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? safeDeltaPct(
+                              biAlignedTotals?.current_cm2_profit ?? 0,
+                              biAlignedTotals?.previous_cm2_profit ?? 0
+                            )
+                            : null)
+                          : safeDeltaPct(globalCurrCm2Disp, globalPrevCm2Disp)
+                      }
+                      loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
                       className="border-[#AB64B5] bg-[#AB64B526]"
                     />
 
+
                     <AmazonStatCard
                       label="CM2 Profit %"
-                      current={curr.profitPct}          // ✅ Amazon margin
-                      previous={prev.profitPct}         // ✅ prev Amazon margin
-                      deltaPct={deltas.profitMarginPctPts} // ✅ pp
-                      loading={loading || shopifyLoading}
+                      current={
+                        globalUseBi
+                          ? (globalCm2Ready ? (biAlignedTotals?.total_current_profit_percentage ?? 0) : 0)
+                          : curr.profitPct
+                      }
+                      previous={
+                        globalUseBi
+                          ? (globalCm2Ready ? (biAlignedTotals?.total_previous_profit_percentage ?? 0) : 0)
+                          : prev.profitPct
+                      }
+                      deltaPct={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? deltaPctPoints(
+                              biAlignedTotals?.total_current_profit_percentage ?? 0,
+                              biAlignedTotals?.total_previous_profit_percentage ?? 0
+                            )
+                            : null)
+                          : deltaPctPoints(curr.profitPct ?? 0, prev.profitPct ?? 0)
+                      }
+
+
+                      loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
                       className="border-[#00627B] bg-[#00627B26]"
                     />
+
 
                   </div>
                 </div>
@@ -3304,7 +2006,7 @@ const fetchBiSeries = useCallback(
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {showLiveBI && (
+                      {showLiveBI && (isCountryMode || platform === "global") && (
                         <RangePicker
                           selectedStartDay={selectedStartDay}
                           selectedEndDay={selectedEndDay}
@@ -3329,9 +2031,9 @@ const fetchBiSeries = useCallback(
 
                     <AmazonStatCard
                       label="Units"
-                      current={showLiveBI && rangeActive ? biCardKpis.curr.units : (totals?.quantity ?? 0)}
-                      previous={showLiveBI && rangeActive ? biCardKpis.prev.units : prev.quantity}
-                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.units : deltas.quantityPct}
+                      current={useBiForAmazonCards ? biCardKpis.curr.units : (totals?.quantity ?? 0)}
+                      previous={useBiForAmazonCards ? biCardKpis.prev.units : prev.quantity}
+                      deltaPct={useBiForAmazonCards ? biCardKpis.deltas.units : deltas.quantityPct}
                       loading={loading || biLoading}
                       formatter={fmtInt}
                       bottomLabel={prevLabel}
@@ -3342,15 +2044,15 @@ const fetchBiSeries = useCallback(
                       label="Gross Sales"
                       current={
                         showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(biCardKpis.curr.grossSales, rangeCurrency)
-                          : convertToDisplayCurrency(uk.grossSalesGBP ?? 0, "GBP")
+                          ? biCardKpis.curr.grossSales                 // ✅ no conversion
+                          : convertToDisplayCurrency(uk.grossSalesGBP ?? 0, amazonDataCurrency)
                       }
                       previous={
                         showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(biCardKpis.prev.grossSales, rangeCurrency)
-                          : convertToDisplayCurrency(prev.grossSales ?? 0, "GBP")
+                          ? biCardKpis.prev.grossSales                 // ✅ no conversion
+                          : convertToDisplayCurrency(prev.grossSales ?? 0, amazonDataCurrency)
                       }
-                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.grossSales : safeDeltaPct(uk.grossSalesGBP ?? 0, prev.grossSales ?? 0)}
+                      deltaPct={useBiForAmazonCards ? biCardKpis.deltas.grossSales : safeDeltaPct(uk.grossSalesGBP ?? 0, prev.grossSales ?? 0)}
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
@@ -3361,15 +2063,15 @@ const fetchBiSeries = useCallback(
                       label="Net Sales"
                       current={
                         showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(biCardKpis.curr.netSales, rangeCurrency)
-                          : convertToDisplayCurrency(uk.netSalesGBP ?? 0, "GBP")
+                          ? biCardKpis.curr.netSales                   // ✅ no conversion
+                          : convertToDisplayCurrency(uk.netSalesGBP ?? 0, amazonDataCurrency)
                       }
                       previous={
                         showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(biCardKpis.prev.netSales, rangeCurrency)
-                          : convertToDisplayCurrency(prev.netSales, "GBP")
+                          ? biCardKpis.prev.netSales                   // ✅ no conversion
+                          : convertToDisplayCurrency(prev.netSales, amazonDataCurrency)
                       }
-                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.netSales : deltas.netSalesPct}
+                      deltaPct={useBiForAmazonCards ? biCardKpis.deltas.netSales : deltas.netSalesPct}
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
@@ -3385,15 +2087,15 @@ const fetchBiSeries = useCallback(
                       label="ASP"
                       current={
                         showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(biCardKpis.curr.asp, rangeCurrency)
-                          : convertToDisplayCurrency(uk.aspGBP ?? 0, "GBP")
+                          ? biCardKpis.curr.asp                        // ✅ no conversion
+                          : convertToDisplayCurrency(uk.aspGBP ?? 0, amazonDataCurrency)
                       }
                       previous={
                         showLiveBI && rangeActive
-                          ? convertToDisplayCurrency(biCardKpis.prev.asp, rangeCurrency)
-                          : convertToDisplayCurrency(prev.asp, "GBP")
+                          ? biCardKpis.prev.asp                        // ✅ no conversion
+                          : convertToDisplayCurrency(prev.asp, amazonDataCurrency)
                       }
-                      deltaPct={showLiveBI && rangeActive ? biCardKpis.deltas.asp : deltas.aspPct}
+                      deltaPct={useBiForAmazonCards ? biCardKpis.deltas.asp : deltas.aspPct}
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
@@ -3405,7 +2107,8 @@ const fetchBiSeries = useCallback(
                       current={
                         useBiCm2
                           ? (cm2Ready
-                            ? convertToDisplayCurrency(biAlignedTotals?.current_cm2_profit ?? 0, rangeCurrency)
+                            ? convertToDisplayCurrency(biAlignedTotals?.current_cm2_profit ?? 0, biSourceCurrency)
+
                             : 0)
                           : convertToDisplayCurrency(uk.cm2ProfitGBP ?? 0, amazonDataCurrency) // ✅ MTD Transactions
                       }
@@ -3447,11 +2150,14 @@ const fetchBiSeries = useCallback(
                       deltaPct={
                         useBiCm2
                           ? (cm2Ready
-                            ? (biAlignedTotals?.total_current_profit_percentage ?? 0) -
-                            (biAlignedTotals?.total_previous_profit_percentage ?? 0)
+                            ? deltaPctPoints(
+                              biAlignedTotals?.total_current_profit_percentage ?? 0,
+                              biAlignedTotals?.total_previous_profit_percentage ?? 0
+                            )
                             : null)
-                          : deltas.profitMarginPctPts // ✅ pp delta from MTD transactions
+                          : deltaPctPoints(curr.profitPct ?? 0, prev.profitPct ?? 0)
                       }
+
                       loading={loading || (useBiCm2 ? biLoading : false)}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
@@ -3460,30 +2166,39 @@ const fetchBiSeries = useCallback(
                   </div>
                 </div>
 
-                {/* Live BI graph */}
-                {showLiveBI && (
+                {/* {showLiveBI && isCountryMode && (
                   <div className="w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
                     <div className="w-full max-w-full min-w-0">
-                      {/* <LiveBiLineGraph
-                        dailySeries={biDailySeries}
-                        periods={biPeriods}
-                        loading={biLoading}
-                        error={biError}
-                      /> */}
                       <LiveBiLineGraph
                         dailySeries={biDailySeries}
                         periods={biPeriods}
                         loading={biLoading}
                         error={biError}
-
-                        // ✅ add
                         selectedStartDay={selectedStartDay}
                         selectedEndDay={selectedEndDay}
                       />
+                    </div>
+                  </div>
+                )} */}
 
+
+                {/* Live BI graph */}
+                {showLiveBI && isCountryMode && (
+                  <div className="w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
+                    <div className="w-full max-w-full min-w-0">
+                      <LiveBiLineGraph
+                        dailySeries={biDailySeriesHome}
+                        periods={biPeriods}
+                        loading={biLoading}
+                        error={biError}
+                        selectedStartDay={selectedStartDay}
+                        selectedEndDay={selectedEndDay}
+                        currencySymbol={currencySymbol}
+                      />
                     </div>
                   </div>
                 )}
+
               </div>
             )}
 
@@ -3562,7 +2277,7 @@ const fetchBiSeries = useCallback(
               <div className="w-full h-full lg:sticky lg:top-6 flex">
                 {/* SalesTargetCard already has h-full, so give its parent h-full too */}
                 <div className="w-full h-full">
-                  <SalesTargetCard
+                  {/* <SalesTargetCard
                     regions={regions}
                     value={targetRegion}
                     onChange={setTargetRegion}
@@ -3571,14 +2286,42 @@ const fetchBiSeries = useCallback(
                     convertToHomeCurrency={(v, from) => convertToDisplayCurrency(v, from)}
                     formatHomeK={formatDisplayK}
                     // ✅ stable "today"
-                    todaySales={convertToDisplayCurrency(todaySalesRaw, rangeCurrency)}
+                   todaySales={todaySalesRaw}
+                  /> */}
+                  <SalesTargetCard
+                    regions={regions}
+                    value={targetRegion}
+                    onChange={setTargetRegion}
+                    hideTabs={isCountryMode}
+                    homeCurrency={displayCurrency}
+                    convertToHomeCurrency={identityConvert}   // ✅ no double conversion
+                    formatHomeK={formatDisplayK}
+                    todaySales={todaySalesRaw}
                   />
-
                 </div>
               </div>
             </div>
           </aside>
         </div>
+
+
+        {/* ✅ Global-only Performance Trend BELOW top section */}
+        {platform === "global" && showLiveBI && (
+          <div className="mt-6 w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
+            <div className="w-full max-w-full min-w-0">
+              <LiveBiLineGraph
+                dailySeries={biDailySeriesHome}
+                periods={biPeriods}
+                loading={biLoading}
+                error={biError}
+                selectedStartDay={selectedStartDay}
+                selectedEndDay={selectedEndDay}
+                currencySymbol={currencySymbol}
+              />
+            </div>
+          </div>
+        )}
+
 
         {/* Months for BI */}
         <div className="w-full overflow-x-hidden">
@@ -3595,6 +2338,33 @@ const fetchBiSeries = useCallback(
             </div>
           )}
         </div>
+        {/* 
+        {platform === "global" && showLiveBI && (
+          <div className="mt-6 w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm text-gray-500">
+                <PageBreadcrumb pageTitle="Performance Trend" align="left" textSize="2xl" variant="page" />
+              </div>
+
+            
+              <div className="text-xs text-gray-400">
+                {selectedStartDay && selectedEndDay ? `Day ${selectedStartDay} – ${selectedEndDay}` : "MTD"}
+              </div>
+            </div>
+
+            <div className="w-full max-w-full min-w-0">
+              <LiveBiLineGraph
+                dailySeries={biDailySeries}
+                periods={biPeriods}
+                loading={biLoading}
+                error={biError}
+                selectedStartDay={selectedStartDay}
+                selectedEndDay={selectedEndDay}
+              />
+            </div>
+          </div>
+        )} */}
+
 
         {/* Lower P&L Graph and Inventory */}
         {hasAnyGraphData && (
