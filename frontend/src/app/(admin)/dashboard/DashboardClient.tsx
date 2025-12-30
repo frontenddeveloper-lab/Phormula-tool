@@ -2419,6 +2419,7 @@ export default function DashboardPage() {
                 regions={regions}
                 value={targetRegion}
                 onChange={setTargetRegion}
+                hideTabs={isCountryMode}
                 homeCurrency={displayCurrency}
                 formatHomeK={formatDisplayK}
                 todayHome={stats_todayHome}

@@ -294,6 +294,15 @@ def fetch_inventory_aged_by_user(user_id: int) -> pd.DataFrame:
 
     return df
 # -----------------------------------------------------------------------------
+def fetch_estimated_storage_cost_next_month(user_id: int) -> float:
+    df = fetch_inventory_aged_by_user(user_id)
+
+    if df.empty or "estimated-storage-cost-next-month" not in df.columns:
+        return 0.0
+
+    return float(
+        safe_num(df["estimated-storage-cost-next-month"]).sum()
+    )
 
 #----Inventory coverage ratio calculation -----
 def _clean_inventory_sku(df: pd.DataFrame) -> pd.DataFrame:
@@ -1592,8 +1601,11 @@ def build_ai_summary(
     curr_label,
     sku_context=None,
     inventory_signals=None,   # ✅ NEW (but optional)
-    prev_fee_totals=None,   # ✅ NEW
-    curr_fee_totals=None, 
+    prev_fee_totals=None,     # ✅ NEW
+    curr_fee_totals=None,
+    estimated_storage_cost_next_month=0.0,
+    currency=None,  # ✅ NEW
+
 ):
     def safe0(x):
         v = safe_float_local(x)
@@ -1639,6 +1651,22 @@ def build_ai_summary(
 
     # -------------------------------
 
+    # -------------------------------
+    # ROAS (SUMMARY ONLY)
+    # ROAS = (Advertising Cost / Net Sales) * 100
+    # -------------------------------
+    def calc_roas(ad_cost, net_sales):
+        ad_cost = safe_float_local(ad_cost)
+        net_sales = safe_float_local(net_sales)
+        if not ad_cost or not net_sales:
+            return 0.0
+        return round((ad_cost / net_sales) * 100.0, 2)
+
+    roas_prev = calc_roas(ad_prev, sales_prev)
+    roas_curr = calc_roas(ad_curr, sales_curr)
+    roas_change = round(roas_curr - roas_prev, 2)
+    # -------------------------------
+
     if sku_context is None:
         sku_context = {
             "fast_growing_profitable": [],
@@ -1647,7 +1675,7 @@ def build_ai_summary(
         }
 
     # ===============================
-    # PAYLOAD (unchanged + inventory)
+    # PAYLOAD (unchanged)
     # ===============================
     payload = {
         "periods": {
@@ -1685,24 +1713,34 @@ def build_ai_summary(
             "new_reviving_skus": new_reviving,
         },
         "inventory_signals": inventory_signals or {},
+        "selling_costs": {
+            "platform_fees": {
+                "previous": pf_prev or 0.0,
+                "current": pf_curr or 0.0,
+                "pct_change": pf_pct,
+            },
+            "advertising_cost": {
+                "previous": ad_prev or 0.0,
+                "current": ad_curr or 0.0,
+                "pct_change": ad_pct,
+            },
+            "total": {
+                "previous": total_cost_prev,
+                "current": total_cost_curr,
+                "pct_change": cost_pct,
+            },
 
-                "selling_costs": {
-                "platform_fees": {
-                    "previous": pf_prev or 0.0,
-                    "current": pf_curr or 0.0,
-                    "pct_change": pf_pct,
-                },
-                "advertising_cost": {
-                    "previous": ad_prev or 0.0,
-                    "current": ad_curr or 0.0,
-                    "pct_change": ad_pct,
-                },
-                "total": {
-                    "previous": total_cost_prev,
-                    "current": total_cost_curr,
-                    "pct_change": cost_pct,
-                },
-            }
+        },
+        "roas": {
+    "previous": roas_prev,
+    "current": roas_curr,
+    "change": roas_change,
+},
+"estimated_platform_fees_next_month": estimated_storage_cost_next_month,
+"currency": {
+    "code": currency.get("code"),
+    "symbol": currency.get("symbol"),
+},
 
 
     }
@@ -1710,15 +1748,19 @@ def build_ai_summary(
     data_block = json.dumps(payload, indent=2)
 
     # ===============================
-    # PROMPT (UPDATED – UNITS + AMAZON CLARITY)
+    # PROMPT (ONLY ACTIONS FIXED)
     # ===============================
     prompt = f"""
 You are a senior ecommerce business analyst.
 
 You receive JSON containing:
 - Overall totals and % change for units, net sales, profit, ASP index and unit profit index
-- SKU tables in sku_tables.top_80_skus and sku_tables.new_reviving_skus
+- SKU tables in sku_tables.top_80_skus and sku_tables.new_reviving_skus including product_name and SKU-wise metrics
 - inventory_signals keyed by SKU
+- selling_costs.platform_fees.pct_change
+- selling_costs.advertising_cost.pct_change
+- roas.previous, roas.current, roas.change
+- estimated_platform_fees_next_month
 
 inventory_signals[sku] may include:
 - low_cover (boolean)
@@ -1731,12 +1773,29 @@ Produce:
 1) A short overall business summary (3–5 bullets)
 2) Exactly 5 detailed SKU-wise recommendations.
 
-In the overall business summary (section 1 only):
-- Include EXACTLY ONE bullet describing platform fees and advertising cost SEPARATELY.
-- Mention the % change for platform fees and the % change for advertising cost individually.
-- Do NOT combine them into a single %.
-- Use absolute comparison only (up/down %).
-- Do NOT mention costs anywhere in SKU actions.
+====================
+SUMMARY (3–5 bullets)
+====================
+Write 3–5 short bullets describing, in simple language:
+- How overall units, sales and profit moved (using quantity_pct, net_sales_pct, profit_pct)
+- Any big change in ASP or unit profit (asp_index_pct, unit_profit_index_pct)
+- Whether performance is coming more from volume, pricing, or a few big SKUs
+- Platform fees % change (selling_costs.platform_fees.pct_change) AND estimated platform fees for next month (estimated_platform_fees_next_month)
+- Advertising cost % change (selling_costs.advertising_cost.pct_change) AND ROAS change (roas.change)
+
+
+IMPORTANT (SUMMARY ONLY):
+- Include EXACTLY ONE bullet that mentions platform fees % change AND estimated platform fees for next month together.
+- Include EXACTLY ONE separate bullet that mentions advertising cost % change AND ROAS change together.
+- Mention % change for platform fees and advertising cost individually.
+- Mention ROAS change as current minus previous (use +/- points, not % growth).
+- Do NOT merge platform fees and advertising into the same bullet.
+- Use absolute comparison only (up/down %, +/- points for ROAS).
+- Do NOT mention costs or ROAS anywhere in SKU actions.
+- Use the currency.symbol provided in the JSON for all monetary values.
+- Never infer or guess the currency from country names.
+- Do not use any currency symbol other than the one provided.
+
 
 
 ====================
@@ -1747,42 +1806,62 @@ Pick SKUs only from:
 - sku_tables.top_80_skus
 - sku_tables.new_reviving_skus
 
-STRICT FORMAT (MANDATORY)
+Return EXACTLY 5 action bullets.
 
-Each action must be ONE single string with this layout:
+✅ EACH action bullet MUST follow this exact layout with line breaks:
 
-Line 1: Product name - <product_name>
-
-Line 2–3: Exactly 2 sentences (metrics + sales mix + profit logic)
-
-Line 4: blank line
-
-Line 5: ONE sales / pricing action sentence (mandatory)
-
+Line 1: "Product name - <product_name>"
+Line 2-3: One paragraph of exactly 2 sentences (metrics + causal chain + mix)
+Line 4: (blank line)
+Line 5: One action sentence ONLY
 Line 6 (OPTIONAL): ONE inventory alert sentence ONLY IF inventory_signals[sku] indicate an issue
 
-Rules:
+So the action_bullet string must look like:
+Product name - Classic
+
+The increase in ASP by 13.27% resulted in a dip in units by 25.91%, which also resulted in sales falling by 16.08%. The sales mix is down by 15.93%, reducing its contribution, and profit is up by 10.74%.
+
+Reduce ASP slightly to improve traction.
+⚠ Inventory: Initiate inventory replenishment as current cover is below lead time.
+
+-----------------------------
+Metrics paragraph rules (Line 2-3)
+-----------------------------
+- Exactly 2 sentences.
+
+- Sentence 1: Use ONLY the SKU metrics for ASP, Units and Sales (where values exist).
+  Use the same flow as the original causal chain, but adjust tone only in this special case:
+  - Default tone:
+    "The increase/decrease in ASP by X% resulted in a dip/growth in units by Y%, which also resulted in sales falling/increasing by Z%."
+  - If ASP, Units, and Sales are ALL negative (all down), do NOT imply ASP caused units. Use this co-movement tone instead:
+    "There is a decrease in ASP by X% and also a dip in units by Y%, which resulted in sales falling by Z%."
+
+- Sentence 2: Must mention Sales Mix Change (%) if available (up or down) in the same original style:
+  "The sales mix is up/down by M%, increasing/reducing its contribution."
+  If profitability metrics are available for that SKU, append ONLY ONE of them to the SAME sentence without breaking flow and without using "while/since/because":
+  Prefer in this order:
+  1) Profit (%)
+  2) Profit Per Unit (%)
+  Append as:
+  ", and profit is up/down by A%."
+  OR ", and profit per unit is up/down by B%."
+  (If profitability metric is not available, skip it.)
+
+- Do NOT invent numbers and do NOT add extra reasons.
+
+-----------------------------
+Inventory alert rules (Line 6 ONLY, OPTIONAL)
+-----------------------------
 - NEVER create a separate bullet for inventory.
 - Inventory sentence must start with "⚠ Inventory:".
-- If no inventory issue exists, DO NOT add line 6.
-- Do NOT add extra bullets or split content.
-- Do NOT repeat "Product name -".
+- If no inventory issue exists, DO NOT add Line 6.
+- Do NOT repeat product name.
+- Do NOT mention inventory anywhere else.
 
 -----------------------------
-Inventory alert guidance
+Allowed action sentences (Line 5 only)
 -----------------------------
-- If low_cover is true:
-  Use replenishment language.
-- If overaged is true:
-  Mention aged_units if provided (use approximate phrasing like "around 300 units").
-- If amazon_recommendation exists:
-  Briefly explain the recommendation in plain language.
-  If the meaning is unclear, say the seller should review it in Seller Central.
-- Do NOT invent details.
-
------------------------------
-Allowed sales actions (Line 5 only)
------------------------------
+Use exactly ONE of these sentences, verbatim:
 - "Check ads and visibility campaigns for this product."
 - "Review the visibility setup for this product."
 - "Reduce ASP slightly to improve traction."
@@ -1797,6 +1876,9 @@ Allowed inventory alerts (Line 6 only, OPTIONAL)
 - "⚠ Inventory: Initiate inventory replenishment as current cover is below lead time."
 - "⚠ Inventory: Push promotions or ads to clear around <aged_units> units of aged inventory and reduce storage costs."
 - "⚠ Inventory: Amazon has flagged this SKU for inventory optimization; review the recommendation in Seller Central."
+
+Ignore:
+- Any row where product_name is "Total" or contains "Total".
 
 OUTPUT FORMAT
 Return ONLY valid JSON:
@@ -1817,7 +1899,10 @@ DATA
                     "role": "system",
                     "content": (
                         "Return only valid JSON. "
-                        "Each action_bullet must be a SINGLE formatted block."
+                        "You are a senior ecommerce analyst. "
+                        "Return only valid JSON with summary_bullets and action_bullets. "
+                        "Each action_bullet must follow the exact 3-block layout: "
+                        "Product name line, blank line, 2-sentence metrics paragraph, blank line, one action line."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -1859,6 +1944,8 @@ DATA
         "summary_bullets": fallback_summary,
         "action_bullets": fallback_actions[:5],
     }
+
+
 
 
 #-----------------------------------------------------------------------------
@@ -1952,7 +2039,8 @@ def generate_live_insight(item, country, prev_label, curr_label):
     - Use the exact causal tone wherever % values exist:
     "The increase/decrease in ASP by X% resulted in a dip/growth in units by Y%, which also resulted in sales falling/increasing by Z%."
     - In at least one observation, mention Sales Mix Change (%) direction if present (up/down).
-    - Do NOT add assumptions like stock issues, supply constraints, replenishment, OOS, or fulfillment problems.
+    - Do NOT add assumptions like stock issues, supply constraints, replenishment, OOS, or fulfillment problems
+    in observations or metric explanations.
 
     Improvements:
     - Provide exactly 3–5 action bullets.
@@ -1964,7 +2052,8 @@ def generate_live_insight(item, country, prev_label, curr_label):
     • "Monitor performance closely and reassess next steps."
     • "Monitor performance closely for now."
     - Do NOT add any other recommendations, explanations, or extra words.
-    - Do NOT mention stock, inventory, supply, operations, OOS, logistics, replenishment, or warehousing.
+    - Do NOT mention stock, inventory, supply, operations, OOS, logistics, replenishment, or warehousing
+    in sales, pricing, or profitability actions.
     - Decision guidance:
     • If ASP is strongly up and units are down: prefer "Reduce ASP slightly to improve traction."
     • If units and sales are down and ASP is flat or slightly up: prefer visibility lines.
@@ -1992,6 +2081,21 @@ def generate_live_insight(item, country, prev_label, curr_label):
     • [Explain per-unit profit change using ONLY available signals like realized price/discounting and mix (higher-priced variants) impact, without mentioning COGS.]
     • [Choose ONE action bullet from the Improvements list that best fits per-unit profit strength/weakness and paste it verbatim.]
 
+    Inventory Alert (OPTIONAL — MUST MATCH OVERALL ACTIONS):
+    - After completing all observations and action bullets above,
+    check inventory_signals for this SKU.
+    - ONLY IF inventory_signals indicate an issue, add ONE final bullet.
+    - The inventory bullet MUST:
+    • Start with "⚠ Inventory:"
+    • Use EXACTLY one of the allowed inventory alert sentences below, verbatim.
+    - Allowed inventory alerts (verbatim only):
+    • "⚠ Inventory: Initiate inventory replenishment as current cover is below lead time."
+    • "⚠ Inventory: Push promotions or ads to clear around <aged_units> units of aged inventory and reduce storage costs."
+    • "⚠ Inventory: Amazon has flagged this SKU for inventory optimization; review the recommendation in Seller Central."
+    - If no inventory issue exists, DO NOT add any inventory bullet.
+    - Do NOT add more than ONE inventory bullet.
+    - Do NOT let inventory influence sales, ASP, profit, or pricing explanations.
+
     Instructions:
     - Use plain text with bullets only.
     - DO NOT use Markdown formatting (no **bold**, no italics, no headers).
@@ -2002,6 +2106,7 @@ def generate_live_insight(item, country, prev_label, curr_label):
     Data:
     {data_block}
     """
+
 
     try:
         ai_response = oa_client.chat.completions.create(
@@ -2046,3 +2151,104 @@ def generate_live_insight(item, country, prev_label, curr_label):
             "key_used": key,
             "is_new_or_reviving": is_new_or_reviving,
         }
+#-------------------------------------------------------------------------------    
+def generate_inventory_alerts_for_all_skus(user_id: int, country: str) -> dict:
+    """
+    Generates inventory alerts for all SKUs based on:
+    1) Inventory coverage ratio vs transit time
+    2) Aged inventory buckets
+
+    Returns:
+      {
+        sku: {
+          "alert": str,
+          "alert_type": "supply" | "ageing" | "none"
+        }
+      }
+    """
+
+    alerts = {}
+
+    # -----------------------------------
+    # 1) Inventory coverage ratio
+    # -----------------------------------
+    coverage_df = compute_inventory_coverage_ratio(user_id, country)
+    coverage_map = {
+        str(r["sku"]).strip(): r["inventory_coverage_ratio"]
+        for _, r in coverage_df.iterrows()
+        if r.get("sku") is not None
+    }
+
+    # -----------------------------------
+    # 2) Transit time
+    # -----------------------------------
+    transit_time = None
+    try:
+        transit_row = fetch_transit_time(
+            user_id=user_id,
+            marketplace=None,
+            country=country,
+        )
+        if transit_row and transit_row.get("transit_time") is not None:
+            transit_time = float(transit_row["transit_time"])
+    except Exception:
+        transit_time = None
+
+    # -----------------------------------
+    # 3) Inventory aged data
+    # -----------------------------------
+    inv_df = fetch_inventory_aged_by_user(user_id)
+
+    for _, r in inv_df.iterrows():
+        sku = r.get("sku")
+        if sku is None:
+            continue
+
+        sku = str(sku).strip()
+        if not sku:
+            continue
+
+        def _num(col):
+            v = r.get(col)
+            return float(safe_num(v)) if v is not None else 0.0
+
+        aged_181_270 = _num("inv-age-181-to-270-days")
+        aged_271_365 = _num("inv-age-271-to-365-days")
+        aged_365p    = _num("inv-age-365-plus-days")
+
+        aged_qty = aged_181_270 + aged_271_365 + aged_365p
+        overaged = aged_qty > 0
+
+        coverage_ratio = coverage_map.get(sku)
+
+        # -----------------------------------
+        # Alert decision (STRICT priority)
+        # -----------------------------------
+        alert = "No action needed"
+        alert_type = "none"
+
+        # 1️⃣ Supply risk
+        if (
+            transit_time is not None
+            and coverage_ratio is not None
+            and coverage_ratio < transit_time
+        ):
+            alert = "Inventory coverage is below transit time; supply inventory required."
+            alert_type = "supply"
+
+        # 2️⃣ Ageing inventory
+        elif overaged:
+            alert = (
+                "Inventory is ageing; please refer to Business Intelligence for resolution."
+            )
+            alert_type = "ageing"
+
+        alerts[sku] = {
+            "alert": alert,
+            "alert_type": alert_type,
+        }
+
+    return alerts
+
+
+

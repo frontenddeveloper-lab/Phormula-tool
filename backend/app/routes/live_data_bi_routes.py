@@ -10,7 +10,7 @@ from openai import OpenAI
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.utils.live_bi_utils import (build_inventory_signals, get_mtd_and_prev_ranges,fetch_previous_period_data,fetch_current_mtd_data,calculate_growth,aggregate_totals,build_segment_total_row,build_sku_context,build_ai_summary,generate_live_insight,fetch_historical_skus_last_6_months,round_numeric_values,totals_from_daily_series,construct_prev_table_name,compute_sku_metrics_from_df,
-                                     compute_inventory_coverage_ratio)
+                                     compute_inventory_coverage_ratio,fetch_estimated_storage_cost_next_month)
 from app.utils.email_utils import (send_live_bi_email,get_user_email_by_id,has_recent_bi_email,mark_bi_email_sent,)
 
 
@@ -227,6 +227,15 @@ def live_mtd_vs_previous():
         curr_totals = aggregate_totals(curr_data)
 
         sku_context = build_sku_context(growth_data, max_items=5)
+        estimated_storage_cost_next_month = fetch_estimated_storage_cost_next_month(user_id)
+        currency_map = {
+            "uk": {"symbol": "£", "code": "GBP"},
+            "us": {"symbol": "$", "code": "USD"},
+        }
+
+        currency = currency_map.get(country, {"symbol": "£", "code": "GBP"})
+            
+
 
         overall = build_ai_summary(
             prev_totals,
@@ -239,6 +248,9 @@ def live_mtd_vs_previous():
             inventory_signals=inventory_signals,
             prev_fee_totals=prev_fee_totals,
             curr_fee_totals=curr_fee_totals,
+            estimated_storage_cost_next_month=estimated_storage_cost_next_month,
+            currency=currency,
+
         )
 
         overall_summary = overall.get("summary_bullets", [])

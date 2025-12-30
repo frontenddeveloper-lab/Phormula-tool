@@ -10,6 +10,7 @@ import DownloadIconButton from "@/components/ui/button/DownloadIconButton";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import DashboardBargraphCard from "@/components/dashboard/DashboardBargraphCard";
 import SalesTargetCard from "@/components/dashboard/SalesTargetCard";
+import SalesTargetStatsCard from "@/components/dashboard/SalesTargetStatsCard";
 import AmazonStatCard from "@/components/dashboard/AmazonStatCard";
 import CurrentInventorySection from "@/components/dashboard/CurrentInventorySection";
 import { RootState } from "@/lib/store";
@@ -36,7 +37,6 @@ import type { RegionKey, RegionMetrics } from "@/lib/dashboard/types";
 import { useGetUserDataQuery } from "@/lib/api/profileApi";
 import { usePlatform } from "@/components/context/PlatformContext";
 import type { PlatformId } from "@/lib/utils/platforms";
-import MonthsforBI from "./live-business-insight/[ranged]/[countryName]/[month]/[year]/page";
 import LiveBiLineGraph from "@/components/businessInsight/LiveBiLineChartPanel";
 
 // ✅ moved range picker deps here
@@ -44,6 +44,7 @@ import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import { FaCalendarAlt } from "react-icons/fa";
+import MonthsforBI from "@/app/(admin)/live-business-insight/[ranged]/[countryName]/[month]/[year]/page";
 
 type CurrencyCode = "USD" | "GBP" | "INR" | "CAD";
 
@@ -170,6 +171,14 @@ function RangePicker({
   onClear: () => void;
   onCloseReset: () => void;
 }) {
+
+  // ✅ LOCK CALENDAR TO CURRENT MONTH ONLY
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+  const [shownDate, setShownDate] = useState<Date>(monthStart);
+
   const [showCalendar, setShowCalendar] = useState(false);
 
   const [calendarRange, setCalendarRange] = useState<any>([
@@ -246,13 +255,39 @@ function RangePicker({
             minWidth: 320,
           }}
         >
+          {/* <DateRange
+            ranges={calendarRange}
+            onChange={handleCalendarChange}
+            moveRangeOnFirstSelection={false}
+            showMonthAndYearPickers={false}
+            rangeColors={["#5EA68E"]}
+          /> */}
+
           <DateRange
             ranges={calendarRange}
             onChange={handleCalendarChange}
             moveRangeOnFirstSelection={false}
             showMonthAndYearPickers={false}
             rangeColors={["#5EA68E"]}
+
+            // ✅ Only allow selecting dates from current month
+            minDate={monthStart}
+            maxDate={monthEnd}
+
+            // ✅ Always show current month (prevents switching)
+            shownDate={shownDate}
+            onShownDateChange={() => {
+              // snap back to the same month even if user tries to navigate
+              setShownDate(monthStart);
+            }}
           />
+          <style jsx global>{`
+  /* Remove left/right month navigation arrows */
+  .rdrNextPrevButton {
+    display: none !important;
+  }
+`}</style>
+
 
           <div className="flex justify-between mt-2 gap-2">
             <button
@@ -445,7 +480,12 @@ export default function DashboardPage() {
       const { monthName, year } = getISTYearMonth();
       const month = monthName.toLowerCase();
 
-      const commonBody = { month, year, fetch_if_missing: true };
+      const commonBody = {
+        month,
+        year,
+        fetch_if_missing: true,
+        seed_all: true,
+      };
 
       const [ukRes, inrRes, cadRes] = await Promise.all([
         fetch(FX_ENDPOINT, {
@@ -453,9 +493,9 @@ export default function DashboardPage() {
           headers,
           body: JSON.stringify({
             ...commonBody,
-            user_currency: "GBP",
+            user_currency: "gbp",
             country: "uk",
-            selected_currency: "USD",
+            selected_currency: "usd",
           }),
         }),
         fetch(FX_ENDPOINT, {
@@ -463,9 +503,9 @@ export default function DashboardPage() {
           headers,
           body: JSON.stringify({
             ...commonBody,
-            user_currency: "INR",
+            user_currency: "inr",
             country: "india",
-            selected_currency: "USD",
+            selected_currency: "usd",
           }),
         }),
         fetch(FX_ENDPOINT, {
@@ -473,29 +513,44 @@ export default function DashboardPage() {
           headers,
           body: JSON.stringify({
             ...commonBody,
-            user_currency: "CAD",
+            user_currency: "cad",
             country: "ca",
-            selected_currency: "USD",
+            selected_currency: "usd",
           }),
         }),
       ]);
 
       if (ukRes.ok) {
         const json = await ukRes.json();
+        console.log("💱 GBP → USD FX response:", json);
+
         const rate = json?.record?.conversion_rate;
-        if (json?.success && rate != null) setGbpToUsd(Number(rate));
+        if (json?.success && rate != null) {
+          setGbpToUsd(Number(rate));
+          console.log("✅ GBP → USD rate used:", Number(rate));
+        }
       }
 
       if (inrRes.ok) {
         const json = await inrRes.json();
+        console.log("💱 INR → USD FX response:", json);
+
         const rate = json?.record?.conversion_rate;
-        if (json?.success && rate != null) setInrToUsd(Number(rate));
+        if (json?.success && rate != null) {
+          setInrToUsd(Number(rate));
+          console.log("✅ INR → USD rate used:", Number(rate));
+        }
       }
 
       if (cadRes.ok) {
         const json = await cadRes.json();
+        console.log("💱 CAD → USD FX response:", json);
+
         const rate = json?.record?.conversion_rate;
-        if (json?.success && rate != null) setCadToUsd(Number(rate));
+        if (json?.success && rate != null) {
+          setCadToUsd(Number(rate));
+          console.log("✅ CAD → USD rate used:", Number(rate));
+        }
       }
     } catch (err) {
       console.error("Failed to fetch FX rates", err);
@@ -503,6 +558,16 @@ export default function DashboardPage() {
       setFxLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    console.log("📊 FINAL FX RATES IN USE", {
+      GBP_TO_USD: gbpToUsd,
+      INR_TO_USD: inrToUsd,
+      CAD_TO_USD: cadToUsd,
+      displayCurrency,
+    });
+  }, [gbpToUsd, inrToUsd, cadToUsd, displayCurrency]);
+
 
   useEffect(() => {
     fetchFxRates();
@@ -1268,6 +1333,9 @@ export default function DashboardPage() {
     return daysInPrevMonth > 0 ? (lastMonthTotalUSD * todayDay) / daysInPrevMonth : 0;
   };
 
+
+
+
   // ---------- NET SALES (DISPLAY CURRENCY) ----------
 
   // Amazon current & prev net sales (already correct source)
@@ -1315,6 +1383,7 @@ export default function DashboardPage() {
       lastMonthToDateUSD: globalPrevNetDisp,   // prev MTD
       lastMonthTotalUSD: globalTarget,         // ✅ prev FULL month total
       targetUSD: globalTarget,                 // ✅ target = prev FULL month total
+      decTargetUSD: globalTarget,
     };
 
     const ukTarget =
@@ -1325,6 +1394,8 @@ export default function DashboardPage() {
       lastMonthToDateUSD: amazonPrevNetDisp,
       lastMonthTotalUSD: ukTarget,
       targetUSD: ukTarget,
+      // ✅ Dec target
+      decTargetUSD: ukTarget,
     };
 
 
@@ -1341,6 +1412,7 @@ export default function DashboardPage() {
       lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
       lastMonthTotalUSD: usLastMonthTotal,
       targetUSD: usLastMonthTotal,
+      decTargetUSD: usLastMonthTotal,
     };
 
     const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
@@ -1349,6 +1421,8 @@ export default function DashboardPage() {
       lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
       lastMonthTotalUSD: caLastMonthTotal,
       targetUSD: caLastMonthTotal,
+      // ✅ Dec target (fallback)
+      decTargetUSD: caLastMonthTotal,
     };
 
     return {
@@ -1499,14 +1573,14 @@ export default function DashboardPage() {
 
   const colorMapping: Record<string, string> = {
     "Net Sales": "#2CA9E0",
-    "Amazon Fees": "#ff5c5c",
+    "Amazon Fees": "#FFBE25",
     COGS: "#AB64B5",
     Advertisements: "#F47A00",
-    "Tax & Credits": "#FFBE26",
+    "Tax & Credits": "#C03030",
     // "Other Charges": "#00627D",
-    Others: "#00627D",
+    Others: "#01627F",
     "CM1 Profit": "#87AD12",
-    "CM2 Profit": "#5EA49B",
+    "CM2 Profit": "#2DA49A",
 
   };
 
@@ -1763,7 +1837,59 @@ export default function DashboardPage() {
 
   const identityConvert = useCallback((v: number, _from?: any) => v, []);
 
+  // ✅ Reimbursement (current + previous) converted to HOME currency (displayCurrency)
+  const reimbursementHome = useMemo(() => {
+    // current month reimbursement lives in derived_totals
+    const currRaw = toNumberSafe(derived?.current_net_reimbursement ?? 0);
 
+    // previous month reimbursement lives in previous_period.totals (as per your snippet)
+    const prevRaw = toNumberSafe(
+      data?.previous_period?.totals?.previous_net_reimbursement ?? 0
+    );
+
+    return {
+      current: convertToDisplayCurrency(currRaw, amazonDataCurrency),
+      previous: convertToDisplayCurrency(prevRaw, amazonDataCurrency),
+
+      // optional: delta% in home currency (safe even if fx changes)
+      deltaPct: safeDeltaPct(
+        convertToDisplayCurrency(currRaw, amazonDataCurrency),
+        convertToDisplayCurrency(prevRaw, amazonDataCurrency)
+      ),
+    };
+  }, [
+    derived?.current_net_reimbursement,
+    data?.previous_period?.totals?.previous_net_reimbursement,
+    convertToDisplayCurrency,
+    amazonDataCurrency,
+  ]);
+
+
+  const targetData = regions[targetRegion] || regions.Global;
+
+  const stats_mtdHome = identityConvert(targetData.mtdUSD ?? 0);
+  const stats_lastMtdHome = identityConvert(targetData.lastMonthToDateUSD ?? 0);
+  const stats_lastMonthTotalHome = identityConvert(targetData.lastMonthTotalUSD ?? 0);
+  const stats_targetHome = identityConvert(targetData.targetUSD ?? 0);
+
+  const { todayDay: statsTodayDay } = getISTDayInfo();
+
+  const stats_todayHome =
+    typeof todaySalesRaw === "number" && !Number.isNaN(todaySalesRaw)
+      ? todaySalesRaw
+      : statsTodayDay > 0
+        ? stats_mtdHome / statsTodayDay
+        : 0;
+
+  const stats_salesTrendPct =
+    stats_lastMtdHome > 0
+      ? ((stats_mtdHome - stats_lastMtdHome) / stats_lastMtdHome) * 100
+      : 0;
+
+  const stats_targetTrendPct =
+    stats_lastMonthTotalHome > 0
+      ? ((stats_targetHome - stats_lastMonthTotalHome) / stats_lastMonthTotalHome) * 100
+      : 0;
 
   return (
     <div className="relative overflow-x-hidden">
@@ -1825,14 +1951,8 @@ export default function DashboardPage() {
 
             {/* GLOBAL CARD */}
             {!isCountryMode && hasGlobalCard && (
-              <div className="flex lg:flex-1">
+              <div className="flex">
                 <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
-                  {/* <div className="mb-4">
-                    <div className="flex items-baseline gap-2">
-                      <PageBreadcrumb pageTitle="Global" variant="page" align="left" />
-                    </div>
-                  </div> */}
-
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div className="flex items-baseline gap-2">
                       <PageBreadcrumb pageTitle="Global" variant="page" align="left" />
@@ -1869,7 +1989,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || biLoading}
                       formatter={fmtInt}
                       bottomLabel={prevLabel}
-                      className="border-[#F47A00] bg-[#F47A0026]"
+                      className="border-[#FFBE25] bg-[#FFBE2526]"
                     />
 
                     <AmazonStatCard
@@ -1881,7 +2001,8 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#FFD54F] bg-[#FFD54F26]"
+
+                      className="border-[#F47A00] bg-[#F47A0026]"
                     />
 
 
@@ -1894,7 +2015,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#87AD12] bg-[#87AD1226]"
+                      className="border-[#2CA9E0] bg-[#2CA9E026]"
                     />
 
                     <AmazonStatCard
@@ -1909,7 +2030,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#2CA9E0] bg-[#2CA9E026]"
+                      className="border-[#FF5C5C] bg-[#FF5C5C26]"
                     />
 
 
@@ -1944,7 +2065,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#AB64B5] bg-[#AB64B526]"
+                      className="border-[#2DA49A] bg-[#2DA49A26]"
                     />
 
 
@@ -1975,7 +2096,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
-                      className="border-[#00627B] bg-[#00627B26]"
+                      className="border-[#01627F] bg-[#01627F26]"
                     />
 
 
@@ -2006,7 +2127,25 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {showLiveBI && (isCountryMode || platform === "global") && (
+                      {/* {showLiveBI && (isCountryMode || platform === "global") && (
+                        <RangePicker
+                          selectedStartDay={selectedStartDay}
+                          selectedEndDay={selectedEndDay}
+                          onSubmit={(s, e) => {
+                            setSelectedStartDay(s);
+                            setSelectedEndDay(e);
+                          }}
+                          onClear={() => {
+                            setSelectedStartDay(null);
+                            setSelectedEndDay(null);
+                          }}
+                          onCloseReset={() => {
+                            setSelectedStartDay(null);
+                            setSelectedEndDay(null);
+                          }}
+                        />
+                      )} */}
+                      {showLiveBI && isCountryMode && (
                         <RangePicker
                           selectedStartDay={selectedStartDay}
                           selectedEndDay={selectedEndDay}
@@ -2024,6 +2163,7 @@ export default function DashboardPage() {
                           }}
                         />
                       )}
+
                     </div>
                   </div>
 
@@ -2037,7 +2177,8 @@ export default function DashboardPage() {
                       loading={loading || biLoading}
                       formatter={fmtInt}
                       bottomLabel={prevLabel}
-                      className="border-[#F47A00] bg-[#F47A0026]"
+                      className="border-[#FFBE25] bg-[#FFBE2526]"
+
                     />
 
                     <AmazonStatCard
@@ -2056,7 +2197,7 @@ export default function DashboardPage() {
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#FFD54F] bg-[#FFD54F26]"
+                      className="border-[#F47A00] bg-[#F47A0026]"
                     />
 
                     <AmazonStatCard
@@ -2075,7 +2216,7 @@ export default function DashboardPage() {
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#87AD12] bg-[#87AD1226]"
+                      className="border-[#2CA9E0] bg-[#2CA9E026]"
                     />
 
 
@@ -2099,7 +2240,7 @@ export default function DashboardPage() {
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#2CA9E0] bg-[#2CA9E026]"
+                      className="border-[#FF5C5C] bg-[#FF5C5C26]"
                     />
 
                     <AmazonStatCard
@@ -2132,7 +2273,7 @@ export default function DashboardPage() {
                       loading={loading || (useBiCm2 ? biLoading : false)}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#AB64B5] bg-[#AB64B526]"
+                      className="border-[#2DA49A] bg-[#2DA49A26]"
                     />
 
                     <AmazonStatCard
@@ -2161,7 +2302,7 @@ export default function DashboardPage() {
                       loading={loading || (useBiCm2 ? biLoading : false)}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
-                      className="border-[#00627B] bg-[#00627B26]"
+                      className="border-[#01627F] bg-[#01627F26]"
                     />
                   </div>
                 </div>
@@ -2226,15 +2367,7 @@ export default function DashboardPage() {
                     <div className="mt-3 text-sm text-gray-500">Loading Shopify…</div>
                   ) : shopify ? (
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <AmazonStatCard
-                        label="Sales"
-                        current={convertToDisplayCurrency(shopifyDeriv?.netSales ?? 0, "INR")}
-                        previous={convertToDisplayCurrency(shopifyPrevDeriv?.netSales ?? 0, "INR")}
-                        loading={shopifyLoading}
-                        formatter={formatDisplayAmount}
-                        bottomLabel={prevLabel}
-                        className="border-[#87AD12] bg-[#87AD1226]"
-                      />
+
                       <AmazonStatCard
                         label="Units"
                         current={shopifyDeriv?.totalOrders ?? 0}
@@ -2242,7 +2375,17 @@ export default function DashboardPage() {
                         loading={shopifyLoading}
                         formatter={fmtInt}
                         bottomLabel={prevLabel}
-                        className="border-[#F47A00] bg-[#F47A0026]"
+                        className="border-[#FFBE25] bg-[#FFBE2526]"
+                      />
+                      <AmazonStatCard
+                        label="Sales"
+                        current={convertToDisplayCurrency(shopifyDeriv?.netSales ?? 0, "INR")}
+                        previous={convertToDisplayCurrency(shopifyPrevDeriv?.netSales ?? 0, "INR")}
+                        loading={shopifyLoading}
+                        formatter={formatDisplayAmount}
+                        bottomLabel={prevLabel}
+                        className="border-[#2CA9E0] bg-[#2CA9E026]"
+
                       />
                       <AmazonStatCard
                         label="ASP"
@@ -2256,7 +2399,7 @@ export default function DashboardPage() {
                         loading={shopifyLoading}
                         formatter={formatDisplayAmount}
                         bottomLabel={prevLabel}
-                        className="border-[#2CA9E0] bg-[#2CA9E026]"
+                        className="border-[#FF5C5C] bg-[#FF5C5C26]"
                       />
                     </div>
                   ) : (
@@ -2270,39 +2413,47 @@ export default function DashboardPage() {
           </div>
 
           {/* RIGHT COLUMN – Sales Target */}
-          <aside className="col-span-12 lg:col-span-4 order-1 lg:order-2 flex flex-col h-full">
-            {/* This wrapper must be allowed to stretch */}
-            <div className="w-full h-full flex">
-              {/* Sticky can still work, but it must also be h-full and NOT self-start */}
-              <div className="w-full h-full lg:sticky lg:top-6 flex">
-                {/* SalesTargetCard already has h-full, so give its parent h-full too */}
-                <div className="w-full h-full">
-                  {/* <SalesTargetCard
-                    regions={regions}
-                    value={targetRegion}
-                    onChange={setTargetRegion}
-                    hideTabs={isCountryMode}
-                    homeCurrency={displayCurrency}
-                    convertToHomeCurrency={(v, from) => convertToDisplayCurrency(v, from)}
-                    formatHomeK={formatDisplayK}
-                    // ✅ stable "today"
-                   todaySales={todaySalesRaw}
-                  /> */}
-                  <SalesTargetCard
-                    regions={regions}
-                    value={targetRegion}
-                    onChange={setTargetRegion}
-                    hideTabs={isCountryMode}
-                    homeCurrency={displayCurrency}
-                    convertToHomeCurrency={identityConvert}   // ✅ no double conversion
-                    formatHomeK={formatDisplayK}
-                    todaySales={todaySalesRaw}
-                  />
-                </div>
-              </div>
+          <aside className="col-span-12 lg:col-span-4 order-1 lg:order-2 flex flex-col gap-6 h-full">
+            <div className="w-full">
+              <SalesTargetStatsCard
+                regions={regions}
+                value={targetRegion}
+                onChange={setTargetRegion}
+                hideTabs={isCountryMode}
+                homeCurrency={displayCurrency}
+                formatHomeK={formatDisplayK}
+                todayHome={stats_todayHome}
+                mtdHome={stats_mtdHome}
+                targetHome={stats_targetHome}
+                lastMonthTotalHome={stats_lastMonthTotalHome}
+                salesTrendPct={stats_salesTrendPct}
+                targetTrendPct={stats_targetTrendPct}
+                currentReimbursement={reimbursementHome.current}
+                previousReimbursement={reimbursementHome.previous}
+              />
+            </div>
+
+            <div className="w-full lg:sticky lg:top-6">
+              <SalesTargetCard
+                data={targetData}
+                regions={regions}
+                value={targetRegion}
+                onChange={setTargetRegion}
+                hideTabs={isCountryMode}
+                homeCurrency={displayCurrency}
+                convertToHomeCurrency={identityConvert}
+                formatHomeK={formatDisplayK}
+                todaySales={todaySalesRaw}
+                targetHome={stats_targetHome}
+                mtdHome={stats_mtdHome}
+                lastMonthTotalHome={stats_lastMonthTotalHome}
+                currentReimbursement={reimbursementHome.current}
+                previousReimbursement={reimbursementHome.previous}
+              />
             </div>
           </aside>
         </div>
+
 
 
         {/* ✅ Global-only Performance Trend BELOW top section */}

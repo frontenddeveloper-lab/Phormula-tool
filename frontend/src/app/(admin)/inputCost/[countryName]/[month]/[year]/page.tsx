@@ -56,6 +56,11 @@ function getCurrencyForCountry(country: string): string {
   }
 }
 
+const allMonths = [
+  'january','february','march','april','may','june',
+  'july','august','september','october','november','december'
+];
+
  
 
 /* ================= COMPONENT ================= */
@@ -84,8 +89,16 @@ export default function InputCostPage({ params }: Params) {
   const [showSkuExpand, setShowSkuExpand] = useState(false);
   const [ledgerMode, setLedgerMode] = useState(false);
 const [ledgerMap, setLedgerMap] = useState<Record<string, number>>({});
-const [month, setMonth] = useState('');
-const [year, setYear] = useState('');
+const now = new Date();
+
+const [month, setMonth] = useState(
+  allMonths[now.getMonth()] // e.g. "september"
+);
+
+const [year, setYear] = useState(
+  String(now.getFullYear())
+);
+
 const [ledgerLoading, setLedgerLoading] = useState(false);
 
   
@@ -99,10 +112,7 @@ const getAgeingForRow = (row: SkuRow) => {
 };
 
 const currentMonthIndex = new Date().getMonth(); // 0-based
-const allMonths = [
-  'january','february','march','april','may','june',
-  'july','august','september','october','november','december'
-];
+
 
 const filteredMonths = allMonths.filter((_, i) => i !== currentMonthIndex);
 
@@ -111,8 +121,17 @@ const filteredMonths = allMonths.filter((_, i) => i !== currentMonthIndex);
   const isColumnEmpty = (data: SkuRow[], columnName: string) =>
     data.every(r => !r[columnName]);
 
+  const isCurrentMonth =
+  month === allMonths[new Date().getMonth()] &&
+  year === String(new Date().getFullYear());
+
   const fetchLedgerSnapshot = async () => {
   if (!month || !year) return;
+
+  if (isCurrentMonth) {
+    cancelLedgerView();
+    return;
+  }
 
   setLedgerLoading(true); // 🔥 start loader
 
@@ -194,9 +213,15 @@ const filteredMonths = allMonths.filter((_, i) => i !== currentMonthIndex);
 
 
 const cancelLedgerView = () => {
+  const now = new Date();
+
+  setMonth(allMonths[now.getMonth()]);
+  setYear(String(now.getFullYear()));
+
   setLedgerMode(false);
   setLedgerMap({});
 };
+
 
 
 
@@ -563,13 +588,13 @@ const tableRows = skuData.map((row, index) => {
   };
 });
 tableRows.push({
-  s_no: "",
+  s_no: <></>,
   product_name: "TOTAL",
   sku: "",
   asin: "",
   barcode: "",
   price: "",
-  margin: "",
+  margin: <></>,
   available: formatNumber(totals.available),
   age_0_90: formatNumber(totals.age0_90),
   age_91_180: formatNumber(totals.age91_180),
@@ -789,7 +814,7 @@ const columns: ColumnDef<any>[] = [
   stickyHeader
   rowClassName={(row) =>
     (row as any).__isTotal
-      ? " font-semibold"
+      ? "bg-[#D9D9D9] font-semibold"
       : ""
   }
 />

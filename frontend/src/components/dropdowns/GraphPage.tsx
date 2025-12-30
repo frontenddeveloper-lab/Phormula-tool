@@ -3556,16 +3556,35 @@ const GraphPage: React.FC<GraphPageProps> = ({
         profit2: "#87AD12",
       };
 
+      // const datasets = Object.entries(selectedGraphs)
+      //   .filter(([, checked]) => checked)
+      //   .map(([metric]) => ({
+      //     label: labelMap[metric] ?? metric,
+      //     data: labels.map((l) => dataToUse[l]?.[metric as keyof (typeof dataToUse)[string]] || 0),
+      //     fill: false,
+      //     borderColor: colorMap[metric] ?? "#000",
+      //     backgroundColor: colorMap[metric] ?? "#000",
+      //     tension: 0.1,
+      //   }));
+
       const datasets = Object.entries(selectedGraphs)
-        .filter(([, checked]) => checked)
-        .map(([metric]) => ({
-          label: labelMap[metric] ?? metric,
-          data: labels.map((l) => dataToUse[l]?.[metric as keyof (typeof dataToUse)[string]] || 0),
-          fill: false,
-          borderColor: colorMap[metric] ?? "#000",
-          backgroundColor: colorMap[metric] ?? "#000",
-          tension: 0.1,
-        }));
+  .filter(([, checked]) => checked)
+  .map(([metric]) => ({
+    label: labelMap[metric] ?? metric,
+    data: labels.map(
+      (l) => dataToUse[l]?.[metric as keyof (typeof dataToUse)[string]] || 0
+    ),
+    fill: false,
+    borderColor: colorMap[metric] ?? "#000",
+    backgroundColor: colorMap[metric] ?? "#000",
+
+    // 👇 Make the line curved
+    tension: 0.35,        // try 0.3 – 0.5
+    cubicInterpolationMode: "monotone", // keeps curve smooth & realistic
+    pointRadius: 3,
+    pointHoverRadius: 5,
+  }));
+
 
       return { labels, datasets, isAllZero };
     }

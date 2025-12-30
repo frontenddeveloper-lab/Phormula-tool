@@ -25,6 +25,7 @@ import DataTable, { ColumnDef } from "@/components/ui/table/DataTable";
 import DownloadIconButton from "@/components/ui/button/DownloadIconButton";
 import ExcelJS from "exceljs/dist/exceljs.min.js";
 import { saveAs } from "file-saver";
+import CashFlowSankey from "@/components/cashflow/CashFlowSankey";
 
 ChartJS.register(
   BarElement,
@@ -64,6 +65,7 @@ type SummaryRow = {
 };
 
 type APIResponse = {
+  previous_summary: SummaryShape | undefined;
   summary?: Partial<SummaryShape>;
   monthlyBreakdown?: Record<string, Partial<SummaryShape>>;
 };
@@ -143,6 +145,13 @@ const quarterMapping: Record<string, string[]> = {
   Q4: ["October", "November", "December"],
 };
 
+const quarterToPeriodTypeMap: Record<string, string> = {
+  Q1: "quarter1",
+  Q2: "quarter2",
+  Q3: "quarter3",
+  Q4: "quarter4",
+};
+
 const CashFlowPage: React.FC = () => {
   const params = useParams<{
     countryName?: string;
@@ -181,10 +190,23 @@ const CashFlowPage: React.FC = () => {
     ? String(paramYear)
     : "";
 
+    
+
+// previous month logic
+const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+
+const defaultMonth = monthsList[prevMonthDate.getMonth()]; // "November"
+const defaultYear = String(prevMonthDate.getFullYear());   // "2024"
+
   // State
   const [selectedQuarter, setSelectedQuarter] = useState<string>("");
-  const [month, setMonth] = useState<string>(initialMonth);
-  const [year, setYear] = useState<string>(initialYear);
+  const [month, setMonth] = useState<string>(
+  initialMonth || defaultMonth
+);
+
+const [year, setYear] = useState<string>(
+  initialYear || defaultYear
+);
   const [periodType, setPeriodType] = useState<PeriodType>("monthly");
   const [error, setError] = useState<string>("");
   const [data, setData] = useState<APIResponse | null>(null);
@@ -225,7 +247,7 @@ const CashFlowPage: React.FC = () => {
     Object.values(data.summary!).every((v) => !v);
 
   // API helpers (using fetch)
-  const fetchSpecificPeriodData = async (
+ const fetchSpecificPeriodData = async (
     requestMonth: string | null,
     requestYear: string | null,
     requestPeriodType: PeriodType
@@ -255,6 +277,30 @@ const CashFlowPage: React.FC = () => {
     const json = (await res.json()) as APIResponse;
     return json;
   };
+
+  const prevMonthLabel =
+  periodType === "monthly" && month && year
+    ? `${monthsList[(monthsList.indexOf(month) + 11) % 12]} ${
+        month === "January" ? Number(year) - 1 : year
+      }`
+    : "";
+
+    const prevQuarterLabel =
+  periodType === "quarterly" && selectedQuarter && year
+    ? `${selectedQuarter === "Q1" ? "Q4" : "Q" + (Number(selectedQuarter[1]) - 1)} ${
+        selectedQuarter === "Q1" ? Number(year) - 1 : year
+      }`
+    : "";
+
+    const prevYearLabel =
+  periodType === "yearly" && year ? String(Number(year) - 1) : "";
+const previousLabel =
+  periodType === "monthly"
+    ? prevMonthLabel
+    : periodType === "quarterly"
+    ? prevQuarterLabel
+    : prevYearLabel;
+
 
   const fetchQuarterlyMonthlyData = async (quarter: string, y: string) => {
     const qMonths = quarterMapping[quarter] || [];
@@ -349,13 +395,28 @@ const CashFlowPage: React.FC = () => {
     }
 
     try {
-      if (periodType === "quarterly") {
-        await fetchAllQuarterlyData();
-        const { monthlyData, quarterSummary } =
-          await fetchQuarterlyMonthlyData(selectedQuarter, year);
-        setQuarterlyMonthlyData(monthlyData);
-        setData({ summary: quarterSummary, monthlyBreakdown: monthlyData });
-      } else if (periodType === "yearly") {
+    if (periodType === "quarterly") {
+  // 1️⃣ Quarterly API → Sankey + summary
+  const quarterPeriodType =
+    quarterToPeriodTypeMap[selectedQuarter];
+
+  const quarterResp = await fetchSpecificPeriodData(
+    null,
+    year,
+    quarterPeriodType as PeriodType
+  );
+
+  setData(quarterResp);
+
+  // 2️⃣ Monthly APIs → Line chart data
+  const { monthlyData } = await fetchQuarterlyMonthlyData(
+    selectedQuarter,
+    year
+  );
+
+  setQuarterlyMonthlyData(monthlyData);
+}
+ else if (periodType === "yearly") {
         await fetchAllYearlyData();
         const resp = await fetchSpecificPeriodData(null, year, "yearly");
         setData(resp);
@@ -433,29 +494,36 @@ const CashFlowPage: React.FC = () => {
     let labels: string[] = [];
     const datasets: any[] = [];
 
-    if (periodType === "quarterly" && selectedQuarter && quarterlyMonthlyData) {
-      labels = quarterMapping[selectedQuarter] || [];
-      columnsToDisplay2.forEach((key) => {
-        if (!selectedGraphs[key]) return;
-        const ds = (quarterMapping[selectedQuarter] || []).map((m) => {
-          const md = quarterlyMonthlyData[m];
-          const val = md?.[key] ?? 0;
-          return Math.abs(Number(val));
-        });
-        const label = labelMap[key];
-        datasets.push({
-          label,
-          data: ds,
-          borderColor: colorMapping[label],
-          backgroundColor: `${colorMapping[label]}20`,
-          borderWidth: 2,
-          fill: false,
-          tension: 0.1,
-          pointRadius: 2,
-          pointHoverRadius: 3,
-        });
-      });
-    } else if (periodType === "yearly") {
+if (
+  periodType === "quarterly" &&
+  selectedQuarter &&
+  Object.keys(quarterlyMonthlyData).length > 0
+) {
+  labels = quarterMapping[selectedQuarter] || [];
+
+  columnsToDisplay2.forEach((key) => {
+    if (!selectedGraphs[key]) return;
+
+    const ds = labels.map((monthName) => {
+      const md = quarterlyMonthlyData[monthName];
+      return Math.abs(Number(md?.[key] ?? 0));
+    });
+
+    datasets.push({
+      label: labelMap[key],
+      data: ds, // ✅ month-wise real data
+      borderColor: colorMapping[labelMap[key]],
+      backgroundColor: `${colorMapping[labelMap[key]]}20`,
+      borderWidth: 2,
+      fill: false,
+      tension: 0.35,
+      pointRadius: 3,
+      pointHoverRadius: 4,
+    });
+  });
+}
+
+ else if (periodType === "yearly") {
       labels = monthsList;
       columnsToDisplay2.forEach((key) => {
         if (!selectedGraphs[key]) return;
@@ -472,7 +540,7 @@ const CashFlowPage: React.FC = () => {
           backgroundColor: `${colorMapping[label]}20`,
           borderWidth: 2,
           fill: false,
-          tension: 0.1,
+          tension: 0.35,
           pointRadius: 2,
           pointHoverRadius: 3,
         });
@@ -876,13 +944,20 @@ const CashFlowPage: React.FC = () => {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-        <PageBreadcrumb
-          pageTitle="Cash Flow"
-          variant="page"
-          align="left"
-          textSize="2xl"
-        />
+      <div className="flex justify-between">
+<div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+   <div className="flex flex-wrap items-baseline gap-2 justify-center sm:justify-start">
+              <PageBreadcrumb
+                pageTitle="Cash Flow –"
+                variant="page"
+                align="left"
+                className="mt-0 md:mt-2 mb-0 md:mb-2"
+              />
+              <span className="text-[#5EA68E] font-bold text-lg sm:text-2xl md:text-2xl">
+  {countryName?.toUpperCase()}
+</span>
+            </div>
+        
       </div>
 
       {/* Filters */}
@@ -901,6 +976,8 @@ const CashFlowPage: React.FC = () => {
           />
         </div>
       </div>
+      </div>
+      
 
             {/* Show alert until a valid period selection is made */}
       {!canShowResults && (
@@ -945,36 +1022,23 @@ const CashFlowPage: React.FC = () => {
           {/* Header + Download in one responsive row */}
           <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {/* Left: title + period */}
-            <div className="flex flex-wrap items-baseline gap-2 justify-center sm:justify-start">
-              <PageBreadcrumb
-                pageTitle="Cash Generated –"
-                variant="page"
-                align="left"
-                className="mt-0 md:mt-2 mb-0 md:mb-2"
-              />
-              <span className="text-[#5EA68E] font-bold text-lg sm:text-2xl md:text-2xl">
-                {xAxisTitle} ({currencySymbol})
-              </span>
-            </div>
 
             {/* Right: Download button */}
-            <div className="flex justify-center sm:justify-end">
+            {/* <div className="flex justify-center sm:justify-end">
               <DownloadIconButton onClick={downloadCombinedExcelWithImage} />
-            </div>
+            </div> */}
           </div>
 
           {/* Summary Table using DataTable */}
-          <div className="[&_table]:w-full [&_th]:text-center [&_td]:text-center [&_td]:text-charcoal-500">
-            <DataTable<SummaryRow>
-              columns={summaryColumns}
-              data={summaryRows}
-              paginate={false}
-              scrollY={false}
-              stickyHeader={false}
-              zebra={true}
-              showCellTitle={false}
-            />
-          </div>
+          {data?.summary && (
+ <CashFlowSankey
+  data={data.summary}
+  previous_summary={data.previous_summary}
+  previousLabel={previousLabel}
+  periodType={periodType}
+  currency={currencySymbol}
+/>
+)}
 
 
 

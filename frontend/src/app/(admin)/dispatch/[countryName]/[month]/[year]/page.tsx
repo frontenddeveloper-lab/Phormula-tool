@@ -297,18 +297,37 @@ const tableRows = skuData.map((row, index) => {
   return obj
 })
 
-const columns: ColumnDef<any>[] = displayedColumns.map((col) => ({
-  key: col === "Sno." ? "sno" : col,
-  header: col,
+const columns: ColumnDef<any>[] = displayedColumns.map((col) => {
+  const isCoverage =
+    col === "Inventory Coverage Ratio Before Dispatch";
 
-  // ✅ Sno column small width
-  width: col === "Sno." ? "50px" : undefined,
+  return {
+    key: col === "Sno." ? "sno" : col,
 
-  cellClassName:
-    col === "Sno."
+    // 🔥 HEADER FIX
+    header: isCoverage ? (
+      <div
+        className="one-line-ellipsis"
+        title={col}                 // hover pe full text
+      >
+        {col}
+      </div>
+    ) : (
+      col
+    ),
+
+    // 🔥 FIXED WIDTH (MANDATORY for ellipsis)
+    width: isCoverage ? "200px" : col === "Sno." ? "50px" : undefined,
+
+    // 🔥 CELL alignment
+    cellClassName: isCoverage
+      ? "text-center whitespace-nowrap"
+      : col === "Sno."
       ? "text-center whitespace-nowrap"
       : "text-center",
-}))
+  };
+});
+
 
 
   return (
@@ -586,12 +605,34 @@ const columns: ColumnDef<any>[] = displayedColumns.map((col) => ({
         .forecast-data {
           margin-top: 20px;
         }
+
+        .ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ellipsis-center {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.one-line-ellipsis {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  text-align: center;
+  display: block;
+  width: 100%;
+}
       `}</style>
-     <h2 className='text-2xl font-bold text-[#414042] mb-6'>
+     <h2 className='text-2xl font-bold text-[#414042] '>
       Dispatch Report for <span style={{ color: '#60a68e' }}>{countryName.toUpperCase()}</span>
     </h2>
 
-    <div className="inline-dropdowns">
+    <div className="inline-dropdowns my-4">
       {/* <table className="dropdown-table">
         <thead>
           <tr className="dropdown-header">
@@ -679,7 +720,7 @@ const columns: ColumnDef<any>[] = displayedColumns.map((col) => ({
   stickyHeader
   loading={loading}
   rowClassName={(row: any) =>
-    row.__isTotal ? "bg-gray-300 font-bold" : ""
+    row.__isTotal ? "bg-[#D9D9D9] font-bold" : ""
   }
 />
     <div className='flex justify-end items-end mt-2'>

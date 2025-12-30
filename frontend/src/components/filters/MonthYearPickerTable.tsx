@@ -173,6 +173,7 @@ export interface MonthYearPickerTableProps {
   valueMode?: ValueMode;
   className?: string;
   monthsOverride?: string[];
+  months?: string[];
 }
 
 const MonthYearPickerTable: React.FC<MonthYearPickerTableProps> = ({

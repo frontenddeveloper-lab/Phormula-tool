@@ -1161,30 +1161,30 @@ export default function SalesTargetCard({
     lines: string[];
   }>({ show: false, x: 0, y: 0, title: "", lines: [] });
 
-const showTip = (e: React.MouseEvent, title: string, lines: string[]) => {
-  const rect = wrapRef.current?.getBoundingClientRect();
-  if (!rect) return;
+  const showTip = (e: React.MouseEvent, title: string, lines: string[]) => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-  setTip({
-    show: true,
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top,
-    title,
-    lines,
-  });
-};
+    setTip({
+      show: true,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      title,
+      lines,
+    });
+  };
 
 
-const moveTip = (e: React.MouseEvent) => {
-  const rect = wrapRef.current?.getBoundingClientRect();
-  if (!rect) return;
+  const moveTip = (e: React.MouseEvent) => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-  setTip((t) =>
-    t.show
-      ? { ...t, x: e.clientX - rect.left, y: e.clientY - rect.top }
-      : t
-  );
-};
+    setTip((t) =>
+      t.show
+        ? { ...t, x: e.clientX - rect.left, y: e.clientY - rect.top }
+        : t
+    );
+  };
 
   const hideTip = () => setTip((t) => ({ ...t, show: false }));
 
@@ -1217,6 +1217,18 @@ const moveTip = (e: React.MouseEvent) => {
   const reimbPrevPct = (reimbPrev / reimbMax) * 100;
 
   const homeCurrencySymbol = currencySymbolMap[homeCurrency];
+
+  const reimbNowSalesPct =
+    mtdHomeResolved > 0
+      ? (reimbNow / mtdHomeResolved) * 100
+      : 0;
+
+  const reimbPrevSalesPct =
+    lastMonthTotalHomeResolved > 0
+      ? (reimbPrev / lastMonthTotalHomeResolved) * 100
+      : 0;
+
+  const fmtPct = (v: number) => `${v.toFixed(2)}%`;
 
   const formatWithCurrencySpace = (value: number) => {
     // formatHomeK returns something like "£514.04" or "$1.31k"
@@ -1260,7 +1272,7 @@ const moveTip = (e: React.MouseEvent) => {
             className="h-2.5 w-2.5 rounded-sm"
             // style={{ backgroundColor: "#9ca3af" }}
             style={{ backgroundColor: "#5EA68E" }}
-           
+
           />
           <span className="text-gray-600">{thisMonthLabel} Target</span>
         </div>
@@ -1269,7 +1281,7 @@ const moveTip = (e: React.MouseEvent) => {
           <span
             className="h-2.5 w-2.5 rounded-sm"
             // style={{ backgroundColor: "#F59E0B" }}
-             style={{ backgroundColor: "#9ca3af" }}
+            style={{ backgroundColor: "#9ca3af" }}
           />
           <span className="text-gray-600">{prevLabel} Sale</span>
         </div>
@@ -1389,10 +1401,10 @@ const moveTip = (e: React.MouseEvent) => {
         <div className="mt-2 text-center">
           <div className="text-3xl font-semibold">{pctDisplay.toFixed(1)}%</div>
           <div className="text-xs text-gray-500 mt-1">Target Achieved</div>
-          <div className="text-xs text-gray-600 mt-1">
+          {/* <div className="text-xs text-gray-600 mt-1">
             Target:{" "}
             <span className="font-medium">{formatHomeK(targetHomeResolved)}</span>
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -1423,7 +1435,10 @@ const moveTip = (e: React.MouseEvent) => {
               {toApostropheLabel(reimbNowLabel)}{' '}
             </span>
             <span className="font-semibold text-gray-900">
-              {formatWithCurrencySpace(reimbNow)}
+              {formatWithCurrencySpace(reimbNow)}{" "}
+              <span className="text-gray-500 font-medium">
+                ({fmtPct(reimbNowSalesPct)})
+              </span>
             </span>
 
           </div>
@@ -1441,8 +1456,12 @@ const moveTip = (e: React.MouseEvent) => {
               {toApostropheLabel(reimbPrevLabel)}{' '}
             </span>
             <span className="font-semibold text-gray-900">
-              {formatWithCurrencySpace(reimbPrev)}
+              {formatWithCurrencySpace(reimbPrev)}{" "}
+              <span className="text-gray-500 font-medium">
+                ({fmtPct(reimbPrevSalesPct)})
+              </span>
             </span>
+
 
           </div>
           <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">

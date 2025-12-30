@@ -1575,38 +1575,36 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
   // DataTable wiring
   // =========================
 
-  type BIGridRow = {
-    __isTotal?: boolean;
-    sNo?: number | string;
-    product?: React.ReactNode;
-    salesMix?: React.ReactNode;
-    unit?: React.ReactNode;
-    asp?: React.ReactNode;
-    sales?: React.ReactNode;
-    mixChange?: React.ReactNode;
-    unitProfit?: React.ReactNode;
-    profit?: React.ReactNode;
-    ai?: React.ReactNode;
-  };
+type BIGridRow = {
+  __isTotal?: boolean;
+  sNo?: number | string;
+  product?: React.ReactNode;
+  salesMix?: React.ReactNode;
+  unit?: React.ReactNode;
+  asp?: React.ReactNode;
+  sales?: React.ReactNode;
+  mixChange?: React.ReactNode;
+  unitProfit?: React.ReactNode;
+  ai?: React.ReactNode;
+  profit?: React.ReactNode;
+};
 
-  const calcGrowthValue = (prev: number, curr: number) => {
-    if (!prev || prev === 0 || curr == null) return null;
-    return ((curr - prev) / prev) * 100;
-  };
+const calcGrowthValue = (prev: number, curr: number) => {
+  if (!prev || prev === 0 || curr == null) return null;
+  return ((curr - prev) / prev) * 100;
+};
 
-  const safePct = (prev: number, curr: number) => {
-    if (!prev || prev === 0 || curr == null) return null;
-    return ((curr - prev) / prev) * 100;
-  };
+const safePct = (prev: number, curr: number) => {
+  if (!prev || prev === 0 || curr == null) return null;
+  return ((curr - prev) / prev) * 100;
+};
 
-  // 🔹 wrap into GrowthCategory for existing renderer
-  const makeGrowth = (prev: number, curr: number): GrowthCategory | undefined => {
-    const v = calcGrowthValue(prev, curr);
-    if (v == null) return undefined;
-    return { value: v, category: '' };
-  };
+const makeGrowth = (prev: number, curr: number): GrowthCategory | undefined => {
+  const v = calcGrowthValue(prev, curr);
+  if (v == null) return undefined;
+  return { value: v, category: "" };
+};
 
-  // ✅ ADD this helper inside MonthsforBI component (place it ABOVE `renderGrowthOrNA`)
 const GrowthCell = ({
   val,
   color,
@@ -1616,7 +1614,6 @@ const GrowthCell = ({
   color: string;
   showArrow: boolean;
 }) => {
-  const abs = Math.abs(val).toFixed(2);
   const text = `${val > 0 ? "+" : ""}${val.toFixed(2)}%`; // keeps + only for positive
   const Icon = val > 0 ? FaArrowUp : FaArrowDown;
 
@@ -1642,25 +1639,17 @@ const GrowthCell = ({
   );
 };
 
-// ✅ REPLACE your current `renderGrowthOrNA` with this version
 const renderGrowthOrNA = (g?: GrowthCategory) => {
   if (!g || g.value == null) return <span>N/A</span>;
 
   const val = Number(g.value);
 
-  // ✅ same thresholds you were using
   let color = "#414042";
   if (val > 5) color = "#5EA68E";
   else if (val < -5) color = "#dc2626";
 
   // ✅ keep icon space even for 0
-  return (
-    <GrowthCell
-      val={val}
-      color={color}
-      showArrow={val !== 0}
-    />
-  );
+  return <GrowthCell val={val} color={color} showArrow={val !== 0} />;
 };
 
 
@@ -1759,13 +1748,6 @@ const renderGrowthOrNA = (g?: GrowthCategory) => {
         header: isNewRev ? 'Unit Profit (%)' : 'CM1 Profit Per Unit (%)',
         width: '190px',
       },
-      {
-        key: 'profit',
-        header: isNewRev ? 'Profit (%)' : 'CM1 Profit Impact (%)',
-        width: '200px',
-      },
-
-      // ✅ AI column ONLY ONCE and ALWAYS LAST
       ...(showAI
         ? [
           {
@@ -1775,6 +1757,13 @@ const renderGrowthOrNA = (g?: GrowthCategory) => {
           },
         ]
         : []),
+
+      {
+        key: 'profit',
+        header: isNewRev ? 'Profit (%)' : 'CM1 Profit Impact (%)',
+        width: '200px',
+      },
+
     ];
 
     return cols;

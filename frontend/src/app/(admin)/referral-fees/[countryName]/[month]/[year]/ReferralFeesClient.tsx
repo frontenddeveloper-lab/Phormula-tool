@@ -1,9 +1,3 @@
-
-
-
-
-
-
 "use client";
 
 import React, {
@@ -24,10 +18,10 @@ import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import DataTable, { ColumnDef, Row } from "@/components/ui/table/DataTable";
 import Loader from "@/components/loader/Loader";
 import DownloadButton from "@/components/ui/button/DownloadIconButton";
-
-// ✅ home currency hook (already used in your profits page)
 import { useHomeCurrencyContext } from "@/lib/hooks/useHomeCurrencyContext";
 import { AiButton } from "@/components/ui/button/AiButton";
+import PeriodFiltersTable, { type Range } from "@/components/filters/PeriodFiltersTable";
+import GroupedDataTable from "@/components/ui/table/GroupedDataTable";
 
 /* ===================== Overlap Plugin ===================== */
 const overlapPlugin = {
@@ -136,13 +130,24 @@ type FeeSummaryRow = {
 
 type Card6Summary = {
   sales: number;
-  totalFees: number;          // charged
-  refFeesApplied: number;     // charged
-  refFeesApplicable: number;  // applicable
-  fbaFees: number;
-  platformFees: number;
-  otherFees: number;
+  units: number;
+  productSales: number;
+  totalFees: number;            // charged (sum of fee buckets)
+  totalFeesApplicable: number;  // applicable (sum of fee buckets)
+
+  refFeesApplied: number;       // charged
+  refFeesApplicable: number;    // applicable
+
+  fbaFees: number;              // charged
+  fbaFeesApplicable: number;    // applicable
+
+  platformFees: number;         // charged
+  platformFeesApplicable: number; // applicable
+
+  otherFees: number;            // charged
+  otherFeesApplicable: number;  // applicable
 };
+
 
 type SalesStatusSummary = {
   totalSales: number;
@@ -199,6 +204,20 @@ const pctDelta = (current: number, previous: number) => {
 
 const fmtPct = (p: number) => `${Math.abs(p).toFixed(2)}%`;
 
+
+const pctOfSales = (value: number, sales: number) => {
+  const s = toNumberSafe(sales);
+  if (s <= 0) return 0;
+  return (toNumberSafe(value) / s) * 100;
+};
+
+const fmtPctDelta = (p: number) =>
+  `${Math.abs(toNumberSafe(p)).toFixed(2)}%`;
+
+const fmtPctPlain = (p: number) => `${toNumberSafe(p).toFixed(2)}%`;
+
+
+
 // --- Fee buckets helpers ---
 const isSummaryLine = (sku: any) => {
   const s = String(sku ?? "");
@@ -222,6 +241,7 @@ type OverlapSalesDonutProps = {
   fmtCurrency: (n: number) => string;
 };
 
+/* ===================== Cards ===================== */
 
 function StatCard({
   title,
@@ -294,6 +314,308 @@ function StatCard({
   );
 }
 
+// function SalesCard({
+//   title,
+//   sales,
+//   units,
+//   valueFmt,
+//   borderColor,
+//   bgColor,
+// }: {
+//   title: string;
+//   sales: number;
+//   units: number;
+//   valueFmt: (n: number) => string;
+//   borderColor?: string;
+//   bgColor?: string;
+// }) {
+
+//   const asp =
+//     toNumberSafe(units) > 0
+//       ? toNumberSafe(sales) / toNumberSafe(units)
+//       : 0;
+
+//   return (
+//     <div
+//       className="rounded-2xl border shadow-sm px-4 py-3 flex flex-col min-h-[110px]"
+//       style={{ borderColor: borderColor ?? "#cbd5e1", backgroundColor: bgColor ?? "#fff" }}
+//     >
+//       <p className="text-xs font-semibold text-charcoal-500">{title}</p>
+
+//       <p className="mt-1 text-[11px] sm:text-xs font-bold text-charcoal-500">
+//         {valueFmt(toNumberSafe(sales))}
+//       </p>
+//       <div className="mt-auto pt-2 grid grid-cols-2 gap-4">
+//         {/* Units Sold */}
+//         <div>
+//           <p className="text-[11px] sm:text-xs text-slate-600">Units Sold</p>
+//           <p className="text-[11px] sm:text-xs font-semibold text-charcoal-500">
+//             {fmtInteger(Math.round(toNumberSafe(units)))}
+//           </p>
+//         </div>
+
+//         {/* ASP */}
+//         <div className="text-center">
+//           <p className="text-[11px] sm:text-xs text-slate-600">ASP</p>
+//           <p className="text-[11px] sm:text-xs font-semibold text-charcoal-500 tabular-nums">
+//             {valueFmt(0).replace(/[\d.,\s]/g, "")}
+//             {asp.toFixed(2)}
+//           </p>
+
+//         </div>
+//       </div>
+
+//     </div>
+//   );
+// }
+
+
+// function SalesCard({
+//   title,
+//   sales,          // Net
+//   productSales,   // Gross
+//   units,
+//   valueFmt,
+//   borderColor,
+//   bgColor,
+// }: {
+//   title: string;
+//   sales: number;
+//   productSales: number;
+//   units: number;
+//   valueFmt: (n: number) => string;
+//   borderColor?: string;
+//   bgColor?: string;
+// }) {
+//   const net = toNumberSafe(sales);
+//   const gross = toNumberSafe(productSales);
+//   const discount = gross - net;
+
+//   const asp =
+//     toNumberSafe(units) > 0 ? net / toNumberSafe(units) : 0;
+
+//   const discountPct =
+//     gross > 0 ? ((gross - net) / gross) * 100 : 0;
+
+//   return (
+//     <div
+//       className="rounded-2xl border shadow-sm px-4 py-3 flex flex-col min-h-[110px]"
+//       style={{ borderColor: borderColor ?? "#cbd5e1", backgroundColor: bgColor ?? "#fff" }}
+//     >
+//       <p className="text-xs font-semibold text-charcoal-500">{title}</p>
+
+//       {/* Sales: Net / Gross / Discount */}
+//       <div className="mt-1">
+//         {/* <p className="text-[11px] sm:text-xs font-semibold text-slate-600">Sales</p> */}
+
+//         <div className="grid grid-cols-3 gap-2 mt-1">
+
+//           <div>
+//             <p className="text-[10px] sm:text-[11px] text-slate-500">Gross</p>
+//             <p className="text-[11px] sm:text-xs font-bold text-charcoal-500">
+//               {valueFmt(gross)}
+//             </p>
+//           </div>
+//           <div className="text-center">
+//             <p className="text-[10px] sm:text-[11px] text-slate-500">Net</p>
+//             <p className="text-[11px] sm:text-xs font-bold text-charcoal-500">
+//               {valueFmt(net)}
+//             </p>
+//           </div>
+
+
+
+//           <div className="text-right">
+//             <p className="text-[10px] sm:text-[11px] text-slate-500">Disc.</p>
+//             <p className="text-[11px] sm:text-xs font-bold text-charcoal-500 tabular-nums">
+//               {discountPct.toFixed(2)}%
+//             </p>
+//           </div>
+
+//         </div>
+//       </div>
+
+//       {/* Bottom: Units + ASP */}
+//       <div className="mt-auto pt-2 grid grid-cols-2 gap-4">
+//         <div className="text-center">
+//           <p className="text-[11px] sm:text-xs text-slate-600">Units Sold</p>
+//           <p className="text-[11px] sm:text-xs font-semibold text-charcoal-500">
+//             {fmtInteger(Math.round(toNumberSafe(units)))}
+//           </p>
+//         </div>
+
+//         <div className="text-center">
+//           <p className="text-[11px] sm:text-xs text-slate-600">ASP</p>
+//           <p className="text-[11px] sm:text-xs font-semibold text-charcoal-500 tabular-nums">
+//             {valueFmt(0).replace(/[\d.,\s]/g, "")}
+//             {asp.toFixed(2)}
+//           </p>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+
+function SalesCard({
+  title,
+  sales,          // Net
+  productSales,   // Gross
+  units,
+  valueFmt,
+  borderColor,
+  bgColor,
+}: {
+  title: string;
+  sales: number;
+  productSales: number;
+  units: number;
+  valueFmt: (n: number) => string;
+  borderColor?: string;
+  bgColor?: string;
+}) {
+  const net = toNumberSafe(sales);
+  const gross = toNumberSafe(productSales);
+  const discountPct = gross > 0 ? ((gross - net) / gross) * 100 : 0;
+
+  const asp =
+    toNumberSafe(units) > 0 ? net / toNumberSafe(units) : 0;
+
+  const currencySymbol = valueFmt(0).replace(/[\d.,\s]/g, "");
+
+  return (
+    <div
+      className="rounded-2xl border shadow-sm px-4 py-3 flex flex-col min-h-[110px]"
+      style={{ borderColor: borderColor ?? "#cbd5e1", backgroundColor: bgColor ?? "#fff" }}
+    >
+      <p className="text-xs font-semibold text-charcoal-500">{title}</p>
+
+      {/* 3x2 Grid */}
+      <div className="mt-2 grid grid-cols-3 grid-rows-2 gap-2 text-left">
+        {/* Row 1 */}
+        <div>
+          <p className="text-[10px] sm:text-[11px] text-slate-500">Gross</p>
+          <p className="text-[11px] sm:text-xs font-bold text-charcoal-500">
+            {valueFmt(gross)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-[10px] sm:text-[11px] text-slate-500">Net</p>
+          <p className="text-[11px] sm:text-xs font-bold text-charcoal-500">
+            {valueFmt(net)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-[10px] sm:text-[11px] text-slate-500">Disc.</p>
+          <p className="text-[11px] sm:text-xs font-bold text-charcoal-500 tabular-nums">
+            {discountPct.toFixed(2)}%
+          </p>
+        </div>
+
+        {/* Row 2 */}
+        <div>
+          <p className="text-[10px] sm:text-[11px] text-slate-500">Units Sold</p>
+          <p className="text-[11px] sm:text-xs font-semibold text-charcoal-500">
+            {fmtInteger(Math.round(toNumberSafe(units)))}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-[10px] sm:text-[11px] text-slate-500">ASP</p>
+          <p className="text-[11px] sm:text-xs font-semibold text-charcoal-500 tabular-nums">
+            {currencySymbol}
+            {asp.toFixed(2)}
+          </p>
+        </div>
+
+        {/* Empty cell (future use / keeps grid symmetric) */}
+        <div />
+      </div>
+    </div>
+  );
+}
+
+
+function FeeCard({
+  title,
+  sales,
+  charged,
+  applicable,
+  fmtCurrency,
+  borderColor,
+  bgColor,
+}: {
+  title: string;
+  sales: number;
+  charged: number;
+  applicable: number;
+  fmtCurrency: (n: number) => string;
+  borderColor?: string;
+  bgColor?: string;
+}) {
+  const chargedPct = pctOfSales(charged, sales);
+  const applicablePct = pctOfSales(applicable, sales);
+
+  // delta = charged% - applicable%
+  const deltaPct = chargedPct - applicablePct;
+
+  const deltaCls =
+    deltaPct > 0
+      ? "text-emerald-600"
+      : deltaPct < 0
+        ? "text-red-600"
+        : "text-slate-500";
+
+  return (
+    <div
+      className="rounded-2xl border shadow-sm px-4 py-3 flex flex-col min-h-[110px]"
+      style={{ borderColor: borderColor ?? "#cbd5e1", backgroundColor: bgColor ?? "#fff" }}
+    >
+      {/* Heading */}
+      <p className="text-xs font-semibold text-charcoal-500">{title}</p>
+
+      {/* Charged label */}
+      <p className="mt-1 text-[11px] sm:text-xs text-slate-600">Charged</p>
+
+      {/* Charged row */}
+      <div className="flex items-baseline gap-3">
+        <p className="text-[11px] sm:text-xs font-bold text-charcoal-500">
+          {fmtCurrency(toNumberSafe(charged))}
+        </p>
+        <p className="text-[11px] sm:text-xs font-bold text-emerald-600 whitespace-nowrap">
+          ({fmtPctPlain(chargedPct)})
+        </p>
+      </div>
+
+      {/* Applicable label */}
+      <p className="mt-auto pt-2 text-[11px] sm:text-xs text-slate-600">Applicable</p>
+
+      {/* Applicable row + delta */}
+      <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+        <div className="flex items-baseline gap-3">
+          <p className="text-[11px] sm:text-xs font-semibold text-charcoal-500 whitespace-nowrap">
+            {fmtCurrency(toNumberSafe(applicable))}
+          </p>
+          <p className="text-[11px] sm:text-xs font-bold text-emerald-600 whitespace-nowrap">
+            ({fmtPctPlain(applicablePct)})
+          </p>
+        </div>
+
+        <div
+          className={`text-[11px] sm:text-xs font-bold whitespace-nowrap flex items-center justify-end ${deltaCls}`}
+        >
+          {deltaPct > 0 && <span className="text-sm leading-none">▲</span>}
+          {deltaPct < 0 && <span className="text-sm leading-none">▼</span>}
+          <span>{fmtPctDelta(deltaPct)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 /* ===================== MAIN DASHBOARD PAGE ===================== */
 export default function ReferralFeesDashboard(): JSX.Element {
   const routeParams = useParams();
@@ -316,14 +638,24 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
   const [card6, setCard6] = useState<Card6Summary>({
     sales: 0,
-    totalFees: 0,
-    refFeesApplied: 0,
-    refFeesApplicable: 0, // ✅ add this
-    fbaFees: 0,
-    platformFees: 0,
-    otherFees: 0,
-  });
+    units: 0,
+    productSales: 0,
 
+    totalFees: 0,
+    totalFeesApplicable: 0,
+
+    refFeesApplied: 0,
+    refFeesApplicable: 0,
+
+    fbaFees: 0,
+    fbaFeesApplicable: 0,
+
+    platformFees: 0,
+    platformFeesApplicable: 0,
+
+    otherFees: 0,
+    otherFeesApplicable: 0,
+  });
 
   const fmtCurrency = useCallback(
     (n: number): string => {
@@ -338,6 +670,22 @@ export default function ReferralFeesDashboard(): JSX.Element {
     [displayCurrencyCode]
   );
 
+  const fmtCurrencyRounded = useCallback(
+    (n: number): string => {
+      if (typeof n !== "number" || Number.isNaN(n)) return "-";
+      return n.toLocaleString(undefined, {
+        style: "currency",
+        currency: displayCurrencyCode,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      });
+    },
+    [displayCurrencyCode]
+  );
+
+
+
+
   const refDeltaPct = useMemo(
     () => pctDelta(card6.refFeesApplied, card6.refFeesApplicable),
     [card6.refFeesApplied, card6.refFeesApplicable]
@@ -346,6 +694,20 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
   const [month, setMonth] = useState<string>("");
   const [year, setYear] = useState<string>("");
+  const [range, setRange] = useState<Range>("monthly");
+  const [selectedQuarter, setSelectedQuarter] = useState<string>("");
+
+  // quarter -> representative month (choose what you prefer: start month here)
+  const quarterToMonth = (q: string) => {
+    switch ((q || "").toUpperCase()) {
+      case "Q1": return "january";
+      case "Q2": return "april";
+      case "Q3": return "july";
+      case "Q4": return "october";
+      default: return "";
+    }
+  };
+
 
   const [rows, setRows] = useState<ReferralRow[]>([]);
   const [skuwiseRows, setSkuwiseRows] = useState<ReferralRow[]>([]);
@@ -426,6 +788,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
     }
   }, []);
 
+
   /* ======= fileName ======= */
   const fileName = useMemo(
     () => `user_${userId}_${country}_${month}${year}_data`.toLowerCase(),
@@ -455,6 +818,16 @@ export default function ReferralFeesDashboard(): JSX.Element {
         month: month,
         year: year,
       });
+
+      // ✅ range → send qtd/ytd flags
+      if (range === "quarterly") {
+        params.set("qtd", "true");       // or "1" if your backend prefers
+        params.set("quarter", selectedQuarter || ""); // optional but useful
+      }
+
+      if (range === "yearly") {
+        params.set("ytd", "true");       // or "1"
+      }
 
       // ✅ ONLY GLOBAL sends homeCurrency
       if (isGlobalPage && homeCurrency) {
@@ -595,26 +968,60 @@ export default function ReferralFeesDashboard(): JSX.Element {
         return true;
       });
 
+      // const salesTotal = lineItems.reduce((acc, r) => acc + getNetSales(r), 0);
+
+
+      // const totalFees = lineItems.reduce((acc, r) => acc + toNumberSafe(r.selling_fees), 0);
+
+      // const refFeesApplicable = lineItems.reduce((acc, r) => acc + toNumberSafe(r.answer), 0);
+
+      // const refFeesApplied = totalFees;
+
+      // const fbaFees = lineItems.reduce((acc, r) => {
+      //   return acc + FBA_KEYS.reduce((s, k) => s + toNumberSafe((r as any)[k]), 0);
+      // }, 0);
+
+      // const platformFees = platformFeeTotalFromApi !== 0 ? platformFeeTotalFromApi : platformFeesDerived;
+      // const otherFees = otherTotalFromApi !== 0 ? otherTotalFromApi : otherFeesDerived;
+
+
+      // const platformFeesDerived = lineItems.reduce((acc, r) => {
+      //   return acc + PLATFORM_KEYS.reduce((s, k) => s + toNumberSafe((r as any)[k]), 0);
+      // }, 0);
+
+      // const otherFeesDerived = lineItems.reduce((acc, r) => {
+      //   return acc + OTHER_KEYS.reduce((s, k) => s + toNumberSafe((r as any)[k]), 0);
+      // }, 0);
+
+
+      const unitsSold = lineItems.reduce((acc, r) => acc + Math.round(toNumberSafe(r.quantity)), 0);
+
       const salesTotal = lineItems.reduce((acc, r) => acc + getNetSales(r), 0);
 
+      const productSalesTotal = lineItems.reduce(
+        (acc, r) => acc + toNumberSafe((r as any)?.product_sales),
+        0
+      );
 
-      const totalFees = lineItems.reduce((acc, r) => acc + toNumberSafe(r.selling_fees), 0);
 
+
+      // Referral
       const refFeesApplicable = lineItems.reduce((acc, r) => acc + toNumberSafe(r.answer), 0);
+      const refFeesApplied = lineItems.reduce((acc, r) => acc + toNumberSafe(r.selling_fees), 0); // charged
 
-      const refFeesApplied = totalFees;
+      const fbaFees = Math.abs(
+        lineItems.reduce((acc, r) => {
+          return acc + FBA_KEYS.reduce((s, k) => s + toNumberSafe((r as any)[k]), 0);
+        }, 0)
+      );
 
 
-      // FBA stays derived from rows (or do the same if you later add fba_fee_total)
-      const fbaFees = lineItems.reduce((acc, r) => {
-        return acc + FBA_KEYS.reduce((s, k) => s + toNumberSafe((r as any)[k]), 0);
-      }, 0);
-
-
+      // Platform (charged)
       const platformFeesDerived = lineItems.reduce((acc, r) => {
         return acc + PLATFORM_KEYS.reduce((s, k) => s + toNumberSafe((r as any)[k]), 0);
       }, 0);
 
+      // Other (charged)
       const otherFeesDerived = lineItems.reduce((acc, r) => {
         return acc + OTHER_KEYS.reduce((s, k) => s + toNumberSafe((r as any)[k]), 0);
       }, 0);
@@ -622,17 +1029,35 @@ export default function ReferralFeesDashboard(): JSX.Element {
       const platformFees = platformFeeTotalFromApi !== 0 ? platformFeeTotalFromApi : platformFeesDerived;
       const otherFees = otherTotalFromApi !== 0 ? otherTotalFromApi : otherFeesDerived;
 
+      // ✅ APPLICABLE for non-ref fees:
+      // If you don’t have “applicable” yet, use charged as placeholder.
+      // Replace later if backend gives you: fba_applicable_total / platform_applicable_total / other_applicable_total
+      const fbaFeesApplicable = fbaFees;
+      const platformFeesApplicable = platformFees;
+      const otherFeesApplicable = otherFees;
 
-
+      // ✅ Total fees are aggregate of buckets (charged + applicable)
+      const totalFees = refFeesApplied + fbaFees + platformFees + otherFees;
+      const totalFeesApplicable = refFeesApplicable + fbaFeesApplicable + platformFeesApplicable + otherFeesApplicable;
 
       setCard6({
         sales: salesTotal,
-        totalFees,                 // charged
-        refFeesApplied,            // charged (986.71)
-        refFeesApplicable,         // applicable (959.76)
+        units: unitsSold,
+        productSales: productSalesTotal,
+        totalFees,
+        totalFeesApplicable,
+
+        refFeesApplied,
+        refFeesApplicable,
+
         fbaFees,
+        fbaFeesApplicable,
+
         platformFees,
+        platformFeesApplicable,
+
         otherFees,
+        otherFeesApplicable,
       });
 
 
@@ -660,7 +1085,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [month, year, country, fileName, isGlobalPage, homeCurrency]);
+  }, [month, year, country, fileName, isGlobalPage, homeCurrency, range, selectedQuarter]);
+
 
   useEffect(() => {
     fetchReferralData();
@@ -696,6 +1122,39 @@ export default function ReferralFeesDashboard(): JSX.Element {
     })) as Row[];
   }, [feeSummaryRows]);
 
+  // const skuTableAll: Row[] = useMemo(() => {
+  //   if (!skuwiseRows.length) return [];
+
+  //   const filtered = skuwiseRows.filter((r) => {
+  //     const skuStr = String(r.sku ?? "");
+  //     if (skuStr === "Grand Total") return true;
+  //     return !skuStr.startsWith("Charge -");
+  //   });
+
+  //   return filtered.map((r) => {
+  //     const quantity = Math.round(toNumberSafe(r.quantity));
+  //     const sales = getNetSales(r);
+  //     const applicable = toNumberSafe(r.answer);
+  //     const charged = toNumberSafe(r.selling_fees);
+  //     const overcharged = toNumberSafe(r.overcharged ?? r.difference);
+
+  //     const skuStr = String(r.sku ?? "");
+  //     const isTotal = skuStr.toLowerCase() === "grand total";
+
+  //     return {
+  //       sku: isTotal ? "" : (r.sku ?? ""),                 // ✅ blank SKU for total
+  //       productName: isTotal ? "Grand Total" : (r.product_name ?? ""), // ✅ label in Product Name
+  //       units: quantity,
+  //       sales,
+  //       applicable,
+  //       charged,
+  //       overcharged,
+  //       _isTotal: isTotal,
+  //     };
+
+  //   });
+  // }, [skuwiseRows]);
+
   const skuTableAll: Row[] = useMemo(() => {
     if (!skuwiseRows.length) return [];
 
@@ -708,26 +1167,61 @@ export default function ReferralFeesDashboard(): JSX.Element {
     return filtered.map((r) => {
       const quantity = Math.round(toNumberSafe(r.quantity));
       const sales = getNetSales(r);
-      const applicable = toNumberSafe(r.answer);
-      const charged = toNumberSafe(r.selling_fees);
+
+      const ref_applicable = toNumberSafe(r.answer);
+      const ref_charged = toNumberSafe(r.selling_fees);
       const overcharged = toNumberSafe(r.overcharged ?? r.difference);
+
+      // ✅ FBA from row (usually negative in your data)
+      const fba_charged = Math.abs(
+        FBA_KEYS.reduce((sum, k) => sum + toNumberSafe((r as any)[k]), 0)
+      );
+      const fba_applicable = fba_charged; // placeholder until backend gives applicable
+
+      // ✅ Other fees from row
+      const other_charged = Math.abs(
+        OTHER_KEYS.reduce((sum, k) => sum + toNumberSafe((r as any)[k]), 0)
+      );
+      const other_applicable = other_charged; // placeholder
+
+      // (optional) ✅ Platform fees from row
+      const platform_charged = Math.abs(
+        PLATFORM_KEYS.reduce((sum, k) => sum + toNumberSafe((r as any)[k]), 0)
+      );
+
+      // ✅ Total (you can include platform in total, even if not shown as a column)
+      const total_charged = ref_charged + fba_charged + other_charged + platform_charged;
+      const total_applicable = ref_applicable + fba_applicable + other_applicable + platform_charged;
 
       const skuStr = String(r.sku ?? "");
       const isTotal = skuStr.toLowerCase() === "grand total";
 
       return {
-        sku: isTotal ? "" : (r.sku ?? ""),                 // ✅ blank SKU for total
-        productName: isTotal ? "Grand Total" : (r.product_name ?? ""), // ✅ label in Product Name
+        sku: isTotal ? "" : (r.sku ?? ""),
+        productName: isTotal ? "Grand Total" : (r.product_name ?? ""),
         units: quantity,
         sales,
-        applicable,
-        charged,
+
+        // keep your existing ones if needed elsewhere
+        applicable: ref_applicable,
+        charged: ref_charged,
         overcharged,
+
+        // ✅ NEW fields for grouped table
+        ref_applicable,
+        ref_charged,
+        fba_applicable,
+        fba_charged,
+        other_applicable,
+        other_charged,
+        total_applicable,
+        total_charged,
+
         _isTotal: isTotal,
       };
-
     });
   }, [skuwiseRows]);
+
 
   const skuColumns: ColumnDef<Row>[] = [
     { key: "sku", header: "SKU" },
@@ -765,16 +1259,58 @@ export default function ReferralFeesDashboard(): JSX.Element {
     let othersRow: Row | null = null;
 
     if (remaining.length) {
+      // const agg = remaining.reduce(
+      //   (acc: any, row: any) => {
+      //     acc.units += Math.round(toNumberSafe(row.units));
+      //     acc.sales += toNumberSafe(row.sales);
+      //     acc.applicable += toNumberSafe(row.applicable);
+      //     acc.charged += toNumberSafe(row.charged);
+      //     acc.overcharged += toNumberSafe(row.overcharged);
+      //     return acc;
+      //   },
+      //   { units: 0, sales: 0, applicable: 0, charged: 0, overcharged: 0 }
+      // );
+
+      // othersRow = {
+      //   sku: "",
+      //   productName: "Others",
+      //   units: agg.units,
+      //   sales: agg.sales,
+      //   applicable: agg.applicable,
+      //   charged: agg.charged,
+      //   overcharged: agg.overcharged,
+      //   _isOthers: true,
+      // } as Row;
+
+
       const agg = remaining.reduce(
         (acc: any, row: any) => {
           acc.units += Math.round(toNumberSafe(row.units));
           acc.sales += toNumberSafe(row.sales);
-          acc.applicable += toNumberSafe(row.applicable);
-          acc.charged += toNumberSafe(row.charged);
+
+          acc.ref_applicable += toNumberSafe(row.ref_applicable);
+          acc.ref_charged += toNumberSafe(row.ref_charged);
+
+          acc.fba_applicable += toNumberSafe(row.fba_applicable);
+          acc.fba_charged += toNumberSafe(row.fba_charged);
+
+          acc.other_applicable += toNumberSafe(row.other_applicable);
+          acc.other_charged += toNumberSafe(row.other_charged);
+
+          acc.total_applicable += toNumberSafe(row.total_applicable);
+          acc.total_charged += toNumberSafe(row.total_charged);
+
           acc.overcharged += toNumberSafe(row.overcharged);
           return acc;
         },
-        { units: 0, sales: 0, applicable: 0, charged: 0, overcharged: 0 }
+        {
+          units: 0, sales: 0,
+          ref_applicable: 0, ref_charged: 0,
+          fba_applicable: 0, fba_charged: 0,
+          other_applicable: 0, other_charged: 0,
+          total_applicable: 0, total_charged: 0,
+          overcharged: 0,
+        }
       );
 
       othersRow = {
@@ -782,12 +1318,24 @@ export default function ReferralFeesDashboard(): JSX.Element {
         productName: "Others",
         units: agg.units,
         sales: agg.sales,
-        applicable: agg.applicable,
-        charged: agg.charged,
         overcharged: agg.overcharged,
+
+        ref_applicable: agg.ref_applicable,
+        ref_charged: agg.ref_charged,
+        fba_applicable: agg.fba_applicable,
+        fba_charged: agg.fba_charged,
+        other_applicable: agg.other_applicable,
+        other_charged: agg.other_charged,
+        total_applicable: agg.total_applicable,
+        total_charged: agg.total_charged,
+
         _isOthers: true,
       } as Row;
+
     }
+
+
+
 
     // Build final rows (top5 + optional others + optional total)
     const finalRows: Row[] = [...top5];
@@ -801,6 +1349,50 @@ export default function ReferralFeesDashboard(): JSX.Element {
       return { ...row, sno: counter++ };
     });
   }, [skuTableAll]);
+
+  // const groupedSkuTableDisplay: any[] = useMemo(() => {
+  //   return skuTableDisplay.map((row: any) => ({
+  //     sno: row.sno,
+  //     productName: row.productName,
+  //     sku: row.sku,
+  //     units: row.units,
+  //     sales: row.sales,
+  //     ref_applicable: row.applicable,
+  //     ref_charged: row.charged,
+  //     fba_applicable: 0,
+  //     fba_charged: 0,
+  //     other_applicable: 0,
+  //     other_charged: 0,
+  //     total_applicable: row.applicable,
+  //     total_charged: row.charged,
+  //   }));
+  // }, [skuTableDisplay]);
+
+  const groupedSkuTableDisplay: any[] = useMemo(() => {
+  return skuTableDisplay.map((row: any) => ({
+    sno: row.sno,
+    productName: row.productName,
+    sku: row.sku,
+    units: row.units,
+    sales: row.sales,
+
+    ref_applicable: row.ref_applicable,
+    ref_charged: row.ref_charged,
+
+    fba_applicable: row.fba_applicable,
+    fba_charged: row.fba_charged,
+
+    other_applicable: row.other_applicable,
+    other_charged: row.other_charged,
+
+    total_applicable: row.total_applicable,
+    total_charged: row.total_charged,
+
+    // ✅ keep total-row styling working
+    _isTotal: row._isTotal,
+  }));
+}, [skuTableDisplay]);
+
 
   const handleDownloadExcel = useCallback(() => {
     if (!feeSummaryRows.length && !skuTableAll.length && !rows.length) return;
@@ -895,6 +1487,18 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
   const canShowContent = !loading && !error && month && year;
 
+  const currencySymbol = useMemo(
+    () => fmtCurrency(0).replace(/[\d.,\s]/g, ""),
+    [fmtCurrency]
+  );
+
+  const fmtMoneyNoSymbol = useCallback((n: any) => {
+    const val = toNumberSafe(n);
+    return val.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }, []);
 
 
   return (
@@ -914,7 +1518,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
         {/* RIGHT: Filters */}
         <div className="flex w-full md:w-auto justify-start md:justify-end">
-          <MonthYearPickerTable
+          {/* <MonthYearPickerTable
             month={month}
             year={year}
             yearOptions={[new Date().getFullYear(), new Date().getFullYear() - 1]}
@@ -927,6 +1531,54 @@ export default function ReferralFeesDashboard(): JSX.Element {
               if (v && month) setError(null);
             }}
             valueMode="lower"
+          /> */}
+
+          <PeriodFiltersTable
+            range={range}
+            selectedMonth={month}
+            selectedQuarter={selectedQuarter}
+            selectedYear={year}
+            yearOptions={[new Date().getFullYear(), new Date().getFullYear() - 1]}
+            onRangeChange={(v) => {
+              setRange(v);
+
+              // If switching to monthly and month already exists, keep it
+              if (v === "monthly") {
+                // no-op; month stays your source of truth
+                return;
+              }
+
+              // If switching to quarterly and a quarter is already selected, derive month
+              if (v === "quarterly") {
+                const m = quarterToMonth(selectedQuarter);
+                if (m) setMonth(m);
+                return;
+              }
+
+              // If switching to yearly, you can either:
+              // A) keep month as-is (last used), or
+              // B) force a month like january to keep backend happy
+              if (v === "yearly") {
+                if (!month) setMonth("january"); // optional
+              }
+            }}
+            onMonthChange={(v) => {
+              setMonth(v);
+              if (v && year) setError(null);
+            }}
+            onQuarterChange={(q) => {
+              setSelectedQuarter(q);
+
+              // IMPORTANT: backend needs month/year, so derive a month from quarter
+              const m = quarterToMonth(q);
+              setMonth(m);
+
+              if (m && year) setError(null);
+            }}
+            onYearChange={(v) => {
+              setYear(String(v));
+              if (v && month) setError(null);
+            }}
           />
         </div>
       </div>
@@ -955,62 +1607,71 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
       {canShowContent && (
         <>
-          {/* <PageBreadcrumb pageTitle="Summary Overview" variant="page" align="left" className="mt-0 md:mt-4 mb-0 md:mb-2" /> */}
-
           {/* ===================== 6 CARDS (UPDATED) ===================== */}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mt-4">
-            <StatCard
+            <SalesCard
               title="Sales"
-              value={card6.sales}
-              valueFmt={fmtCurrency}
+              sales={card6.sales}
+              productSales={card6.productSales}
+              units={card6.units}
+              valueFmt={fmtCurrencyRounded}
               borderColor="#2CA9E0"
               bgColor="#2CA9E026"
             />
 
-            <StatCard
-              title="Total Fees"
-              value={card6.totalFees}
-              valueFmt={fmtCurrency}
+
+            <FeeCard
+              title="Total Amazon Fees"
+              sales={card6.sales}
+              charged={card6.totalFees}
+              applicable={card6.totalFeesApplicable}
+              fmtCurrency={fmtCurrencyRounded}
               borderColor="#F47A00"
               bgColor="#F47A0026"
             />
 
-            {/* ✅ ONLY this card has bottom section */}
-            <StatCard
-              title="Ref Fees Applied"
-              value={card6.refFeesApplied}
-              valueFmt={fmtCurrency}
-              bottomLeftLabel="Applicable"
-              bottomLeftValue={card6.refFeesApplicable}
-              bottomRightDeltaPct={pctDelta(card6.refFeesApplied, card6.refFeesApplicable)}
+            <FeeCard
+              title="Referral Fees"
+              sales={card6.sales}
+              charged={card6.refFeesApplied}
+              applicable={card6.refFeesApplicable}
+              fmtCurrency={fmtCurrencyRounded}
               borderColor="#FF5C5C"
               bgColor="#FF5C5C26"
             />
 
-            <StatCard
+            <FeeCard
               title="FBA Fees"
-              value={card6.fbaFees}
-              valueFmt={fmtCurrency}
+              sales={card6.sales}
+              charged={card6.fbaFees}
+              applicable={card6.fbaFeesApplicable}
+              fmtCurrency={fmtCurrencyRounded}
               borderColor="#2DA49A"
               bgColor="#2DA49A26"
             />
 
-            <StatCard
+            <FeeCard
               title="Platform Fees"
-              value={card6.platformFees}
-              valueFmt={fmtCurrency}
+              sales={card6.sales}
+              charged={card6.platformFees}
+              applicable={card6.platformFeesApplicable}
+              fmtCurrency={fmtCurrencyRounded}
               borderColor="#FFBE25"
               bgColor="#FFBE2526"
             />
 
-            <StatCard
+            <FeeCard
               title="Other Fees"
-              value={card6.otherFees}
-              valueFmt={fmtCurrency}
+              sales={card6.sales}
+              charged={card6.otherFees}
+              applicable={card6.otherFeesApplicable}
+              fmtCurrency={fmtCurrencyRounded}
               borderColor="#01627F"
               bgColor="#01627F26"
             />
           </div>
+
 
           {/* ===================== BREAKDOWN SECTION (NEW) ===================== */}
           {(() => {
@@ -1033,38 +1694,89 @@ export default function ReferralFeesDashboard(): JSX.Element {
               (r) => String(r.sku ?? "").toLowerCase() === "grand total"
             );
 
+            const fmtPctSigned = (p: number) => {
+              const v = toNumberSafe(p);
+              const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+              return `${sign}${Math.abs(v).toFixed(2)}%`;
+            };
+
+
+            const pctOf = (value: number, total: number) => {
+              const t = Math.max(1e-9, Math.abs(toNumberSafe(total)));
+              return (toNumberSafe(value) / t) * 100;
+            };
+
+            const totalSalesForPct = Math.max(1, Math.abs(toNumberSafe(grand?.net_sales_total_value)));
+
+
             /* =========================
                2) LEFT PANEL (Sales based): use net_sales_total_value from Charge lines
                Requirement: show net_sales_total_value for:
                Charge - Accurate, Charge - Undercharged, Charge - Overcharged, Charge - noreferallfee, Grand Total
             ========================= */
+            // const leftList = [
+            //   {
+            //     label: "Total Sales",
+            //     value: toNumberSafe(grand?.net_sales_total_value),
+            //     color: "#F47A00",
+            //   },
+            //   {
+            //     label: "Accurately charged",
+            //     value: toNumberSafe(chargeAcc?.net_sales_total_value),
+            //     color: "#14B8A6",
+            //   },
+            //   {
+            //     label: "Over charged",
+            //     value: toNumberSafe(chargeOver?.net_sales_total_value),
+            //     color: "#EF4444",
+            //   },
+            //   {
+            //     label: "Undercharged",
+            //     value: toNumberSafe(chargeUnder?.net_sales_total_value),
+            //     color: "#F59E0B",
+            //   },
+            //   {
+            //     label: "No ref fee",
+            //     value: toNumberSafe(chargeNoRef?.net_sales_total_value),
+            //     color: "#94A3B8",
+            //   },
+            // ];
+
+            const totalSalesForLeft = Math.max(1e-9, Math.abs(toNumberSafe(grand?.net_sales_total_value)));
+
             const leftList = [
               {
                 label: "Total Sales",
                 value: toNumberSafe(grand?.net_sales_total_value),
+                pct: pctOf(toNumberSafe(grand?.net_sales_total_value), totalSalesForLeft),
                 color: "#F47A00",
               },
               {
                 label: "Accurately charged",
                 value: toNumberSafe(chargeAcc?.net_sales_total_value),
+                pct: pctOf(toNumberSafe(chargeAcc?.net_sales_total_value), totalSalesForLeft),
                 color: "#14B8A6",
               },
               {
                 label: "Over charged",
                 value: toNumberSafe(chargeOver?.net_sales_total_value),
+                pct: pctOf(toNumberSafe(chargeOver?.net_sales_total_value), totalSalesForLeft),
                 color: "#EF4444",
               },
               {
                 label: "Undercharged",
                 value: toNumberSafe(chargeUnder?.net_sales_total_value),
+                pct: pctOf(toNumberSafe(chargeUnder?.net_sales_total_value), totalSalesForLeft),
                 color: "#F59E0B",
               },
               {
                 label: "No ref fee",
                 value: toNumberSafe(chargeNoRef?.net_sales_total_value),
+                pct: pctOf(toNumberSafe(chargeNoRef?.net_sales_total_value), totalSalesForLeft),
                 color: "#94A3B8",
               },
             ];
+
 
             /* =========================
                3) RIGHT PANEL (Ref fee breakdown): use selling_fees from Charge lines
@@ -1075,33 +1787,39 @@ export default function ReferralFeesDashboard(): JSX.Element {
                 label: "Total Ref Fees",
                 value: toNumberSafe(grand?.selling_fees),
                 diff: toNumberSafe(grand?.difference),
+                pct: pctOf(toNumberSafe(grand?.difference), totalSalesForPct),
                 color: "#64748B",
               },
               {
                 label: "Accurately charged",
                 value: toNumberSafe(chargeAcc?.selling_fees),
                 diff: toNumberSafe(chargeAcc?.difference),
+                pct: pctOf(toNumberSafe(chargeAcc?.difference), totalSalesForPct),
                 color: "#14B8A6",
               },
               {
                 label: "Over charged",
                 value: toNumberSafe(chargeOver?.selling_fees),
                 diff: toNumberSafe(chargeOver?.difference),
+                pct: pctOf(toNumberSafe(chargeOver?.difference), totalSalesForPct),
                 color: "#EF4444",
               },
               {
                 label: "Undercharged",
                 value: toNumberSafe(chargeUnder?.selling_fees),
                 diff: toNumberSafe(chargeUnder?.difference),
+                pct: pctOf(toNumberSafe(chargeUnder?.difference), totalSalesForPct),
                 color: "#F59E0B",
               },
               {
                 label: "No ref fee",
                 value: toNumberSafe(chargeNoRef?.selling_fees),
                 diff: toNumberSafe(chargeNoRef?.difference),
+                pct: pctOf(toNumberSafe(chargeNoRef?.difference), totalSalesForPct),
                 color: "#94A3B8",
               },
             ];
+
 
             /* =========================
                4) Bar scaling totals
@@ -1127,39 +1845,83 @@ export default function ReferralFeesDashboard(): JSX.Element {
               value,
               total,
               color,
-              diff,
+              deltaPct,
+              showDelta = false,
+              pctColor,
             }: {
               label: string;
               value: number;
               total: number;
               color: string;
-              diff?: number;
+              deltaPct?: number;
+              showDelta?: boolean;
+              pctColor?: string;
             }) => {
+
               const v = Math.abs(toNumberSafe(value));
               const t = Math.max(1, Math.abs(toNumberSafe(total)));
-              const pct = Math.min(100, (v / t) * 100);
+              const barPct = Math.min(100, (v / t) * 100);
 
-              const d = typeof diff === "number" ? toNumberSafe(diff) : null;
+              const deltaCls =
+                typeof deltaPct === "number"
+                  ? deltaPct > 0
+                    ? "text-emerald-600"
+                    : deltaPct < 0
+                      ? "text-red-600"
+                      : "text-slate-500"
+                  : "text-slate-500";
 
               return (
-                <div className="grid grid-cols-[180px_1fr_170px] items-center gap-3">
+                <div
+                  className={`grid items-center gap-3 ${showDelta
+                    ? "grid-cols-[180px_1fr_170px]"
+                    : "grid-cols-[180px_1fr_120px]"
+                    }`}
+                >
+                  {/* Label */}
                   <div className="text-sm text-slate-700">{label}</div>
 
+                  {/* Bar */}
                   <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                     <div
                       className="h-2 rounded-full"
-                      style={{ width: `${pct}%`, backgroundColor: color }}
+                      style={{ width: `${barPct}%`, backgroundColor: color }}
                     />
                   </div>
 
-                  <div className="text-right text-sm font-semibold text-slate-800 whitespace-nowrap">
-                    {fmtNumber(value)}
-                    {d !== null ? (
-                      <span className="ml-2 text-xs font-semibold text-slate-500">
-                        ({fmtCurrency(d)})
+                  {/* Value (+ optional %) */}
+                  {/* <div className="flex items-baseline justify-end whitespace-nowrap tabular-nums">
+                    <span className="text-sm font-semibold text-slate-800 min-w-[90px] text-right">
+                      {fmtNumber(value)}
+                    </span>
+
+                    {showDelta && (
+                      <span className={`ml-1 text-xs font-bold min-w-[55px] text-right ${deltaCls}`}>
+                        ({fmtPctSigned(deltaPct ?? 0)})
                       </span>
-                    ) : null}
+                    )}
+                  </div> */}
+
+                  {/* Value / Right column */}
+                  <div className="flex items-baseline justify-end whitespace-nowrap tabular-nums">
+                    <span className="text-sm font-semibold text-slate-800 min-w-[90px] text-right">
+                      {fmtNumber(value)}
+                    </span>
+
+                    {showDelta ? (
+                      <span className={`ml-1 text-xs font-bold min-w-[55px] text-right ${deltaCls}`}>
+                        ({fmtPctSigned(deltaPct ?? 0)})
+                      </span>
+                    ) : (
+                      <span
+                        className={`ml-2 text-xs font-bold min-w-[55px] text-right ${deltaCls}`}
+                      >
+                        ({fmtPctSigned(deltaPct ?? 0)})
+                      </span>
+                    )}
+
                   </div>
+
                 </div>
               );
             };
@@ -1192,7 +1954,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* LEFT PANEL */}
-                  <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                  {/* <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
                     <div className="text-base font-semibold text-slate-800 mb-4">
                       Sales Summary <span className="text-slate-500">({currencySymbol})</span>
                     </div>
@@ -1206,13 +1968,50 @@ export default function ReferralFeesDashboard(): JSX.Element {
                           value={x.value}
                           total={leftTotalForBars}
                           color={x.color}
+                          showDelta={false}  
+                        />
+                      ))}
+
+                    </div>
+                  </div> */}
+
+                  <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                    <div className="text-base font-semibold text-slate-800 mb-2">
+                      Sales Summary <span className="text-slate-500">({currencySymbol})</span>
+                    </div>
+
+                    {/* LEFT headers */}
+                    {/* LEFT headers */}
+                    <div className="grid grid-cols-[180px_1fr_120px] items-center mb-2 text-[11px] text-slate-500 font-semibold">
+                      <div /> {/* label column */}
+                      <div /> {/* bar column */}
+
+                      {/* single container for both headings (you control gap) */}
+                      <div className="flex justify-end gap-4 pr-2">
+                        <span>Net Sales</span>
+                        <span>% of Sales</span>
+                      </div>
+                    </div>
+
+
+                    <div className="space-y-3">
+                      {leftList.map((x) => (
+                        <BarRow
+                          key={x.label}
+                          label={x.label}
+                          value={x.value}
+                          total={leftTotalForBars}
+                          color={x.color}
+                          deltaPct={x.pct}
+                          showDelta={false}
                         />
                       ))}
                     </div>
                   </div>
 
+
                   {/* RIGHT PANEL */}
-                  <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                  {/* <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
                     <div className="text-base font-semibold text-slate-800 mb-4">
                       Referral Fees Breakdown <span className="text-slate-500">(£)</span>
                     </div>
@@ -1224,13 +2023,53 @@ export default function ReferralFeesDashboard(): JSX.Element {
                           key={x.label}
                           label={x.label}
                           value={x.value}
-                          diff={x.diff}
                           total={rightTotalForBars}
                           color={x.color}
+                          deltaPct={x.pct}
+                          showDelta={true}
+                        />
+                      ))}
+
+
+                    </div>
+                  </div> */}
+
+                  <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                    <div className="text-base font-semibold text-slate-800 mb-2">
+                      Referral Fees Breakdown <span className="text-slate-500">(£)</span>
+                    </div>
+
+                    {/* RIGHT headers */}
+                    {/* Header row */}
+                    <div className="grid grid-cols-[180px_1fr_170px] items-center mb-2 text-[11px] font-semibold text-slate-500">
+                      {/* Empty label column */}
+                      <div />
+
+                      {/* Empty bar column */}
+                      <div />
+
+                      {/* Single container for both headings */}
+                      <div className="flex justify-end gap-4 pr-2">
+                        <span>Fees Charged</span>
+                        <span>Delta</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {rightList.map((x) => (
+                        <BarRow
+                          key={x.label}
+                          label={x.label}
+                          value={x.value}
+                          total={rightTotalForBars}
+                          color={x.color}
+                          deltaPct={x.pct}
+                          showDelta={true}
                         />
                       ))}
                     </div>
                   </div>
+
                 </div>
               </div>
             );
@@ -1251,8 +2090,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
             {/* <AiButton /> */}
 
-            <div className="[&_table]:w-full [&_th]:text-center [&_td]:text-center">
-              <DataTable
+            <div className="[&_table]:w-full ">
+              {/* <DataTable
                 columns={[
                   { key: "sno", header: "S. No." },
                   { key: "productName", header: "Product Name" },
@@ -1271,7 +2110,101 @@ export default function ReferralFeesDashboard(): JSX.Element {
                 zebra={true}
                 stickyHeader={false}
                 rowClassName={(row) => ((row as any)._isTotal ? "bg-[#DDDDDD] font-bold" : "")}
+              /> */}
+
+
+              <GroupedDataTable
+                data={groupedSkuTableDisplay}
+                rowClassName={(row) =>
+                  (row as any)._isTotal ? "bg-[#EFEFEF] font-semibold" : ""
+                }
+                baseColumns={[
+                  { key: "sno", header: "S.No.", width: "60px" },
+                  {
+                    key: "productName", header: "Product Name", width: "180px", headerClassName: "text-left",
+                    cellClassName: "text-left"
+                  },
+                  { key: "sku", header: "SKU", width: "110px" },
+                  { key: "units", header: "Units", width: "70px" },
+                  {
+                    key: "sales",
+                    header: `Net Sales (${currencySymbol})`,
+                    width: "110px",
+                    render: (_, v) => fmtMoneyNoSymbol(v),
+                  },
+                ]}
+                groupedColumns={[
+                  {
+                    groupHeader: "Referral Fees",
+                    columns: [
+                      {
+                        key: "ref_applicable",
+                        header: `Applicable (${currencySymbol})`,
+                        width: "110px",
+                        render: (_, v) => fmtMoneyNoSymbol(v),
+                      },
+                      {
+                        key: "ref_charged",
+                        header: `Charged (${currencySymbol})`,
+                        width: "110px",
+                        render: (_, v) => fmtMoneyNoSymbol(v),
+                      },
+                    ],
+                  },
+                  {
+                    groupHeader: "FBA Fees",
+                    columns: [
+                      {
+                        key: "fba_applicable",
+                        header: `Applicable (${currencySymbol})`,
+                        width: "110px",
+                        render: (_, v) => fmtMoneyNoSymbol(v),
+                      },
+                      {
+                        key: "fba_charged",
+                        header: `Charged (${currencySymbol})`,
+                        width: "110px",
+                        render: (_, v) => fmtMoneyNoSymbol(v),
+                      },
+                    ],
+                  },
+                  {
+                    groupHeader: "Other Fees",
+                    columns: [
+                      {
+                        key: "other_applicable",
+                        header: `Applicable (${currencySymbol})`,
+                        width: "110px",
+                        render: (_, v) => fmtMoneyNoSymbol(v),
+                      },
+                      {
+                        key: "other_charged",
+                        header: `Charged (${currencySymbol})`,
+                        width: "110px",
+                        render: (_, v) => fmtMoneyNoSymbol(v),
+                      },
+                    ],
+                  },
+                  {
+                    groupHeader: "Total Fees",
+                    columns: [
+                      {
+                        key: "total_applicable",
+                        header: `Applicable (${currencySymbol})`,
+                        width: "110px",
+                        render: (_, v) => fmtMoneyNoSymbol(v),
+                      },
+                      {
+                        key: "total_charged",
+                        header: `Charged (${currencySymbol})`,
+                        width: "110px",
+                        render: (_, v) => fmtMoneyNoSymbol(v),
+                      },
+                    ],
+                  },
+                ]}
               />
+
             </div>
           </div>
         </>
