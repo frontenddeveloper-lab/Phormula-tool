@@ -55,17 +55,6 @@ const formatNumber = (val: any): string => {
   });
 };
 
-const getPreviousMonthYear = (month: string, year: string) => {
-  const date = new Date(`${month} 1, ${year}`);
-  date.setMonth(date.getMonth() - 1);
-
-  return {
-    month: date.toLocaleString("default", { month: "long" }),
-    year: date.getFullYear().toString(),
-  };
-};
-
-
 const formatPercent = (val: any): string => {
   if (val === null || val === undefined || val === '' || isNaN(Number(val))) return '';
   return `${Number(val).toFixed(2)}%`;
@@ -104,10 +93,9 @@ const Pnlforecast: React.FC = () => {
   const router = useRouter();
   const params = useParams();
   const countryName = (params?.countryName as string) || '';
-  const urlMonth = (params?.month as string) || '';
-const urlYear = (params?.year as string) || '';
+  const month = (params?.month as string) || '';
+  const year = (params?.year as string) || '';
   const currencySymbol = getCurrencySymbol(countryName);
-  const { month, year } = getPreviousMonthYear(urlMonth, urlYear);
 
   const [data, setData] = useState<RowData[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);

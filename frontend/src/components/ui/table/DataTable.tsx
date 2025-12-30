@@ -207,7 +207,7 @@ export default function DataTable<T extends Row>({
                 className={clsx(
                   // "border border-[#e1e5ea] px-2 sm:px-3 py-2 text-center align-middle",
                   // "whitespace-normal break-words leading-tight",
-                  "witespace-normal break-words leading-tight border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]",
+                  "whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]",
                   col.headerClassName,
                   col.onHeaderClick && "cursor-pointer select-none"
                 )}

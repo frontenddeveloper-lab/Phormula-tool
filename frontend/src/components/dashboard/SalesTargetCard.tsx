@@ -953,6 +953,7 @@ import type { RegionMetrics } from "@/lib/dashboard/types";
 
 type CurrencyCode = "USD" | "GBP" | "INR" | "CAD";
 
+
 type Props = {
   data: RegionMetrics; // selected region metrics
   homeCurrency: CurrencyCode;
@@ -1241,7 +1242,7 @@ const moveTip = (e: React.MouseEvent) => {
         <div className="flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: "#5EA68E" }}
+            style={{ backgroundColor: "#F47A00" }}
           />
           <span className="text-gray-600">MTD Sale</span>
         </div>
@@ -1257,7 +1258,9 @@ const moveTip = (e: React.MouseEvent) => {
         <div className="flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: "#9ca3af" }}
+            // style={{ backgroundColor: "#9ca3af" }}
+            style={{ backgroundColor: "#5EA68E" }}
+           
           />
           <span className="text-gray-600">{thisMonthLabel} Target</span>
         </div>
@@ -1265,7 +1268,8 @@ const moveTip = (e: React.MouseEvent) => {
         <div className="flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: "#FFBE25" }}
+            // style={{ backgroundColor: "#F59E0B" }}
+             style={{ backgroundColor: "#9ca3af" }}
           />
           <span className="text-gray-600">{prevLabel} Sale</span>
         </div>
@@ -1290,7 +1294,8 @@ const moveTip = (e: React.MouseEvent) => {
             <path
               d={arcPath(fullFrom, toDeg_Orange, rLastMTD)}
               fill="none"
-              stroke="#f59e0b"
+              // stroke="#f59e0b"
+              stroke="#9CA3AF"
               strokeWidth={strokeLast}
               strokeLinecap="round"
               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
@@ -1301,7 +1306,8 @@ const moveTip = (e: React.MouseEvent) => {
             <path
               d={arcPath(fullFrom, toDeg_DecTarget, rDecTarget)}
               fill="none"
-              stroke="#9CA3AF"
+              // stroke="#9CA3AF"
+              stroke="#5EA68E"
               strokeWidth={strokeDec}
               strokeLinecap="round"
               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
@@ -1312,7 +1318,7 @@ const moveTip = (e: React.MouseEvent) => {
             <path
               d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
               fill="none"
-              stroke="#5EA68E"
+              stroke="#F47A00"
               strokeWidth={strokeMain}
               strokeLinecap="round"
               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
@@ -1324,7 +1330,8 @@ const moveTip = (e: React.MouseEvent) => {
               cx={knobYellow.x}
               cy={knobYellow.y}
               r={5}
-              fill="#f59e0b"
+              // fill="#f59e0b"
+              fill="#9CA3AF"
               stroke="#fffbeb"
               strokeWidth={3}
               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
@@ -1335,10 +1342,11 @@ const moveTip = (e: React.MouseEvent) => {
               cx={knobDec.x}
               cy={knobDec.y}
               r={5}
-              fill="#9CA3AF"
+              // fill="#9CA3AF"
+              fill="#5EA68E"
               stroke="#eef2ff"
               strokeWidth={3}
-              onMouseEnter={(e) => showTip(e, decTipTitle, decTipLines)}
+              onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
               onMouseLeave={hideTip}
             />
 
@@ -1346,7 +1354,7 @@ const moveTip = (e: React.MouseEvent) => {
               cx={knobGreen.x}
               cy={knobGreen.y}
               r={10}
-              fill="#5EA68E"
+              fill="#F47A00"
               stroke="#ecfdf3"
               strokeWidth={4}
               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
@@ -1422,7 +1430,7 @@ const moveTip = (e: React.MouseEvent) => {
           <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
             <div
               className="h-full rounded-full"
-              style={{ width: `${reimbNowPct}%`, backgroundColor: "#5EA68E" }}
+              style={{ width: `${reimbNowPct}%`, backgroundColor: "#F47A00" }}
             />
           </div>
         </div>
@@ -1440,7 +1448,8 @@ const moveTip = (e: React.MouseEvent) => {
           <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
             <div
               className="h-full rounded-full"
-              style={{ width: `${reimbPrevPct}%`, backgroundColor: "#FFBE25" }}
+              // style={{ width: `${reimbPrevPct}%`, backgroundColor: "#F59E0B" }}
+              style={{ width: `${reimbPrevPct}%`, backgroundColor: "#9CA3AF" }}
             />
           </div>
         </div>

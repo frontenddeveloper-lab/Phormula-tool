@@ -679,7 +679,7 @@ const columns: ColumnDef<any>[] = displayedColumns.map((col) => ({
   stickyHeader
   loading={loading}
   rowClassName={(row: any) =>
-    row.__isTotal ? "bg-[#D9D9D9] font-bold" : ""
+    row.__isTotal ? "bg-gray-300 font-bold" : ""
   }
 />
     <div className='flex justify-end items-end mt-2'>

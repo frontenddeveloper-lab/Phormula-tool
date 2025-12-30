@@ -1249,8 +1249,10 @@ def cashflow():
             'otherwplatform': 0,
             'taxncredit': 0,
             'cashflow': 0,
-            'rembursement_fee': 0
+            'rembursement_fee': 0,
+            'quantity_total': 0
         }
+
 
         months_to_process = []
         if period_type == 'monthly':
@@ -1336,13 +1338,15 @@ def cashflow():
                 try:
                     cashflow_df = pd.read_sql_table(table_name, engine)
                     if not cashflow_df.empty:
-                        numeric_cols = ['net_sales', 'advertising_total', 'amazon_fee', 'cm2_profit', 'taxncredit', 'rembursement_fee']
+                        numeric_cols = ['net_sales', 'advertising_total', 'amazon_fee', 'cm2_profit', 'taxncredit', 'rembursement_fee', 'quantity']
                         for col in numeric_cols:
                             if col in cashflow_df.columns:
                                 cashflow_df[col] = pd.to_numeric(cashflow_df[col], errors='coerce').fillna(0)
 
-                        net_sales_total = advertising_total = amazon_fee_total = cm2_profit_total = rembursement_fee_total =0
+                        net_sales_total = advertising_total = amazon_fee_total = cm2_profit_total = rembursement_fee_total = 0
+                        quantity_total = 0
                         taxncredit_total = total_taxncredit_from_upload
+
 
                         def find_total_row(df):
                             if 'product_name' not in df.columns:
@@ -1357,18 +1361,21 @@ def cashflow():
                             total_row = find_total_row(cashflow_df)
                             if total_row is not None and not total_row.empty:
                                 net_sales_total = float(total_row['net_sales'].iloc[0]) if 'net_sales' in total_row else 0
+                                quantity_total = float(total_row['quantity'].iloc[0]) if 'quantity' in total_row else 0
                                 advertising_total = float(total_row['advertising_total'].iloc[0]) if 'advertising_total' in total_row else 0
                                 amazon_fee_total = float(total_row['amazon_fee'].iloc[0]) if 'amazon_fee' in total_row else 0
                                 cm2_profit_total = float(total_row['cm2_profit'].iloc[0]) if 'cm2_profit' in total_row else 0
                                 rembursement_fee_total = float(total_row['rembursement_fee'].iloc[0]) if 'rembursement_fee' in total_row else 0
                             else:
                                 net_sales_total = float(cashflow_df['net_sales'].sum()) if 'net_sales' in cashflow_df.columns else 0
+                                quantity_total = float(cashflow_df['quantity'].sum()) if 'quantity' in cashflow_df.columns else 0
                                 advertising_total = float(cashflow_df['advertising_total'].sum()) if 'advertising_total' in cashflow_df.columns else 0
                                 amazon_fee_total = float(cashflow_df['amazon_fee'].sum()) if 'amazon_fee' in cashflow_df.columns else 0
                                 cm2_profit_total = float(cashflow_df['cm2_profit'].sum()) if 'cm2_profit' in cashflow_df.columns else 0
                                 rembursement_fee_total = float(cashflow_df['rembursement_fee'].sum()) if 'rembursement_fee' in cashflow_df.columns else 0
                         else:
                             net_sales_total = float(cashflow_df['net_sales'].sum()) if 'net_sales' in cashflow_df.columns else 0
+                            quantity_total = float(cashflow_df['quantity'].sum()) if 'quantity' in cashflow_df.columns else 0
                             advertising_total = float(cashflow_df['advertising_total'].sum()) if 'advertising_total' in cashflow_df.columns else 0
                             amazon_fee_total = float(cashflow_df['amazon_fee'].sum()) if 'amazon_fee' in cashflow_df.columns else 0
                             cm2_profit_total = float(cashflow_df['cm2_profit'].sum()) if 'cm2_profit' in cashflow_df.columns else 0
@@ -1377,6 +1384,7 @@ def cashflow():
                         cashflow_total = net_sales_total - advertising_total - amazon_fee_total - total_otherwplatform + taxncredit_total
 
                         combined_totals['net_sales'] += net_sales_total
+                        combined_totals['quantity_total'] += quantity_total
                         combined_totals['advertising_total'] += advertising_total
                         combined_totals['amazon_fee'] += amazon_fee_total
                         combined_totals['cm2_profit'] += cm2_profit_total
@@ -1418,6 +1426,7 @@ def cashflow():
                             'period_type': period_type,
                             'month': month_name if period_type == 'monthly' else None,
                             'net_sales': round(net_sales_total, 2),
+                            'quantity_total': round(quantity_total, 2),
                             'advertising_total': round(advertising_total, 2),
                             'amazon_fee': round(amazon_fee_total, 2),
                             'cm2_profit': round(cm2_profit_total, 2),

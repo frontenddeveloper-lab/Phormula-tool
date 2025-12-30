@@ -789,7 +789,7 @@ const columns: ColumnDef<any>[] = [
   stickyHeader
   rowClassName={(row) =>
     (row as any).__isTotal
-      ? "bg-[#D9D9D9] font-semibold"
+      ? " font-semibold"
       : ""
   }
 />

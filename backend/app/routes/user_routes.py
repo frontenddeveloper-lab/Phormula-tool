@@ -326,7 +326,7 @@ def get_user_data():
         'phone_number': user.phone_number,
         'annual_sales_range': user.annual_sales_range,
         'password': user.password,
-        'platform': user.platform,
+        'marketplace_id': user.marketplace_id,
         'country': user.country,
         'homeCurrency': user.homeCurrency
     })
@@ -359,6 +359,42 @@ def get_user_countries():
     return jsonify({'countries': country_list}), 200
 
 
+ALLOWED_MARKETPLACES = {
+    "ATVPDKIKX0DER",  # US
+    "A1F83G8C2ARO7P", # UK
+    "A2EUQ1WTGCTBG2", # CA
+}
+
+COUNTRY_TO_MARKETPLACE = {
+    "us": "ATVPDKIKX0DER",
+    "uk": "A1F83G8C2ARO7P",
+    "ca": "A2EUQ1WTGCTBG2",
+}
+
+def compute_marketplace_ids_from_country(country_value: str) -> str:
+    """
+    country_value can be:
+      - 'uk'
+      - 'uk,us'
+      - 'UK, US'
+    returns comma-separated marketplace ids in stable order.
+    """
+    if not country_value:
+        return ""
+
+    countries = [c.strip().lower() for c in country_value.split(",") if c.strip()]
+    ids = []
+
+    for c in countries:
+        mp = COUNTRY_TO_MARKETPLACE.get(c)
+        if mp and mp in ALLOWED_MARKETPLACES:
+            ids.append(mp)
+
+    # remove duplicates while preserving order
+    seen = set()
+    ids = [x for x in ids if not (x in seen or seen.add(x))]
+
+    return ",".join(ids)
 
 
 
@@ -378,13 +414,11 @@ def add_sales():
         return jsonify({'error': 'Invalid token'}), 401
 
     data = request.get_json()
-
-    country = data.get('country')
+    country = data.get('country')  # can be 'uk' or 'uk,us'
     annual_sales_range = data.get('annual_sales_range')
     brand_name = data.get('brand_name')
     company_name = data.get('company_name')
     homeCurrency = data.get('homeCurrency')
-
 
     if not country:
         return jsonify({'success': False, 'message': 'Country is required.'}), 400
@@ -394,19 +428,22 @@ def add_sales():
         return jsonify({'success': False, 'message': 'User not found.'}), 404
 
     user.country = country
+    user.marketplace_id = compute_marketplace_ids_from_country(country)
+
     user.company_name = company_name
     user.brand_name = brand_name
     user.homeCurrency = homeCurrency
     if annual_sales_range:
         user.annual_sales_range = annual_sales_range
-        
 
     db.session.commit()
     db.session.refresh(user)
 
-    return jsonify({'success': True, 'message': 'Sales data submitted successfully.'}), 201
- 
-
+    return jsonify({
+        'success': True,
+        'message': 'Sales data submitted successfully.',
+        'marketplace_id': user.marketplace_id
+    }), 201
 
 
 
@@ -501,7 +538,10 @@ def profileupdate():
     user.company_name = data.get('company_name', user.company_name)
     user.brand_name = data.get('brand_name', user.brand_name)
     user.country = data.get('country', user.country)
-    user.platform = data.get('platform', user.platform)
+    # ✅ recompute marketplace_id automatically if country is updated
+    new_country = data.get('country')
+    if new_country is not None:
+        user.marketplace_id = compute_marketplace_ids_from_country(new_country)
     user.homeCurrency = data.get('homeCurrency', user.homeCurrency)
 
     # Step 5: Commit the changes to the database

@@ -298,7 +298,7 @@ export default function AmazonStatCard({
         {label}
       </div>
 
-      <div className="mt-1 text-[15px] sm:text-lg lg:text-[16px] font-semibold min-w-0 truncate">
+      <div className="mt-1 text-lg font-semibold min-w-0 truncate">
         <ValueOrSkeleton loading={loading} mode="inline" compact>
           <span className="block min-w-0 truncate">
             {formatter(currVal)}
