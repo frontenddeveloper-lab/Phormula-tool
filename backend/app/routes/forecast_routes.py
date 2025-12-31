@@ -913,7 +913,41 @@ def Pnlforecast():
             print("No platform fee values found for the last 5 months.")
 
         # Get upload history
-        upload_history = UploadHistory.query.filter_by(user_id=user_id, country=country, month=month, year=year).first()
+        # Normalize values for DB query
+        # Get upload history (handle ongoing month)
+      
+
+        requested_month = month.lower()
+        requested_year = int(year)
+
+        current_month = datetime.now().strftime("%B").lower()
+        current_year = datetime.now().year
+
+        # If ongoing month, fallback to previous completed month
+        if requested_month == current_month and requested_year == current_year:
+            fallback_month_num = datetime.now().month - 1
+            fallback_year = requested_year
+
+            if fallback_month_num == 0:  # January edge case
+                fallback_month_num = 12
+                fallback_year -= 1
+
+            fallback_month = MONTHS_REVERSE_MAP[fallback_month_num]
+            fallback_year = str(fallback_year)
+        else:
+            fallback_month = requested_month
+            fallback_year = str(requested_year)
+
+        print(f"📌 Using upload_history from {fallback_month} {fallback_year}")
+
+        upload_history = UploadHistory.query.filter_by(
+            user_id=user_id,
+            country=country,
+            month=fallback_month,
+            year=fallback_year
+        ).first()
+
+
         
         if upload_history:
             # Get values from upload history, with safe defaults

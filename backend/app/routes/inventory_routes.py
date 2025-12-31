@@ -16,8 +16,11 @@ from flask import request, jsonify, Blueprint
 from sqlalchemy.dialects.postgresql import insert, insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from app import db
+from sqlalchemy import delete
 from app.models.user_models import Inventory, CountryProfile, MonthwiseInventory , InventoryAged
 from app.routes.amazon_api_routes import amazon_client, _apply_region_and_marketplace_from_request
+from app.utils.live_bi_utils import generate_inventory_alerts_for_all_skus
+
 from config import Config
 
 # ---------------------------------------------------------------------------
@@ -905,17 +908,28 @@ def _attach_sku_product_names(objs: list["InventoryAged"], user_id: int | None) 
 
 # ------------------------------- route: sync InventoryAged --------------------------
 
+MARKETPLACE_TO_COUNTRY = {
+    "A1F83G8C2ARO7P": "uk",
+    "ATVPDKIKX0DER": "us",
+    "A2EUQ1WTGCTBG2": "ca",
+    "A1PA6795UKMFR9": "de",
+    "A13V1IB3VIYZZH": "fr",
+    "A1RKKUPIHCS9HS": "es",
+    "APJ6JRA9NG5V4": "it",
+}
+
 @inventory_bp.route("/amazon_api/inventory/aged", methods=["GET"])
 def sync_inventory_aged():
     """
     Fetch GET_FBA_INVENTORY_PLANNING_DATA and store into inventory_aged.
-    Each row is tagged with user_id and product_name is taken from
-    public.sku_{user_id}_data_table (sku_uk → sku).
+    Old data for same snapshot_date + user_id + marketplace is deleted
+    before inserting new rows (prevents duplicates).
     """
 
-    # --- auth (same as inventory_all) ---
+    # ---------------- AUTH ----------------
     auth_header = request.headers.get("Authorization")
     user_id = None
+
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
         try:
@@ -926,14 +940,20 @@ def sync_inventory_aged():
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid token"}), 401
 
-    # decide marketplace
+    if not user_id:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # ---------------- MARKETPLACE ----------------
     _apply_region_and_marketplace_from_request()
+
     if amazon_client.marketplace_id not in amazon_client.ALLOWED_MARKETPLACES:
         return jsonify({"success": False, "error": "Unsupported marketplace"}), 400
 
     mp = request.args.get("marketplace_id", amazon_client.marketplace_id)
 
     logger.info("Starting InventoryAged sync for marketplace %s", mp)
+
+    # ---------------- REQUEST REPORT ----------------
     report_id = _request_inventory_age_report(mp)
     if not report_id:
         return jsonify({
@@ -955,6 +975,7 @@ def sync_inventory_aged():
             "error": "Failed to download inventory health report document",
         }), 502
 
+    # ---------------- PARSE TSV ----------------
     text_content = content.decode("utf-8-sig", errors="replace")
     f = io.StringIO(text_content)
     reader = csv.DictReader(f, delimiter="\t")
@@ -967,21 +988,46 @@ def sync_inventory_aged():
 
     objs: list[InventoryAged] = []
     rows_count = 0
-    snapshot_dates = set()
+    snapshot_dates: set[date] = set()
 
     for row in reader:
         rows_count += 1
+
         inv = _row_to_inventory_aged(row)
-        if not inv.sku:
+        if not inv or not inv.sku:
             continue
-        inv.user_id = user_id          # 👈 tag the row with user_id
+
+        inv.user_id = user_id
+        inv.marketplace = mp
+
         objs.append(inv)
+
         if inv.snapshot_date:
             snapshot_dates.add(inv.snapshot_date)
 
-    # overwrite product_name using sku_{user_id}_data_table
+    # ---------------- DELETE OLD DATA (CRITICAL FIX) ----------------
+    try:
+        if snapshot_dates:
+            db.session.execute(
+                delete(InventoryAged).where(
+                    InventoryAged.user_id == user_id,
+                    InventoryAged.marketplace == mp,
+                    InventoryAged.snapshot_date.in_(snapshot_dates)
+                )
+            )
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.exception("Failed to delete old InventoryAged data")
+        return jsonify({
+            "success": False,
+            "error": f"Failed to cleanup old data: {str(e)}",
+        }), 500
+
+    # ---------------- ATTACH PRODUCT NAMES ----------------
     _attach_sku_product_names(objs, user_id)
 
+    # ---------------- INSERT NEW DATA ----------------
     try:
         if objs:
             db.session.bulk_save_objects(objs)
@@ -994,6 +1040,18 @@ def sync_inventory_aged():
             "success": False,
             "error": f"Failed to save rows: {str(e)}",
         }), 500
+    
+        # ---------------- INVENTORY ALERTS ----------------
+    try:
+        country = MARKETPLACE_TO_COUNTRY.get(mp, "uk")
+        inventory_alerts = generate_inventory_alerts_for_all_skus(
+            user_id=user_id,
+            country=country,
+        )
+    except Exception as e:
+        logger.exception("Failed to generate inventory alerts")
+        inventory_alerts = {}
+    # ---------------- RESPONSE ----------------
 
     return jsonify({
         "success": True,
@@ -1003,8 +1061,80 @@ def sync_inventory_aged():
         "rows_in_report": rows_count,
         "rows_saved": saved,
         "snapshot_dates": [d.isoformat() for d in snapshot_dates],
+        "inventory_alerts": inventory_alerts,
     }), 200
 
+
+
+@inventory_bp.route("/amazon_api/inventory/aged/columns", methods=["GET"])
+def get_inventory_aged_selected_columns():
+    # --- auth ---
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Missing Authorization header"}), 401
+
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("user_id")
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token has expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Invalid token"}), 401
+
+    if not user_id:
+        return jsonify({"error": "Invalid token payload"}), 401
+
+    # --- filters ---
+    marketplace_id = request.args.get("marketplace_id")
+    snapshot_date = request.args.get("snapshot_date")  # YYYY-MM-DD
+    latest = request.args.get("latest", "0") == "1"
+
+    q = InventoryAged.query.filter(InventoryAged.user_id == user_id)
+
+    if marketplace_id:
+        q = q.filter(InventoryAged.marketplace == marketplace_id)
+
+    if latest:
+        latest_date = (
+            db.session.query(InventoryAged.snapshot_date)
+            .filter(InventoryAged.user_id == user_id)
+            .order_by(InventoryAged.snapshot_date.desc())
+            .limit(1)
+            .scalar()
+        )
+        if latest_date:
+            q = q.filter(InventoryAged.snapshot_date == latest_date)
+
+    elif snapshot_date:
+        q = q.filter(InventoryAged.snapshot_date == snapshot_date)
+
+    rows = q.order_by(InventoryAged.id.asc()).all()
+
+    # --- ONLY required fields ---
+    data = []
+    for r in rows:
+        data.append({
+            "fnsku": getattr(r, "fnsku", None),
+            "asin": getattr(r, "asin", None),
+            "product-name": getattr(r, "product_name", None),
+            "condition": getattr(r, "condition", None),
+            "available": getattr(r, "available", 0),
+            "pending-removal-quantity": getattr(r, "pending_removal_quantity", 0),
+            "inv-age-0-to-90-days": getattr(r, "inv_age_0_90", 0),
+            "inv-age-91-to-180-days": getattr(r, "inv_age_91_180", 0),
+            "inv-age-181-to-270-days": getattr(r, "inv_age_181_270", 0),
+            "inv-age-271-to-365-days": getattr(r, "inv_age_271_365", 0),
+            "inv-age-365-plus-days": getattr(r, "inv_age_365_plus", 0),
+            "currency": getattr(r, "currency", None),
+            "estimated-storage-cost-next-month": getattr(r, "estimated_storage_cost_next_month", 0.0),
+        })
+
+    return jsonify({
+        "success": True,
+        "count": len(data),
+        "data": data
+    }), 200
 
 
 @inventory_bp.route("/country-profile", methods=["POST"])
@@ -1093,7 +1223,7 @@ def upsert_country_profile():
     except SQLAlchemyError as e:
         db.session.rollback()
         return jsonify({"error": "Database error", "detail": str(e)}), 500
-
+    
 #------------------------------------------------------------------------------ MonthwiseInventory upsert logic --------------------------------------
 
 def _upsert_monthwise_inventory_rows(

@@ -354,7 +354,7 @@ const ProductSearchDropdown: React.FC<ProductSearchDropdownProps> = ({
   };
 
   return (
-    <div className="relative w-full max-w-xs">
+    <div className="relative w-full">
       <div className="relative flex items-center">
         <input
           type="text"

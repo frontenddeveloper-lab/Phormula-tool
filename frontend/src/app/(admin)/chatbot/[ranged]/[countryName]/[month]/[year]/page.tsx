@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation'
 import './style.css'
 import Delete from '@/components/chatbot/Delete'
 import RightArrow from '@/components/chatbot/RightArrow'
-import { Dot } from 'lucide-react'
+import { Copy, Share2, ThumbsDown, ThumbsUp, Dot } from 'lucide-react'
+import { useChatbotStore } from "@/lib/store/chatbotStore";
 
 // ---------- Types ----------
 
@@ -42,32 +43,7 @@ type ParsedAI = {
 
 // ---------- Helpers ----------
 
-const HISTORY_KEY = 'chatbot_history'
-const CHAT_CLEARED_FLAG = 'chatbot_cleared_flag'
 
-const loadCache = (): Message[] => {
-  if (typeof window === 'undefined') return []
-  try {
-    const clearedAt = localStorage.getItem(CHAT_CLEARED_FLAG)
-    const history = localStorage.getItem(HISTORY_KEY)
-    if (!history) return []
-    const parsed: Message[] = JSON.parse(history)
-    if (clearedAt) {
-      const clearedTs = Number(clearedAt)
-      return parsed.filter((msg) => msg.timestamp > clearedTs)
-    }
-    return parsed
-  } catch {
-    return []
-  }
-}
-
-const saveCache = (msgs: Message[]) => {
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(msgs))
-    localStorage.removeItem(CHAT_CLEARED_FLAG)
-  } catch {}
-}
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000'
 const getAuthToken = () => (typeof window !== 'undefined' ? localStorage.getItem('jwtToken') : null)
@@ -85,11 +61,35 @@ const cleanMarkdown = (s = '') =>
     .replace(/\*{1,3}/g, '')
     .trim()
 
+
+// ---- Timestamp helpers (WhatsApp-style) ----
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const formatTime = (ts?: number) => {
+  const d = new Date(ts || Date.now())
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+const dayKey = (ts?: number) => {
+  const d = new Date(ts || Date.now())
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+const formatDayLabel = (ts?: number) => {
+  const d = new Date(ts || Date.now())
+  const now = new Date()
+  const todayKey = dayKey(now.getTime())
+  const y = new Date(now)
+  y.setDate(now.getDate() - 1)
+  const yKey = dayKey(y.getTime())
+  const k = dayKey(d.getTime())
+  if (k === todayKey) return 'Today'
+  if (k === yKey) return 'Yesterday'
+  return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 function parseAIResponse(rawText: string): ParsedAI {
   const result: ParsedAI = { title: '', details: [], weeks: [] }
   if (!rawText) return result
 
-  const text = cleanMarkdown(rawText)
+const text = rawText || ''
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -165,17 +165,28 @@ export default function ChatbotPage() {
     year: string
   }>()
 
+  const {
+  messages,
+  loading: isLoading,
+  sendMessage,
+  clearChat,
+  loadFromStorage,
+  reactToMessage,
+  sendFeedback,
+} = useChatbotStore();
+
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  
   const [inputValue, setInputValue] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [isTyping, setIsTyping] = useState(false)
   const [userData, setUserData] = useState<any>(null)
-  const [aliasOfInput, setAliasOfInput] = useState('')
   const [likeInProgress, setLikeInProgress] = useState<number | null>(null)
   const [dislikeInProgress, setDislikeInProgress] = useState<number | null>(null)
-  const [dislikeInputFor, setDislikeInputFor] = useState<number | null>(null)
-  const [actionMessage, setActionMessage] = useState<{ id: number; text: string } | null>(null)
+  const [actionMessage, setActionMessage] =
+  useState<{ id: string; text: string } | null>(null)
+
+  useEffect(() => {
+  loadFromStorage();
+}, []);
   
 
   useEffect(() => {
@@ -207,21 +218,6 @@ export default function ChatbotPage() {
     }
   }, [])
 
-  // Load chat history from localStorage
-  useEffect(() => {
-    const cached = loadCache()
-    if (cached.length > 0) {
-      setMessages(cached)
-    }
-  }, [])
-
-  // Keep chat history cached
-  useEffect(() => {
-    if (messages.length > 0) {
-      saveCache(messages)
-    }
-  }, [messages])
-
   // Scroll to bottom whenever messages change
   const scrollToBottom = (smooth = false) => {
     if (!scrollRef.current) return
@@ -233,187 +229,155 @@ export default function ChatbotPage() {
   }
 
   useLayoutEffect(() => {
-    scrollToBottom()
-  }, [messages.length])
+  scrollToBottom()
+}, [messages])
+
+  const flash = (id: string, text: string) => {
+    setActionMessage({ id, text })
+    setTimeout(() => setActionMessage(null), 1200)
+  }
+
+  const handleCopy = async (msg: any) => {
+    try {
+      await navigator.clipboard.writeText(msg.text || '')
+      flash(msg.id, 'Copied!')
+    } catch {
+      flash(msg.id, 'Copy failed')
+    }
+  }
+
+  const handleShare = async (msg: any) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: msg.text || '' })
+        flash(msg.id, 'Shared!')
+      } else {
+        await navigator.clipboard.writeText(msg.text || '')
+        flash(msg.id, 'Copied to share')
+      }
+    } catch {
+      // user cancelled share or it failed
+    }
+  }
 
   // Create message objects
-  const createMessage = (sender: Sender, text: string, extra?: Partial<Message>): Message => ({
-    id: Date.now() + Math.random(),
-    sender,
-    text,
-    timestamp: Date.now(),
-    ...extra,
-  })
 
-  const userMsg = (text: string, extra?: Partial<Message>) => createMessage('user', text, extra)
-  const botMsg = (text: string, extra?: Partial<Message>) => createMessage('bot', text, extra)
+ 
 
-  const addMessage = (msg: Message) => {
-    setMessages((prev) => [...prev, msg])
-  }
+  
 
-  const clearChatLocally = () => {
-    setMessages([])
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(CHAT_CLEARED_FLAG, String(Date.now()))
-        localStorage.removeItem(HISTORY_KEY)
-      } catch {}
-    }
-  }
+  // NOTE: Dislike should stay simple (no extra textbox/modal). We just send feedback.
 
-  const sendMessage = async (content?: string) => {
-    const value = typeof content === 'string' ? content : inputValue.trim()
-    if (!value || isLoading) return
 
-    const ranged = params?.ranged || ''
-    const countryName = params?.countryName || ''
-    const month = params?.month || ''
-    const year = params?.year || ''
-
-    const paramsInfo = {
-      range: ranged,
-      countryName,
-      month,
-      year,
-      user_company_id: userData?.company_id,
-    }
-
-    const userMessage = value
-    const staffAlias = aliasOfInput.trim() || userData?.company_name || 'User'
-    const contentWithAlias = `${userMessage} (Alias: ${staffAlias})`
-
-    addMessage(userMsg(userMessage))
-    setInputValue('')
-    setIsLoading(true)
-    setIsTyping(true)
-    scrollToBottom(true)
-
-    try {
-      const resp = await fetch(`${API_BASE_URL}/chatbot`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ action: 'chat', query: contentWithAlias, params: paramsInfo }),
-      })
-      const data = await resp.json()
-      if (resp.ok && (data?.success as boolean)) {
-        addMessage(
-          botMsg(String(data.response ?? ''), {
-            serverId: data.message_id,
-            promptText: contentWithAlias,
-          })
-        )
-      } else {
-        addMessage(botMsg('Error processing request', { error: true }))
-      }
-    } catch {
-      addMessage(botMsg('Network error', { error: true }))
-    } finally {
-      setIsLoading(false)
-      setIsTyping(false)
-      scrollToBottom(true)
-    }
-  }
-
-  const handleLike = async (msgObj: Message) => {
-    if (!msgObj.serverId) return
-    setLikeInProgress(msgObj.id)
-    setActionMessage(null)
-
-    try {
-      const resp = await fetch(`${API_BASE_URL}/chatbot/feedback`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message_id: msgObj.serverId,
-          feedback: 'like',
-          original_prompt: msgObj.promptText,
-        }),
-      })
-
-      if (!resp.ok) {
-        setMessages((prev) => prev.map((m) => (m.id === msgObj.id ? { ...m, liked: 'like' } : m)))
-        setActionMessage({ id: msgObj.id, text: 'Liked!' })
-        setTimeout(() => setActionMessage(null), 1500)
-      } else {
-        setMessages((prev) => prev.map((m) => (m.id === msgObj.id ? { ...m, liked: 'like' } : m)))
-        setActionMessage({ id: msgObj.id, text: 'Liked!' })
-        setTimeout(() => setActionMessage(null), 1500)
-      }
-    } catch {
-      setMessages((prev) => prev.map((m) => (m.id === msgObj.id ? { ...m, liked: 'like' } : m)))
-      setActionMessage({ id: msgObj.id, text: 'Liked!' })
-      setTimeout(() => setActionMessage(null), 1500)
-    } finally {
-      setLikeInProgress(null)
-    }
-  }
-
-  const handleDislike = async (msgObj: Message) => {
-    if (!msgObj.serverId) return
-    setDislikeInProgress(msgObj.id)
-    setActionMessage(null)
-    setDislikeInputFor(msgObj.id)
-  }
-
-  const handleSaveDislike = async (feedbackText: string) => {
-    const msgObj = messages.find((m) => m.id === dislikeInputFor)
-    if (!msgObj || !msgObj.serverId) return
-
-    try {
-      const resp = await fetch(`${API_BASE_URL}/chatbot/feedback`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message_id: msgObj.serverId,
-          feedback: 'dislike',
-          original_prompt: msgObj.promptText,
-          additional_feedback: feedbackText,
-        }),
-      })
-
-      if (!resp.ok) {
-        setMessages((prev) => prev.map((m) => (m.id === msgObj.id ? { ...m, liked: 'dislike' } : m)))
-        setActionMessage({ id: msgObj.id, text: 'Disliked!' })
-        setTimeout(() => setActionMessage(null), 1500)
-        setDislikeInputFor(null)
-        setAliasOfInput('')
-      } else {
-        setMessages((prev) => prev.map((m) => (m.id === msgObj.id ? { ...m, liked: 'dislike' } : m)))
-        setActionMessage({ id: msgObj.id, text: 'Disliked!' })
-        setTimeout(() => setActionMessage(null), 1500)
-        setDislikeInputFor(null)
-        setAliasOfInput('')
-      }
-    } catch {
-      setMessages((prev) => prev.map((m) => (m.id === msgObj.id ? { ...m, liked: 'dislike' } : m)))
-      setActionMessage({ id: msgObj.id, text: 'Disliked!' })
-      setTimeout(() => setActionMessage(null), 1500)
-      setDislikeInputFor(null)
-      setAliasOfInput('')
-    }
-  }
-
-  const handleCancelDislike = () => {
-    handleSaveDislike('User provided negative feedback without additional comments')
-  }
-
-  const clearChat = () => {
-    clearChatLocally()
-  }
 
   const getValidMessages = () =>
     messages.filter((msg) => msg && typeof msg === 'object' && msg.text && msg.sender)
   const validMessages = getValidMessages()
+
+function convertPlainTextToMarkdown(text: string): string {
+  const lines = text.split('\n');
+  let out: string[] = [];
+
+  let productIndex = 0;
+  let collectingProductPoints = false;
+  let productPoints: string[] = [];
+
+  let inConsolidatedActions = false;
+  let consolidatedPoints: string[] = [];
+
+  const flushProductPoints = () => {
+    if (productPoints.length > 0) {
+      productPoints.forEach(p => out.push(`1. ${p}`)); // ordered list
+      productPoints = [];
+    }
+  };
+
+  for (let raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    // ================= SUMMARY =================
+    if (/^SUMMARY$/i.test(line)) {
+      flushProductPoints();
+      out.push('## **SUMMARY**');
+      collectingProductPoints = false;
+      inConsolidatedActions = false;
+      continue;
+    }
+
+    // ================= ACTIONS =================
+    if (/^ACTIONS$/i.test(line)) {
+      flushProductPoints();
+      out.push('\n## **ACTIONS**');
+      collectingProductPoints = false;
+      inConsolidatedActions = false;
+      continue;
+    }
+
+    // ========== CONSOLIDATED ACTIONS ==========
+    if (/^CONSOLIDATED ACTIONS$/i.test(line)) {
+      flushProductPoints();
+      out.push('\n## **CONSOLIDATED ACTIONS**');
+      collectingProductPoints = false;
+      inConsolidatedActions = true;
+      continue;
+    }
+
+    // ================= PRODUCT NAME =================
+    const productMatch = line.match(/^Product name\s*-\s*(.+)$/i);
+    if (productMatch) {
+      flushProductPoints();
+      productIndex++;
+      out.push(`\n### ${productIndex}. **Product name – ${productMatch[1].trim()}**`);
+      collectingProductPoints = true;
+      inConsolidatedActions = false;
+      continue;
+    }
+
+    // ================= ACTION LINE =================
+    if (/^(Review|Check)\b/i.test(line)) {
+      flushProductPoints();
+      out.push(`\n**Action: ${line}**\n`);
+      collectingProductPoints = false;
+      inConsolidatedActions = false;
+      continue;
+    }
+
+    // ================= PRODUCT POINTS =================
+    if (collectingProductPoints) {
+      const sentences = line
+        .split(/(?<=[.])\s+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      productPoints.push(...sentences);
+      continue;
+    }
+
+    // ========== CONSOLIDATED ACTION POINTS ==========
+    if (inConsolidatedActions) {
+      consolidatedPoints.push(line);
+      continue;
+    }
+
+    // ================= SUMMARY BULLETS =================
+    out.push(`- ${line}`);
+  }
+
+  // Flush remaining product points
+  flushProductPoints();
+
+  // Flush consolidated actions as ordered list
+  if (consolidatedPoints.length > 0) {
+    consolidatedPoints.forEach(p => out.push(`1. ${p}`));
+  }
+
+  return out.join('\n');
+}
+
+
+
+
 
   if (!userData) {
     return <div className="p-4">Loading...</div>
@@ -425,7 +389,7 @@ export default function ChatbotPage() {
         <h1 className="text-base sm:text-lg md:text-xl lg:text-[1.625rem] font-bold">
           Hi <i>{userData?.company_name?.split(' ')[0] || 'User'}!</i>
         </h1>
-        <p className="text-xs sm:text-sm md:text-base lg:text-[1rem] mt-1">
+        <p style={{ fontFamily: "Lato, sans-serif" }} className="text-xs sm:text-sm md:text-base  mt-1 ">
         I'm your Analytics Assistant, here to help you understand your business data, generate insights, and make informed decisions. What would you like to explore today?
         </p>
       </div>
@@ -437,11 +401,17 @@ export default function ChatbotPage() {
           <div className="min-h-full flex flex-col justify-end space-y-3">
             {validMessages.length > 0 ? (
               <>
-                {validMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
+                {Array.from(
+  new Map(validMessages.map((m) => [m.id, m])).values()
+).map((msg, idx, arr) => (
+  <React.Fragment key={msg.id}>
+    {(idx === 0 || dayKey(msg.timestamp) !== dayKey(arr[idx - 1]?.timestamp)) && (
+      <div className="chat-date-separator"><span>{formatDayLabel(msg.timestamp)}</span></div>
+    )}
+    <div
+    key={msg.id}
+    className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+  >
                     <div className="flex flex-col mx-4">
                       <div
                         className={`px-4 py-2 rounded-2xl text-xs sm:text-sm md:text-[0.75] lg:text-[0.875rem] break-words max-w-full sm:max-w-[50vw] md:max-w-[50vw] lg:max-w-full ${msg.sender === 'user' ? 'bg-[#5EA68E] text-[#F8EDCE] mb-2' : 'bg-[#D9D9D9] text-gray-800 mb-1'}`}
@@ -505,24 +475,93 @@ export default function ChatbotPage() {
                               )
                             } else {
                               // Default: render as Markdown
-                              return <ReactMarkdown>{msg.text}</ReactMarkdown>
+
+
+return (
+  <div className="markdown-body">
+   <div className="markdown-body">
+  <ReactMarkdown>
+    {convertPlainTextToMarkdown(msg.text)}
+  </ReactMarkdown>
+</div>
+  </div>
+);
+
                             }
                           })()
                         ) : (
                           msg.text
                         )}
+                      <div className={`chat-msg-meta ${msg.sender === 'user' ? 'chat-msg-meta-user' : 'chat-msg-meta-bot'}`}>{formatTime(msg.timestamp)}</div>
                       </div>
 
                       {msg.sender !== 'user' && (
-                        <div className="flex flex-col ml-2 mb-2">
-                          {/* action buttons placeholder */}
+                        <div className="chat-msg-actions ml-2 mb-2">
+                          <button
+                            type="button"
+                            className={`chat-action-btn ${msg.liked === 'like' ? 'is-active' : ''}`}
+                            onClick={() => {
+                              const next = msg.liked === 'like' ? undefined : 'like'
+                              reactToMessage(msg.id, next)
+                              if (next) {
+                                sendFeedback(msg.id, 'like')
+                                flash(msg.id, 'Liked!')
+                              }
+                            }}
+                            aria-label="Like"
+                            title="Like"
+                          >
+                            <ThumbsUp size={16} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className={`chat-action-btn ${msg.liked === 'dislike' ? 'is-active' : ''}`}
+                            onClick={() => {
+                              const next = msg.liked === 'dislike' ? undefined : 'dislike'
+                              reactToMessage(msg.id, next)
+                              if (next) {
+                                sendFeedback(msg.id, 'dislike')
+                                flash(msg.id, 'Disliked!')
+                              }
+                            }}
+                            aria-label="Dislike"
+                            title="Dislike"
+                          >
+                            <ThumbsDown size={16} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-action-btn"
+                            onClick={() => handleCopy(msg)}
+                            aria-label="Copy"
+                            title="Copy"
+                          >
+                            <Copy size={16} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-action-btn"
+                            onClick={() => handleShare(msg)}
+                            aria-label="Share"
+                            title="Share"
+                          >
+                            <Share2 size={16} />
+                          </button>
+
+                          {actionMessage?.id === msg.id && (
+                            <span className="chat-action-toast">{actionMessage.text}</span>
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
+  </React.Fragment>
                 ))}
 
-                {isTyping && (
+                {isLoading && (
                   <div className="flex justify-start">
                     <div className="flex items-center px-4 py-2 rounded-2xl text-[#D9D9D9] rounded-bl-none">
                       {[0, 1, 2, 3, 4].map((i) => (
@@ -547,34 +586,6 @@ export default function ChatbotPage() {
         {/* Input area */}
 
         <div className="border-t border-gray-200 p-2 sm:p-3 md:p-4 flex flex-col gap-2">
-          {dislikeInputFor && (
-            <div className="mb-2 p-2 border border-red-300 rounded-md bg-red-50">
-              <p className="text-xs sm:text-sm text-red-700 mb-1">
-                Please share what went wrong so we can improve:
-              </p>
-              <textarea
-                value={aliasOfInput}
-                onChange={(e) => setAliasOfInput(e.target.value)}
-                className="w-full border border-red-300 rounded-md p-1 text-xs sm:text-sm"
-                rows={2}
-              />
-              <div className="flex justify-end gap-2 mt-1">
-                <button
-                  onClick={() => handleSaveDislike(aliasOfInput)}
-                  className="px-2 py-1 text-xs sm:text-sm bg-red-600 text-white rounded-md"
-                >
-                  Submit
-                </button>
-                <button
-                  onClick={handleCancelDislike}
-                  className="px-2 py-1 text-xs sm:text-sm border border-gray-300 rounded-md"
-                >
-                  Skip
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="flex items-center gap-4">
             <div className="flex-1 flex items-center bg-[#D9D9D9] rounded-full px-3 py-3">
               <input
@@ -582,17 +593,21 @@ export default function ChatbotPage() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    sendMessage()
-                  }
-                }}
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    sendMessage(inputValue)
+    setInputValue('')
+  }
+}}
                 disabled={isLoading}
                 autoFocus
                 className="flex-1 bg-transparent text-black caret-black outline-none text-xs sm:text-sm md:text-[0.75rem] lg:text-[0.875rem] h-full cursor-text"
               />
               <RightArrow
-                onClick={() => sendMessage()}
+                 onClick={() => {
+    sendMessage(inputValue)
+    setInputValue('')
+  }}
                 disabled={isLoading || !inputValue.trim()}
                 className="cursor-pointer"
               />

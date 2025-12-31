@@ -359,7 +359,7 @@ const REVENUE_OPTIONS = [
 ];
 
 // ✅ Currency dropdown options
-const CURRENCY_OPTIONS = ["USD", "GBP", "INR"];
+const CURRENCY_OPTIONS = ["USD", "GBP", "INR", "CAD"];
 
 export default function UserInfoCard() {
   const { isOpen, openModal, closeModal } = useModal();

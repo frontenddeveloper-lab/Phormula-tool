@@ -945,11 +945,11 @@ const CircleChart: React.FC<CircleChartProps> = ({
           data: values,
           backgroundColor: [
             "#AB64B5",
-            "#ff5c5c",
-            "#FFBE26",
+            "#FFBE25",
+            "#C03030",
             "#F47A00",
-            "#00627D",
-            "#5EA49B",
+            "#01627F",
+            "#2DA49A",
           ],
           borderWidth: 1,
         },
@@ -978,13 +978,13 @@ const CircleChart: React.FC<CircleChartProps> = ({
           {
             data: dummyValues,
             backgroundColor: [
-              "#AB64B5",
-              "#ff5c5c",
-              "#FFBE26",
-              "#F47A00",
-              "#00627D",
-              "#5EA49B",
-            ],
+            "#AB64B5",
+            "#FFBE25",
+            "#C03030",
+            "#F47A00",
+            "#01627F",
+            "#2DA49A",
+          ],
             borderWidth: 1,
           },
         ],
@@ -1044,14 +1044,7 @@ const CircleChart: React.FC<CircleChartProps> = ({
       <div className="mb-4">
         <div className="w-fit mx-auto md:mx-0">
           <PageBreadcrumb
-            pageTitle={`Expense Breakdown – <span class='text-[#5EA68E] font-bold'>
-        ${range === "yearly"
-                ? `Year'${String(year).slice(-2)}`
-                : countryName?.toLowerCase() === "global"
-                  ? "GLOBAL"
-                  : countryName?.toUpperCase()
-              }
-      </span>`}
+            pageTitle={`Expense Breakdown`}
             variant="page"
             textSize="2xl"
             align="left"

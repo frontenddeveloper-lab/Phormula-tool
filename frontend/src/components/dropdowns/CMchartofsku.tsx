@@ -1022,16 +1022,16 @@ const CMchartofsku: React.FC<CmChartOfSkuProps> = ({
       return (
         <div className="flex flex-wrap items-baseline gap-2 justify-center sm:justify-start">
           <PageBreadcrumb
-            pageTitle="CM1 Profit Breakdown -"
+            pageTitle="Product Wise CM1 Breakdown"
             variant="page"
             align="left"
             textSize="2xl"
           />
-          <span className="text-[#5EA68E] font-bold text-lg sm:text-2xl md:text-2xl">
+          {/* <span className="text-[#5EA68E] font-bold text-lg sm:text-2xl md:text-2xl">
             {countryName?.toLowerCase() === "global"
               ? "GLOBAL"
               : countryName?.toUpperCase()}
-          </span>
+          </span> */}
         </div>
       );
     }
@@ -1039,28 +1039,28 @@ const CMchartofsku: React.FC<CmChartOfSkuProps> = ({
       return (
         <div className="flex gap-2">
           <PageBreadcrumb
-            pageTitle="CM1 Profit Breakdown -"
+            pageTitle="Product Wise CM1 Breakdown"
             variant="page"
             align="left"
             textSize="2xl"
           />
-          <span className="text-[#5EA68E] text-2xl">
+          {/* <span className="text-[#5EA68E] text-2xl">
             {convertToAbbreviatedMonth(month)}&apos;{y.slice(-2)}
-          </span>
+          </span> */}
         </div>
       );
     }
     return (
       <div className="flex gap-2">
         <PageBreadcrumb
-          pageTitle="CM1 Profit Breakdown - "
+          pageTitle="Product Wise CM1 Breakdown"
           variant="page"
           align="left"
           textSize="2xl"
         />
-        <span className="text-[#5EA68E] font-bold text-lg sm:text-2xl md:text-2xl">
+        {/* <span className="text-[#5EA68E] font-bold text-lg sm:text-2xl md:text-2xl">
           Year&apos;{y.slice(-2)}
-        </span>
+        </span> */}
       </div>
     );
   }, [range, month, year, selectedQuarter, countryName]);
@@ -1109,14 +1109,7 @@ const CMchartofsku: React.FC<CmChartOfSkuProps> = ({
       <div className="mb-4">
         <div className="w-fit mx-auto md:mx-0">
           <PageBreadcrumb
-            pageTitle={`CM1 Profit Breakdown – <span class='text-[#5EA68E] font-bold'>
-      ${range === "yearly"
-                ? `Year'${String(year).slice(-2)}`
-                : countryName?.toLowerCase() === "global"
-                  ? "GLOBAL"
-                  : countryName?.toUpperCase()
-              }
-    </span>`}
+            pageTitle={`Product Wise CM1 Breakdown`}
             variant="page"
             align="left"
             textSize="2xl"

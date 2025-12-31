@@ -27,6 +27,8 @@ from app.utils.currency_utils import (  process_global_yearly_skuwise_data ,
 
 from dotenv import load_dotenv
 from sqlalchemy import MetaData
+from sqlalchemy import text
+
 
 
 load_dotenv()
@@ -389,10 +391,82 @@ def upload():
         raise ValueError("Unsupported country")
 
             
-    with engine.connect() as conn:
-        country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
+    # with engine.connect() as conn:
+    #     country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
 
-    df = df.merge(country_df, on='sku', how='left')
+    # df = df.merge(country_df, on='sku', how='left')
+
+    
+
+    MONTH_NUM = {
+        "january": 1, "february": 2, "march": 3, "april": 4,
+        "may": 5, "june": 6, "july": 7, "august": 8,
+        "september": 9, "october": 10, "november": 11, "december": 12
+    }
+
+    target_month_num = MONTH_NUM.get(month.lower())
+    if not target_month_num:
+        raise ValueError(f"Invalid month: {month}. Expected january..december")
+
+    target_year = int(year)  # form year string -> int
+
+    month_case_sql = """
+    CASE lower(month)
+        WHEN 'january' THEN 1
+        WHEN 'february' THEN 2
+        WHEN 'march' THEN 3
+        WHEN 'april' THEN 4
+        WHEN 'may' THEN 5
+        WHEN 'june' THEN 6
+        WHEN 'july' THEN 7
+        WHEN 'august' THEN 8
+        WHEN 'september' THEN 9
+        WHEN 'october' THEN 10
+        WHEN 'november' THEN 11
+        WHEN 'december' THEN 12
+        ELSE NULL
+    END
+    """
+
+    # year is string in DB, so cast it for comparisons
+    price_asof_query = text(f"""
+        SELECT sku, price, currency, product_name
+        FROM (
+            SELECT
+                {sku_column} AS sku,
+                price,
+                currency,
+                product_name,
+                CAST(year AS INTEGER) AS year_int,
+                {month_case_sql} AS month_num,
+                ROW_NUMBER() OVER (
+                    PARTITION BY {sku_column}
+                    ORDER BY CAST(year AS INTEGER) DESC, {month_case_sql} DESC
+                ) AS rn
+            FROM {country_table_name}
+            WHERE
+                year IS NOT NULL
+                AND trim(year) <> ''
+                AND {month_case_sql} IS NOT NULL
+                AND (
+                    CAST(year AS INTEGER) < :target_year
+                    OR (CAST(year AS INTEGER) = :target_year AND {month_case_sql} <= :target_month_num)
+                )
+        ) x
+        WHERE x.rn = 1
+    """)
+
+    with engine.connect() as conn:
+        country_df = pd.read_sql(
+            price_asof_query,
+            conn,
+            params={"target_year": target_year, "target_month_num": target_month_num}
+        )
+
+    df = df.merge(country_df, on="sku", how="left")
+
+
+    
 
     with engine.connect() as conn:
         countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)
@@ -711,10 +785,79 @@ def upload():
                 raise ValueError("Unsupported country")
 
             
-            with engine.connect() as conn:
-                country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
+            # with engine.connect() as conn:
+            #     country_df = pd.read_sql(f"SELECT {sku_column} AS sku, price,currency, product_name FROM {country_table_name}", conn)
 
-            df = df.merge(country_df, on='sku', how='left')
+            # df = df.merge(country_df, on='sku', how='left')
+
+            
+            MONTH_NUM = {
+                "january": 1, "february": 2, "march": 3, "april": 4,
+                "may": 5, "june": 6, "july": 7, "august": 8,
+                "september": 9, "october": 10, "november": 11, "december": 12
+            }
+
+            target_month_num = MONTH_NUM.get(month.lower())
+            if not target_month_num:
+                raise ValueError(f"Invalid month: {month}. Expected january..december")
+
+            target_year = int(year)  # form year string -> int
+
+            month_case_sql = """
+            CASE lower(month)
+                WHEN 'january' THEN 1
+                WHEN 'february' THEN 2
+                WHEN 'march' THEN 3
+                WHEN 'april' THEN 4
+                WHEN 'may' THEN 5
+                WHEN 'june' THEN 6
+                WHEN 'july' THEN 7
+                WHEN 'august' THEN 8
+                WHEN 'september' THEN 9
+                WHEN 'october' THEN 10
+                WHEN 'november' THEN 11
+                WHEN 'december' THEN 12
+                ELSE NULL
+            END
+            """
+
+            # year is string in DB, so cast it for comparisons
+            price_asof_query = text(f"""
+                SELECT sku, price, currency, product_name
+                FROM (
+                    SELECT
+                        {sku_column} AS sku,
+                        price,
+                        currency,
+                        product_name,
+                        CAST(year AS INTEGER) AS year_int,
+                        {month_case_sql} AS month_num,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY {sku_column}
+                            ORDER BY CAST(year AS INTEGER) DESC, {month_case_sql} DESC
+                        ) AS rn
+                    FROM {country_table_name}
+                    WHERE
+                        year IS NOT NULL
+                        AND trim(year) <> ''
+                        AND {month_case_sql} IS NOT NULL
+                        AND (
+                            CAST(year AS INTEGER) < :target_year
+                            OR (CAST(year AS INTEGER) = :target_year AND {month_case_sql} <= :target_month_num)
+                        )
+                ) x
+                WHERE x.rn = 1
+            """)
+
+            with engine.connect() as conn:
+                country_df = pd.read_sql(
+                    price_asof_query,
+                    conn,
+                    params={"target_year": target_year, "target_month_num": target_month_num}
+                )
+
+            df = df.merge(country_df, on="sku", how="left")
+
 
             with engine.connect() as conn:
                 countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)
@@ -853,7 +996,7 @@ def upload():
 
                 # Generate sales pie chart
                 if country.lower() == 'uk':
-                    total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold  = process_skuwise_data(user_id, country, month, year)
+                    total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold, total_product_sales = process_skuwise_data(user_id, country, month, year)
                     ytd_pie_chart = process_yearly_skuwise_data(user_id, country, year)
                     qtd_pie_chart = process_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
                     # sales_pie_chart, platform_fee, rembursement_fee = create_sales_pie_chart(df_modified)
@@ -887,6 +1030,7 @@ def upload():
                     sales_chart_img=None,
                     expense_chart_img=None,
                     total_sales=float(total_sales),
+                    total_product_sales=float(total_product_sales),
                     total_profit=float(total_profit),
                     otherwplatform=float(platform_fee),
                     taxncredit = float(taxncredit) if taxncredit is not None else 0.0,
@@ -919,7 +1063,7 @@ def upload():
                     print("Table exists! Running next month logic...")
     # Run for next month too
                     if country.lower() == 'uk':
-                        total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold = process_skuwise_data(user_id, country, next_month, next_year)
+                        total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold, total_product_sales = process_skuwise_data(user_id, country, next_month, next_year)
                     elif country.lower() == 'us':
                         platform_fee, rembursement_fee, total_cous, total_amazon_fee,  total_profit, total_expense, total_fba_fees, cm2_profit, cm2_margins, acos, rembursment_vs_cm2_margins, advertising_total, reimbursement_vs_sales, unit_sold, total_sales, otherwplatform,taxncredit = process_skuwise_us_data(user_id, country, next_month, next_year)
                         print("success run")
@@ -934,6 +1078,7 @@ def upload():
                     # 'sales_chart_img': sales_pie_chart,
                     # 'expense_chart_img': expense_pie_chart,
                     'total_sales': total_sales,
+                    'total_product_sales': total_product_sales,
                     'total_profit': total_profit,
                     'otherwplatform': platform_fee,
                     'taxncredit': taxncredit,
@@ -958,181 +1103,7 @@ def upload():
         return jsonify({'success': False, 'message': 'No file selected. Please select a file.'}), 400
 
 
-# @upload_bp.route('/ConfirmationFeepreview', methods=['GET'])
-# def ConfirmationFeepreview():
-#     return jsonify({'message': 'ConfirmationFeepreview successful!'}), 200
 
-# @upload_bp.route('/multiCountry', methods=['POST'])
-# def multiCountry():
-    
-#     # Authentication check remains the same
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         # Decode the JWT token to check the user
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-
-#     # Handle file upload
-#     file = request.files.get('file')
-#     if not file:
-#         return jsonify({'error': 'No file provided'}), 400
-
-#     # Check file type
-#     if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx')):
-#         return jsonify({'error': 'Invalid file type. Only CSV or XLSX files are allowed.'}), 400
-
-#     try:
-#         # Load PostgreSQL conn details from environment variables
-#         from dotenv import load_dotenv
-#         load_dotenv()
-#         db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
-        
-#         # Read the file into a pandas DataFrame (handling both CSV and XLSX)
-#         if file.filename.endswith('.csv'):
-#             df = pd.read_csv(BytesIO(file.read()))
-#         elif file.filename.endswith('.xlsx'):
-#             df = pd.read_excel(BytesIO(file.read()))
-
-#         # Trim column names to remove unexpected spaces
-#         df.columns = df.columns.str.strip()
-
-#         # Replace NaN values with None (equivalent of NULL in SQL)
-#         df = df.where(pd.notnull(df), None)
-
-#         # Create the PostgreSQL engine
-#         user_engine = create_engine(db_url)
-
-#         # Close any existing session and create a new session
-#         Session = sessionmaker(bind=user_engine)
-#         user_session = Session()
-        
-#         table_name = f"sku_{user_id}_data_table"
-
-#         # Use inspect to check if the table exists
-#         inspector = inspect(user_engine)
-#         if inspector.has_table(table_name):
-#             print("Table exists, dropping...")
-#             # Use metadata approach for PostgreSQL
-#             metadata = MetaData()
-#             user_specific_table = Table(table_name, metadata, autoload_with=user_engine)
-#             user_specific_table.drop(user_engine)
-#             print("Table dropped successfully")
-
-#         # Create the new table with the updated schema
-#         metadata = MetaData()
-#         metadata.bind = user_engine
-#         user_specific_table = Table(
-#             table_name, metadata,
-#             Column('id', Integer, primary_key=True),
-#             Column('user_id', Integer, nullable=False),
-#             Column('s_no', Integer, nullable=False),
-#             Column('product_name', String(255), nullable=False),
-#             Column('product_barcode', String(255), nullable=False),
-#             Column('sku_uk', String(255), nullable=False),
-#             Column('sku_us', String(255), nullable=False),   # Ensure SKU column is here
-#             Column('asin', String(255), nullable=False),
-#             Column('price', Float, nullable=True),  # Allow NULL values for price
-#             Column('currency', String(255), nullable=False),
-#         )
-
-#         metadata.create_all(user_engine)  # Recreate the table
-
-#         # Debugging: print the columns to check if SKU is present
-#         print("Table columns:", [column.name for column in user_specific_table.columns])
-
-#         # Process each row from the DataFrame and insert data into the table
-#         for _, row in df.iterrows():
-#             # Ensure product_barcode is a string and strip spaces
-#             product_barcode = str(row.get('Product Barcode', '')).strip()
-#             if not product_barcode:
-#                 print(f"Warning: Missing product_barcode for row: {row}")
-#                 product_barcode = ''  # Ensure it has a value to prevent IntegrityError
-
-#             # Ensure product_name, asin, SKU are strings to avoid .strip() errors
-#             product_name = str(row.get('Product Name', '')).strip()
-#             asin = str(row.get('ASIN', '')).strip()
-#             sku_uk = str(row.get('SKU_UK', '')).strip()
-#             sku_us = str(row.get('SKU_US', '')).strip()
-#             currency = str(row.get('Currency', '')).strip()
-
-#             # Ensure price is a valid float or None
-#             price_value = row.get('Landing Cost', None)
-#             try:
-#                 price_value = float(price_value) if price_value not in [None, ''] else None
-#             except ValueError:
-#                 print(f"Invalid price value: {price_value}, setting to None")
-#                 price_value = None
-
-#             # Insert data into the table
-#             insert_stmt = user_specific_table.insert().values(
-#                 user_id=user_id,
-#                 s_no=row.get('S. No.', None),
-#                 product_name=product_name,
-#                 product_barcode=product_barcode,
-#                 sku_uk=sku_uk, 
-#                 sku_us = sku_us, # Use SKU from the row data
-#                 asin=asin,
-#                 price=price_value,
-#                 currency=currency,  # Use validated price
-#             )
-#             user_session.execute(insert_stmt)
-
-#         # Commit the session to save the data
-#         user_session.commit()
-#         conn = user_engine.connect()
-#         query = user_specific_table.select()
-#         results = conn.execute(query).mappings().all()
-        
-#         return jsonify({'message': 'File uploaded and data saved successfully'}), 200
-
-#     except Exception as e:
-#         print(f"Error processing file: {str(e)}")
-#         return jsonify({'error': f'Error processing file: {str(e)}'}), 500
-
-# from sqlalchemy import create_engine, text  
-
-# @upload_bp.route('/file-upload-status', methods=['GET'])
-# def check_file_upload_status():
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-
-#     try:
-#         db_url = os.getenv('DATABASE_URL')
-#         engine = create_engine(db_url)
-#         conn = engine.connect()
-        
-#         table_name = f"sku_{user_id}_data_table"
-
-#         query = text(f"""
-#             SELECT COUNT(*) FROM {table_name}
-#             WHERE user_id = :user_id
-#             AND (sku_us IS NOT NULL OR sku_uk IS NOT NULL)
-#         """)
-#         result = conn.execute(query, {"user_id": user_id}).scalar()
-
-#         return jsonify({'file_uploaded': result > 0}), 200
-
-#     except Exception as e:
-#         print(f"Error checking file upload status: {str(e)}")
-#         return jsonify({'error': 'Server error'}), 500
 
 
 # ---------- Helpers ----------
@@ -1235,6 +1206,9 @@ def multiCountry():
         Column('asin', String(255), nullable=True),
         Column('price', Float, nullable=True),
         Column('currency', String(255), nullable=True),
+        Column('month', String(20), nullable=True),
+        Column('year', String(20), nullable=True),
+
     )
 
     session = None
@@ -1296,6 +1270,21 @@ def multiCountry():
 
             currency = _pick(row, ['currency'])
 
+            month = _pick(row, ['month', 'Month', 'mon', 'mm'])
+            year  = _pick(row, ['year', 'Year', 'yyyy', 'yy'])
+
+            # int conversion (safe)
+            try:
+                month = str(month).strip().lower() if month not in (None, '') else None
+            except Exception:
+                month = None
+
+            try:
+                year = str(year) if year not in (None, '') else None
+            except Exception:
+                year = None
+
+
             # Skip fully empty lines
             if not any([s_no, product_name, product_barcode, asin, sku_uk, sku_us, price_value, currency]):
                 continue
@@ -1316,6 +1305,8 @@ def multiCountry():
                 'asin': _s(asin),
                 'price': price_value,
                 'currency': _s(currency),
+                'month': month,
+                'year': year,
             })
 
         if inserts:
@@ -1393,6 +1384,11 @@ def check_file_upload_status():
         return jsonify({'error': 'Server error'}), 500
 
 
+
+
+from flask import request, jsonify
+import jwt
+
 @upload_bp.route('/upload_history', methods=['GET'])
 def upload_history():
     auth_header = request.headers.get('Authorization')
@@ -1408,9 +1404,13 @@ def upload_history():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
+    # ✅ read optional params
+    # If you also pass country from FE, support it too (safe default = "")
+    country_param = (request.args.get('country') or "").strip().lower()
+    home_currency = (request.args.get('homeCurrency') or "").strip().lower()
+
     uploads = UploadHistory.query.filter_by(user_id=user_id).all()
-    response = []
-    
+
     # Month number to name mapping
     month_names = {
         1: 'january', 2: 'february', 3: 'march', 4: 'april',
@@ -1418,42 +1418,102 @@ def upload_history():
         9: 'september', 10: 'october', 11: 'november', 12: 'december'
     }
 
+    response = []
+
     for upload in uploads:
+        upload_country = (upload.country or "").strip().lower()
+
+        # ✅ IMPORTANT FIX:
+        # When requesting GLOBAL history:
+        # - if homeCurrency is provided => only return global_<currency>
+        # - else => only return base global
+        if country_param == "global":
+            if home_currency:
+                if upload_country != f"global_{home_currency}":
+                    continue
+            else:
+                if upload_country != "global":
+                    continue
+
+        # ✅ Optional: if FE passes specific country, filter by it
+        # (This avoids sending huge payloads)
+        elif country_param:
+            if upload_country != country_param:
+                continue
+
         # Convert numeric month to month name for display
         month_name = month_names.get(upload.month, str(upload.month))
-        
-        table_name = f"user_{upload.country}_{month_name}{upload.year}_data"
+
+        table_name = f"user_{upload_country}_{month_name}{upload.year}_data"
+
         response.append({
-                'month': month_name,
-                'month_num': upload.month,
-                'year': upload.year,
-                'country': upload.country,
-                'file_name': table_name,
-                'total_sales': upload.total_sales,
-                'total_profit': upload.total_profit,
-                'total_expense': upload.total_expense,
-                'total_fba_fees': upload.total_fba_fees,
-                'platform_fee': upload.platform_fee,
-                'rembursement_fee': upload.rembursement_fee,
-                'expense_chart_img': upload.expense_chart_img,
-                'sales_chart_img': upload.sales_chart_img,
-                'qtd_pie_chart': upload.qtd_pie_chart,   # <-- corrected
-                'ytd_pie_chart': upload.ytd_pie_chart,
-                'total_cous': upload.total_cous,
-                'total_amazon_fee': upload.total_amazon_fee,
-                'profit_chart_img': upload.profit_chart_img,
-                'cm2_profit': upload.cm2_profit,          # <-- corrected
-                'cm2_margins': upload.cm2_margins,
-                'acos': upload.acos,
-                'rembursment_vs_cm2_margins': upload.rembursment_vs_cm2_margins,
-                'advertising_total': upload.advertising_total,
-                'reimbursement_vs_sales': upload.reimbursement_vs_sales,
-                'taxncredit' : upload.taxncredit,
-                'unit_sold': upload.unit_sold,
-                'otherwplatform': upload.platform_fee,
-                'taxncredit': upload.taxncredit,
-            })
-    return jsonify({'uploads': response})
+            'month': month_name,
+            'month_num': upload.month,          # ✅ keep numeric month here
+            'year': upload.year,
+            'country': upload_country,
+            'file_name': table_name,
+
+            'total_sales': upload.total_sales,
+            'total_product_sales': upload.total_product_sales,
+            'total_profit': upload.total_profit,
+            'total_expense': upload.total_expense,
+            'total_fba_fees': upload.total_fba_fees,
+
+            'platform_fee': upload.platform_fee,
+            'rembursement_fee': upload.rembursement_fee,
+
+            'expense_chart_img': upload.expense_chart_img,
+            'sales_chart_img': upload.sales_chart_img,
+            'qtd_pie_chart': upload.qtd_pie_chart,
+            'ytd_pie_chart': upload.ytd_pie_chart,
+
+            'total_cous': upload.total_cous,
+            'total_amazon_fee': upload.total_amazon_fee,
+            'profit_chart_img': upload.profit_chart_img,
+
+            'cm2_profit': upload.cm2_profit,
+            'cm2_margins': upload.cm2_margins,
+            'acos': upload.acos,
+
+            'rembursment_vs_cm2_margins': upload.rembursment_vs_cm2_margins,
+            'advertising_total': upload.advertising_total,
+            'reimbursement_vs_sales': upload.reimbursement_vs_sales,
+            'taxncredit': upload.taxncredit,
+            'unit_sold': upload.unit_sold,
+
+            'otherwplatform': upload.platform_fee,
+        })
+
+    return jsonify({'uploads': response}), 200
+
+
+def resolve_country(country, currency):
+    country = (country or "").lower()
+    currency = (currency or "").lower()
+
+    # 1. If country = global
+    if country == "global":
+        if currency == "usd":
+            return "global"
+        elif currency == "inr":
+            return "global_inr"
+        elif currency == "gbp":
+            return "global_gbp"
+        elif currency == "cad":
+            return "global_cad"
+        else:
+            return "global"  # default fallback
+
+    # 2. If country = uk
+    if country == "uk":
+        if currency == "usd":
+            return "uk_usd"
+        else:
+            return "uk"  # default for all other currencies
+
+    # 3. Default (no special logic)
+    return country
+
 
 @upload_bp.route('/upload_history2', methods=['GET'])
 def upload_history2():
@@ -1474,9 +1534,17 @@ def upload_history2():
     month = request.args.get('month')
     year = request.args.get('year')
     quarter = request.args.get('quarter')
-    country = request.args.get('country', '').lower()
 
-    
+    country_param = (request.args.get('country', '') or '').lower()
+
+    # ✅ only use homeCurrency for GLOBAL
+    if country_param == "global":
+        currency_param = (request.args.get('homeCurrency') or 'USD').lower()
+    else:
+        currency_param = None
+
+    country = resolve_country(country_param, currency_param)
+
     # Try to infer range_type if not provided
     if not range_type:
         if month and year:
@@ -1486,7 +1554,9 @@ def upload_history2():
         elif year:
             range_type = 'yearly'
         else:
-            return jsonify({'error': 'Invalid range parameters. Must specify range type or provide appropriate parameters to infer range.'}), 400
+            return jsonify({
+                'error': 'Invalid range parameters. Must specify range type or provide appropriate parameters to infer range.'
+            }), 400
 
     try:
         year_num = int(year)
@@ -1495,6 +1565,7 @@ def upload_history2():
 
     def summarize_uploads(uploads):
         total_sales = sum(upload.total_sales or 0 for upload in uploads)
+        total_product_sales = sum(upload.total_product_sales or 0 for upload in uploads)
         total_profit = sum(upload.total_profit or 0 for upload in uploads)
         total_expense = sum(upload.total_expense or 0 for upload in uploads)
         advertising_total = sum(upload.advertising_total or 0 for upload in uploads)
@@ -1505,9 +1576,9 @@ def upload_history2():
         taxncredit = sum(upload.taxncredit or 0 for upload in uploads)
         unit_sold = sum(upload.unit_sold or 0 for upload in uploads)
 
-        
         return {
             'total_sales': total_sales,
+            'total_product_sales': total_product_sales,
             'total_profit': total_profit,
             'total_expense': total_expense,
             'advertising_total': advertising_total,
@@ -1519,26 +1590,116 @@ def upload_history2():
             'unit_sold': unit_sold,
         }
 
+    # ---------------- comparison helpers ----------------
+
+    month_order = [
+        'january', 'february', 'march',
+        'april', 'may', 'june',
+        'july', 'august', 'september',
+        'october', 'november', 'december'
+    ]
+
+    quarter_months = {
+        'Q1': ['january', 'february', 'march'],
+        'Q2': ['april', 'may', 'june'],
+        'Q3': ['july', 'august', 'september'],
+        'Q4': ['october', 'november', 'december']
+    }
+
+    def get_previous_month(m: str, y: int):
+        m = (m or '').lower()
+        if m not in month_order:
+            return None, None
+        idx = month_order.index(m)
+        if idx == 0:
+            return month_order[-1], y - 1
+        return month_order[idx - 1], y
+
+    def get_quarter_from_month(m: str):
+        m = (m or '').lower()
+        for q, months in quarter_months.items():
+            if m in months:
+                return q
+        return None
+
+    def get_previous_quarter(q: str, y: int):
+        order = ['Q1', 'Q2', 'Q3', 'Q4']
+        if q not in order:
+            return None, None
+        idx = order.index(q)
+        if idx == 0:
+            return 'Q4', y - 1
+        return order[idx - 1], y
+
+    def fetch_monthly_summary(m: str, y: int):
+        if not m or y is None:
+            return None
+        ups = UploadHistory.query.filter_by(
+            user_id=user_id,
+            year=y,
+            month=m.lower(),
+            country=country
+        ).all()
+        return summarize_uploads(ups) if ups else None
+
+    def fetch_quarterly_summary(q: str, y: int):
+        if not q or y is None or q not in quarter_months:
+            return None
+        ups = UploadHistory.query.filter(
+            UploadHistory.user_id == user_id,
+            UploadHistory.year == y,
+            UploadHistory.month.in_(quarter_months[q]),
+            UploadHistory.country == country
+        ).all()
+        return summarize_uploads(ups) if ups else None
+
+    def fetch_yearly_summary(y: int):
+        if y is None:
+            return None
+        ups = UploadHistory.query.filter_by(
+            user_id=user_id,
+            year=y,
+            country=country
+        ).all()
+        return summarize_uploads(ups) if ups else None
+
+    # ---------------- main logic ----------------
 
     if range_type == 'monthly' and month and year:
+        month_l = month.lower()
+
         uploads = UploadHistory.query.filter_by(
             user_id=user_id,
             year=year_num,
-            month=month.lower(),
+            month=month_l,
             country=country
         ).all()
-    
-        
-        return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+        current_summary = summarize_uploads(uploads)
+
+        # last month (prev month)
+        prev_m, prev_y = get_previous_month(month_l, year_num)
+        last_month_summary = fetch_monthly_summary(prev_m, prev_y) if prev_m else None
+
+        # last quarter (previous quarter from the month you are viewing)
+        current_q = get_quarter_from_month(month_l)
+        prev_q, prev_q_y = get_previous_quarter(current_q, year_num) if current_q else (None, None)
+        last_quarter_summary = fetch_quarterly_summary(prev_q, prev_q_y) if prev_q else None
+
+        # last year (same month previous year)
+        last_year_summary = fetch_monthly_summary(month_l, year_num - 1)
+
+        return jsonify({
+            'uploads': [u.id for u in uploads],
+            'summary': current_summary,
+            'summaryComparisons': {
+                'lastMonth': last_month_summary,
+                'lastQuarter': last_quarter_summary,
+                'lastYear': last_year_summary
+            }
+        })
 
     elif range_type == 'quarterly' and quarter and year:
-        # quarter = quarter.lower()
-        quarter_months = {
-            'Q1': ['january', 'february', 'march'],
-            'Q2': ['april', 'may', 'june'],
-            'Q3': ['july', 'august', 'september'],
-            'Q4': ['october', 'november', 'december']
-        }
         if quarter not in quarter_months:
             return jsonify({'error': 'Quarter must be one of: Q1, Q2, Q3, Q4'}), 400
 
@@ -1548,7 +1709,25 @@ def upload_history2():
             UploadHistory.month.in_(quarter_months[quarter]),
             UploadHistory.country == country
         ).all()
-        return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+        current_summary = summarize_uploads(uploads)
+
+        # last quarter (previous quarter)
+        prev_q, prev_q_y = get_previous_quarter(quarter, year_num)
+        last_quarter_summary = fetch_quarterly_summary(prev_q, prev_q_y) if prev_q else None
+
+        # last year (same quarter last year)
+        last_year_summary = fetch_quarterly_summary(quarter, year_num - 1)
+
+        return jsonify({
+            'uploads': [u.id for u in uploads],
+            'summary': current_summary,
+            'summaryComparisons': {
+                'lastMonth': None,
+                'lastQuarter': last_quarter_summary,
+                'lastYear': last_year_summary
+            }
+        })
 
     elif range_type == 'yearly' and year:
         uploads = UploadHistory.query.filter_by(
@@ -1556,7 +1735,21 @@ def upload_history2():
             year=year_num,
             country=country
         ).all()
-        return jsonify({'uploads': [u.id for u in uploads], 'summary': summarize_uploads(uploads)})
+
+        current_summary = summarize_uploads(uploads)
+
+        # last year
+        last_year_summary = fetch_yearly_summary(year_num - 1)
+
+        return jsonify({
+            'uploads': [u.id for u in uploads],
+            'summary': current_summary,
+            'summaryComparisons': {
+                'lastMonth': None,
+                'lastQuarter': None,
+                'lastYear': last_year_summary
+            }
+        })
 
     else:
         return jsonify({'error': 'Invalid range parameters'}), 400
@@ -1639,6 +1832,7 @@ def upload_historyforacos():
             'country': upload.country,
             'file_name': table_name,
             'total_sales': upload.total_sales,
+            'total_product_sales': upload.total_product_sales,
             'total_profit': upload.total_profit,
             'total_expense': upload.total_expense,
             'total_fba_fees': upload.total_fba_fees,

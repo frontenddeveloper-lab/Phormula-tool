@@ -5508,6 +5508,7 @@ import {
   PlatformId,
   platformToCountryName,
 } from "@/lib/utils/platforms";
+import InsightSideDrawer, { SkuInsight } from "@/components/productwise/InsightSideDrawer";
 
 ChartJS.register(
   CategoryScale,
@@ -5525,32 +5526,48 @@ interface ProductwisePerformanceProps {
 }
 
 /* ---------- Slug helpers ---------- */
-const toSlug = (name: string) =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/\s*\+\s*/g, " plus ")
-    .replace(/\s+/g, "-");
+// const toSlug = (name: string) =>
+//   name
+//     .trim()
+//     .toLowerCase()
+//     .replace(/\s*\+\s*/g, " plus ")
+//     .replace(/\s+/g, "-");
 
-const fromSlug = (slug: string) =>
-  slug
-    .replace(/-/g, " ")
-    .replace(/\bplus\b/gi, "+")
-    .replace(/\s+/g, " ")
-    .trim();
+// const fromSlug = (slug: string) =>
+//   slug
+//     .replace(/-/g, " ")
+//     .replace(/\bplus\b/gi, "+")
+//     .replace(/\s+/g, " ")
+//     .trim();
+
+// const normalizeProductSlug = (slug?: string) => {
+//   if (!slug) return undefined;
+
+//   try {
+//     const decoded = decodeURIComponent(slug);
+//     if (!decoded.trim()) return undefined;
+//     return fromSlug(decoded);
+//   } catch {
+//     if (!slug.trim()) return undefined;
+//     return fromSlug(slug);
+//   }
+// };
+
+/* ---------- URL-safe helpers (NO "plus" text conversion) ---------- */
+const toSlug = (name: string) => encodeURIComponent(name.trim());
+
+const fromSlug = (slug: string) => decodeURIComponent(slug);
 
 const normalizeProductSlug = (slug?: string) => {
   if (!slug) return undefined;
-
   try {
     const decoded = decodeURIComponent(slug);
-    if (!decoded.trim()) return undefined;
-    return fromSlug(decoded);
+    return decoded.trim() || undefined;
   } catch {
-    if (!slug.trim()) return undefined;
-    return fromSlug(slug);
+    return slug.trim() || undefined;
   }
 };
+
 
 const normalizeCountryKey = (key: string): CountryKey => {
   const lower = key.toLowerCase();
@@ -5594,6 +5611,25 @@ const getLatestFetchedMonth = (): string | null => {
   }
 };
 
+const resolveProductKey = (
+  productName: string | null | undefined,
+  sku: string | null | undefined
+): { key: string; isSku: boolean } => {
+  if (productName && productName.trim()) {
+    return { key: productName.trim(), isSku: false };
+  }
+  if (sku && sku.trim()) {
+    return { key: sku.trim(), isSku: true };
+  }
+  return { key: "", isSku: false };
+};
+
+
+const buildInsightsCacheKey = (
+  identifier: string,
+  country: string
+) => `productwise_insights:${country}:${identifier.toLowerCase()}`;
+
 const ProductwisePerformance: React.FC<ProductwisePerformanceProps> = ({
   productname: propProductName,
 }) => {
@@ -5614,6 +5650,114 @@ const ProductwisePerformance: React.FC<ProductwisePerformanceProps> = ({
 
   const params = useParams();
   const router = useRouter();
+
+  // -----------------------
+  // Insights Drawer state
+  // -----------------------
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
+
+  // If your drawer expects sku-based mapping, we’ll store it like that.
+  const [selectedSku, setSelectedSku] = useState<string | null>(null);
+  const [skuInsights, setSkuInsights] = useState<
+    Record<string, { product_name: string; insight: string }>
+  >({});
+
+const handleViewBusinessInsights = async () => {
+  const { key: identifier, isSku } = resolveProductKey(productname, selectedSku);
+
+  if (!identifier) return;
+
+  const countryForApi = (platformCountryName || "global").toLowerCase();
+  const cacheKey = buildInsightsCacheKey(identifier, countryForApi);
+
+  // 1️⃣ Open drawer immediately
+  setIsDrawerOpen(true);
+  setInsightsError(null);
+
+  // 2️⃣ Cache check
+  if (typeof window !== "undefined") {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as {
+          product_name: string;
+          insight: string;
+          cachedAt: number;
+        };
+
+        setSkuInsights({
+          [identifier]: {
+            product_name: parsed.product_name,
+            insight: parsed.insight,
+          },
+        });
+        setSelectedSku(identifier);
+        setInsightsLoading(false);
+        return;
+      } catch {
+        localStorage.removeItem(cacheKey);
+      }
+    }
+  }
+
+  // 3️⃣ No cache → call API
+  setInsightsLoading(true);
+
+  try {
+    const payload: any = {
+      country: countryForApi,
+    };
+
+    if (isSku) {
+      payload.sku = identifier;
+    } else {
+      payload.product_name = identifier;
+    }
+
+    const res = await fetch("http://localhost:5000/ProductwiseGrowthAI", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken ?? ""}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const json = await res.json().catch(() => null);
+
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.error || `HTTP ${res.status}`);
+    }
+
+    const returnedName = json.product_name || identifier;
+    const insightText = json.ai_insights || "";
+
+    setSkuInsights({
+      [identifier]: {
+        product_name: returnedName,
+        insight: insightText,
+      },
+    });
+    setSelectedSku(identifier);
+
+    // 4️⃣ Save cache
+    localStorage.setItem(
+      cacheKey,
+      JSON.stringify({
+        product_name: returnedName,
+        insight: insightText,
+        cachedAt: Date.now(),
+      })
+    );
+  } catch (e: any) {
+    console.error("Growth AI Error:", e);
+    setInsightsError(e?.message || "Failed to load insights");
+  } finally {
+    setInsightsLoading(false);
+  }
+};
 
   // NEW: active platform, default "global"
   const [activePlatform, setActivePlatform] = useState<PlatformId>("global");
@@ -5836,9 +5980,14 @@ const ProductwisePerformance: React.FC<ProductwisePerformanceProps> = ({
       };
 
 
+      // if (range === "quarterly") {
+      //   // selectedQuarter is like "Q1", "Q2", "Q3", "Q4"
+      //   payload.quarter = selectedQuarter.replace("Q", ""); // "Q4" -> "4"
+      // }
+
       if (range === "quarterly") {
-        // selectedQuarter is like "Q1", "Q2", "Q3", "Q4"
-        payload.quarter = selectedQuarter.replace("Q", ""); // "Q4" -> "4"
+        const q = (selectedQuarter || "").match(/Q([1-4])/i)?.[1]; // "4"
+        if (q) payload.quarter = q;
       }
 
 
@@ -6366,17 +6515,6 @@ const ProductwisePerformance: React.FC<ProductwisePerformanceProps> = ({
 
       {canShowResults && data && !loading && (
         <div className="flex flex-col">
-          {/* <TrendChartSection
-            productname={productname}
-            title={getTitle()}
-            chartDataList={chartDataList}
-            chartOptions={chartOptions}
-            nonEmptyCountriesFromApi={nonEmptyCountriesFromApi}
-            selectedCountries={selectedCountries}
-            onToggleCountry={handleCountryChange}
-            authToken={authToken}
-            onProductSelect={handleProductSelect}
-          /> */}
 
           <TrendChartSection
             productname={productname}
@@ -6388,47 +6526,24 @@ const ProductwisePerformance: React.FC<ProductwisePerformanceProps> = ({
             onToggleCountry={handleCountryChange}
             authToken={authToken}
             onProductSelect={handleProductSelect}
-            onViewBusinessInsights={() => {
-              // use last fetched period as a sensible default
-              let effectiveMonth = selectedMonth;
-              let effectiveYear =
-                selectedYear === ""
-                  ? ""
-                  : String(selectedYear);
-
-              if (typeof window !== "undefined") {
-                try {
-                  const raw = localStorage.getItem("latestFetchedPeriod");
-                  if (raw) {
-                    const parsed = JSON.parse(raw) as { month?: string; year?: string };
-                    if (!effectiveMonth && parsed.month) {
-                      effectiveMonth = parsed.month.toLowerCase();
-                    }
-                    if (!effectiveYear && parsed.year) {
-                      effectiveYear = String(parsed.year);
-                    }
-                  }
-                } catch {
-                  // ignore parse errors
-                }
-              }
-
-              if (!effectiveYear) {
-                effectiveYear = String(new Date().getFullYear());
-              }
-
-              const countrySlug = (countryName || "global").toLowerCase();
-              const monthSlug = effectiveMonth || "na";
-
-              // navigate to Business Insights for the same batch
-              router.push(
-                `/improvements/QTD/${encodeURIComponent(
-                  countrySlug
-                )}/${encodeURIComponent(monthSlug)}/${encodeURIComponent(effectiveYear)}`
-              );
-            }}
+            onViewBusinessInsights={handleViewBusinessInsights}
+             insightsLoading={insightsLoading}
           />
 
+          <InsightSideDrawer
+            open={isDrawerOpen}
+            selectedSku={selectedSku}
+            skuInsights={skuInsights}
+            onClose={() => setIsDrawerOpen(false)}
+            enableFeedback={false} getInsightByProductName={function (productName: string): [string, SkuInsight] | null {
+              throw new Error("Function not implemented.");
+            } }          />
+
+          {isDrawerOpen && insightsError && (
+            <div className="fixed right-6 top-16 z-[9999] rounded bg-red-50 px-3 py-2 shadow text-sm text-red-700">
+              {insightsError}
+            </div>
+          )}
 
           <div className="mt-8">
             <div className="grid gap-5 grid-cols-1 md:grid-cols-[repeat(auto-fit,minmax(260px,1fr))]">

@@ -381,9 +381,11 @@ def process_skuwise_data(user_id, country, month, year):
                 sku_grouped[_col] = pd.to_numeric(sku_grouped[_col], errors="coerce").fillna(0.0)
 
         print("Columns in sku_grouped before profit calculation:", sku_grouped.columns)
+        total_product_sales = sku_grouped["product_sales"].sum()
 
         total_profit_final = sku_grouped["profit"].sum()
         print("Total Profit:", total_profit_final)
+        print("product_sales sum:", total_product_sales)
 
         sku_grouped["profit%"] = abs((sku_grouped["profit"] / abs(sku_grouped["Net Sales"])) * 100)
         sku_grouped["profit%"] = sku_grouped["profit%"].replace([float('inf'), -float('inf')], 0).fillna(0)
@@ -1229,10 +1231,10 @@ def process_skuwise_data(user_id, country, month, year):
             'previous_cost_of_unit_sold', 'previous_amazon_fee', 'previous_net_taxes',
             'unit_wise_profitability', 'previous_unit_wise_profitability',
             'unit_wise_profitability_percentage', 'asp', 'sales_percentage', 'previous_asp',
-            'asp_percentag', 'text_credit_change', 'previous_text_credit_change', 'sales_mix',
+            'asp_percentag', 'text_credit_change', 'previous_text_credit_change',
             'previous_fba_fees', 'previous_selling_fees', 'unit_increase', 'change_in_fee',
             'previous_change_in_fee', 'precentage_change_in_fee', 'unit_wise_amazon_fee',
-            'previous_unit_wise_amazon_fee', 'unit_wise_amazon_fee_percentage', 'profit_mix',
+            'previous_unit_wise_amazon_fee', 'unit_wise_amazon_fee_percentage',
             'previous_profit_mix', 'profit_mix_percentage', 'unit_sales_analysis',
             'unit_asp_analysis', 'amazon_fee_increase', 'total_analysis', 'cross_check_analysis',
             'previous_platform_fee', 'previous_rembursement_fee', 'previous_advertising_total',
@@ -1591,6 +1593,7 @@ def process_skuwise_data(user_id, country, month, year):
                 unit_sold_usd              = convert_value(total_row_usd.get("quantity", 0))
                 total_cous_usd             = convert_value(total_row_usd.get("cost_of_unit_sold", 0))
                 total_amazon_fee_val_usd   = convert_value(total_row_usd.get("amazon_fee", 0))
+                total_product_sales_usd    = convert_value(total_row_usd.get("product_sales", 0))
                 total_credits_usd          = convert_value(total_row_usd.get("net_credits", 0))
                 total_tax_usd              = convert_value(total_row_usd.get("net_taxes", 0))
 
@@ -1642,6 +1645,7 @@ def process_skuwise_data(user_id, country, month, year):
                     total_cous=total_cous_usd,
                     total_amazon_fee=total_amazon_fee_val_usd,
                     pnl_email_sent=False,
+                    total_product_sales=total_product_sales_usd
                 )
 
                 session.add(upload_history_entry)
@@ -1681,7 +1685,7 @@ def process_skuwise_data(user_id, country, month, year):
 
         return (total_cous, total_amazon_fee, cm2_profit, abs(rembursement_fee), abs(platform_fee),
                 total_expense, total_profit_final, total_fba_fees, total_advertising, texncredit,
-                reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, total_quantity)
+                reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, total_quantity, total_product_sales)
 
     except Exception as e:
         print(f"Error processing SKU-wise data: {e}")
@@ -1760,10 +1764,10 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                 "product_sales_tax", "selling_fees", "refund_selling_fees", "fba_fees", "other",
                 "marketplace_facilitator_tax", "shipping_credits_tax", "giftwrap_credits_tax",
                 "postage_credits", "gift_wrap_credits", "net_sales", "net_taxes", "net_credits",
-                "profit", "profit_percentage", "amazon_fee", "sales_mix", "profit_mix", "quantity",
+                "profit", "profit_percentage", "amazon_fee", "quantity",
                 "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
                 "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability"
+                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku"
                 FROM {source_table}
                 WHERE LOWER(month) IN ({placeholders}) AND year = %s
             """
@@ -1775,6 +1779,7 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
 
             # ---------- AGGREGATION (same as tumhara) ----------
             sku_grouped = df.groupby('product_name').agg({
+                "sku": "first", 
                 "price_in_gbp": "mean",
                 "product_sales": "sum",
                 "promotional_rebates": "sum",
@@ -1838,8 +1843,13 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                 axis=1
             )
 
-            total_sales = abs(sku_grouped["net_sales"].sum())
-            total_profit = abs(sku_grouped["profit"].sum())
+            temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
+
+            total_sales = abs(temp["net_sales"].sum())
+            total_profit = abs(temp["profit"].sum())
+
+            print(total_profit)
+            print(total_sales)
 
             sku_grouped["profit_mix"] = sku_grouped.apply(
                 lambda row: (row["profit"] / total_profit) * 100 if total_profit != 0 else 0,
@@ -1864,6 +1874,7 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                     CREATE TABLE IF NOT EXISTS {quarter_table} (
                         id SERIAL PRIMARY KEY,
                         product_name TEXT,
+                        sku TEXT,
                         price_in_gbp DOUBLE PRECISION,
                         product_sales DOUBLE PRECISION,
                         promotional_rebates DOUBLE PRECISION,
@@ -1947,10 +1958,10 @@ def process_yearly_skuwise_data(user_id, country, year):
                 "product_sales_tax", "selling_fees", "refund_selling_fees", "fba_fees", "other",
                 "marketplace_facilitator_tax", "shipping_credits_tax", "giftwrap_credits_tax",
                 "postage_credits", "gift_wrap_credits", "net_sales", "net_taxes", "net_credits",
-                "profit", "profit_percentage", "amazon_fee", "sales_mix", "profit_mix", "quantity",
+                "profit", "profit_percentage", "amazon_fee", "quantity",
                 "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
                 "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability"
+                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku"
                 FROM {source_table}
                 WHERE "year" = '{year}'
             """
@@ -1972,6 +1983,7 @@ def process_yearly_skuwise_data(user_id, country, year):
     
         # Group by SKU for aggregation
             sku_grouped = df.groupby('product_name').agg({
+                "sku": "first", 
                 "price_in_gbp": "mean",
                 "product_sales": "sum",
                 "promotional_rebates": "sum",
@@ -2049,8 +2061,13 @@ def process_yearly_skuwise_data(user_id, country, year):
             )
             # print(sku_grouped[["product_name", "unit_wise_profitability"]])
 
-            total_sales = abs(sku_grouped["net_sales"].sum())  # lowercase column name
-            total_profit = abs(sku_grouped["profit"].sum())
+            temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
+
+            total_sales = abs(temp["net_sales"].sum())
+            total_profit = abs(temp["profit"].sum())
+
+            print(total_profit)
+            print(total_sales)
             # print(total_profit)
             # print(total_sales)
 
@@ -2090,6 +2107,7 @@ def process_yearly_skuwise_data(user_id, country, year):
                 CREATE TABLE IF NOT EXISTS {quarter_table} (
                     id SERIAL PRIMARY KEY,
                     product_name TEXT,
+                    sku TEXT,
                     price_in_gbp DOUBLE PRECISION,
                     product_sales DOUBLE PRECISION,
                     promotional_rebates DOUBLE PRECISION,
