@@ -445,7 +445,7 @@ def compute_inventory_coverage_ratio(user_id: int, country: str) -> pd.DataFrame
             df["product_name"] = None
 
     except Exception as e:
-        print("[WARN] Failed to attach product_name to inventory coverage:", e)
+        
         df["product_name"] = None
 
     # reorder columns (nice for printing)
@@ -629,7 +629,7 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
         year=prev_start.year,
     )
 
-    print(f"[DEBUG] Previous Period Table: {table_name}")
+    
 
     query = text(f"""
         SELECT *
@@ -749,7 +749,7 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
         res = conn.execute(query_live, params)
         rows = res.fetchall()
         if not rows:
-            print("[DEBUG] No current MTD rows found in liveorders for this user/date range.")
+            
             return [], []
 
         df = pd.DataFrame(rows, columns=res.keys())
