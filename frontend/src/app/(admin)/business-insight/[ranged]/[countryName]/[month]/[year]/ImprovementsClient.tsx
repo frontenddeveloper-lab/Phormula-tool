@@ -1215,7 +1215,7 @@ const MonthsforBI: React.FC = () => {
     { value: '11', label: 'November' }, { value: '12', label: 'December' },
   ];
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 2 }, (_, i) => String(currentYear - i));
+  const years = Array.from({ length: 3 }, (_, i) => String(currentYear - i));
   const pad2 = (m: string | number) => String(m).padStart(2, '0');
   const getAbbr = (m: string | number) => months.find(x => x.value === pad2(m))?.label.slice(0, 3) || '';
 
@@ -2906,9 +2906,6 @@ const MonthsforBI: React.FC = () => {
                 );
               })}
             </div>
-            {year1 && !month1 && (
-              <div className="month-help">Tap any highlighted month to select Month 1</div>
-            )}
           </div>
           {/* Row 2 */}
           <div className="month-row">

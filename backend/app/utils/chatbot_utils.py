@@ -2791,7 +2791,6 @@ class FormulaEngine:
         return units
 
 
-
     def _order_units_by_sku(self, df: pd.DataFrame) -> pd.DataFrame:
         if df.empty or "sku" not in df.columns:
             return pd.DataFrame(columns=["sku","quantity"])

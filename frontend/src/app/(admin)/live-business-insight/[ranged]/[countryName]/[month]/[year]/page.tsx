@@ -1352,57 +1352,69 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
     });
   };
 
-  const renderAiActionLine = (line: string) => {
-    if (!line) return null;
+const renderAiActionLine = (line: string) => {
+  if (!line) return null;
 
-    // Step 1: Remove "Product name -"
-    const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, '');
+  // 1️⃣ Remove "Product name -"
+  const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, '');
 
-    // Step 2: Product name = first word(s) before "The / Increase / Decrease"
-    const productSplit = cleaned.split(/\s+(The|Increase|Decrease|An increase|A decrease)/i);
+  // 2️⃣ Extract Inventory line (even if stuck or ⚠ prefixed)
+  const inventoryMatch = cleaned.match(/⚠?\s*Inventory\s*:\s*[^.]+\.?/i);
+  const inventoryLine = inventoryMatch?.[0]?.trim() || null;
 
-    const productName = productSplit[0]?.trim();
+  // 3️⃣ Extract Action line (Check / Review / Monitor etc, even with ⚠)
+  const actionMatch = cleaned.match(
+    /⚠?\s*(Check|Review|Monitor|Increase|Reduce|Maintain)[^.]+\.?/i
+  );
+  const actionLine = actionMatch?.[0]?.trim() || null;
 
-    // Step 3: Remaining description
-    const remainingText = cleaned.replace(productName, '').trim();
+  // 4️⃣ Remove extracted lines from description
+  let descriptionText = cleaned;
+  if (inventoryLine) descriptionText = descriptionText.replace(inventoryLine, '');
+  if (actionLine) descriptionText = descriptionText.replace(actionLine, '');
 
-    // Step 4: Split sentences
-    const sentences = remainingText
-      .split('.')
-      .map(s => s.trim())
-      .filter(Boolean);
+  // 5️⃣ Split product name from description
+  const split = descriptionText.split(
+    /\s+(There is|There was|There are|An increase|A decrease|Increase|Decrease)/i
+  );
 
-    // Last sentence = action
-    const actionLine = sentences[sentences.length - 1];
+  const productName = split[0]?.trim();
+  const description = descriptionText.replace(productName, '').trim();
 
-    // Middle description
-    const description = sentences.slice(0, -1).join('. ');
+  return (
+    <div className="space-y-2">
+      {/* Product Name */}
+      {productName && (
+        <div className="font-bold text-[#414042]">
+          Product name – {productName}
+        </div>
+      )}
 
-    return (
-      <div className="space-y-1">
-        {/* Product Name */}
-        {productName && (
-          <div className="font-bold">
-            Product name - {productName}
-          </div>
-        )}
+      {/* Description */}
+      {description && (
+        <div className="text-sm text-[#414042]">
+          {formatBulletLine(description)}
+        </div>
+      )}
 
-        {/* Description */}
-        {description && (
-          <div className="text-sm">
-            {formatBulletLine(description)}
-          </div>
-        )}
+      {/* Action line */}
+      {actionLine && (
+        <div className="font-bold text-[#414042]">
+          {actionLine.replace(/^⚠\s*/, '')}
+        </div>
+      )}
 
-        {/* Recommendation */}
-        {actionLine && (
-          <div className="font-bold">
-            {actionLine}.
-          </div>
-        )}
-      </div>
-    );
-  };
+      {/* Inventory line (always last) */}
+      {inventoryLine && (
+        <div className="font-bold text-[#414042]">
+          ⚠ {inventoryLine.replace(/^⚠?\s*Inventory\s*:\s*/i, 'Inventory: ')}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 
 
 

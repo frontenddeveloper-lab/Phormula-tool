@@ -1401,13 +1401,20 @@ def get_table_data(file_name):
 
                 elif range_ == "quarterly" and country and year:
                     q = (quarter or month or "").strip().upper()
-                    if not q.startswith("Q"):
+
+                    # derive quarter number (1–4)
+                    if q.startswith("Q"):
+                        q_num = q.replace("Q", "")
+                    else:
                         m_int = _month_str_to_int(month)
                         if m_int:
-                            q = "Q1" if 1 <= m_int <= 3 else "Q2" if 4 <= m_int <= 6 else "Q3" if 7 <= m_int <= 9 else "Q4"
+                            q_num = "1" if 1 <= m_int <= 3 else "2" if 4 <= m_int <= 6 else "3" if 7 <= m_int <= 9 else "4"
+                        else:
+                            q_num = None
 
-                    # ✅ your required format
-                    table_for_fee = f"{q}_{user_id}_{country}_{year}_table".lower()
+                    if q_num:
+                        table_for_fee = f"quarter{q_num}_{user_id}_{country}_{year}_table".lower()
+
 
                 elif range_ == "yearly" and country and year:
                     # ✅ your required format

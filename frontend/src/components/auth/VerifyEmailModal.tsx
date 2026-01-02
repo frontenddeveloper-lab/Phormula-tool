@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useResendVerificationMutation } from "@/lib/api/userApi";
-import { toast } from "sonner";
+import './style.css'
 
 type VerifyEmailModalProps = {
   status: string; // "success" | "failed" | invalid
@@ -32,17 +32,13 @@ export default function VerifyEmailModal({
   }, [isFailed]);
 
   /* =====================================================
-     ✅ SUCCESS → TOAST ONLY (NO MODAL)
+     ✅ SUCCESS → AUTO CLOSE AFTER 5s
   ===================================================== */
   useEffect(() => {
     if (isSuccess) {
-      toast.success("Email verified successfully ✅", {
-        duration: 4500,
-      });
-
       const timer = setTimeout(() => {
         onClose();
-      }, 4500);
+      }, 5000);
 
       return () => clearTimeout(timer);
     }
@@ -75,10 +71,46 @@ export default function VerifyEmailModal({
   };
 
   /* =====================================================
-     ❌ DON'T RENDER MODAL FOR SUCCESS
+     ✅ SUCCESS MODAL (NO BUTTON)
   ===================================================== */
-  if (isSuccess) return null;
+  if (isSuccess) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+        onClick={onClose}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-2xl p-8 flex flex-col items-center text-center"
+        >
+          {/* Animated Tick */}
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-500">
+            <svg className="h-7 w-7 text-white" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M20 6L9 17L4 12"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
 
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            Email Verified!
+          </h2>
+
+          <p className="mt-2 text-gray-600 dark:text-gray-300">
+            Your email address has been successfully verified.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* =====================================================
+     ❌ FAILED / INVALID MODAL
+  ===================================================== */
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
@@ -88,7 +120,6 @@ export default function VerifyEmailModal({
         className="w-full max-w-md sm:max-w-lg rounded-2xl bg-white dark:bg-gray-900 shadow-2xl p-6 sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* FAILED / INVALID VIEW */}
         <div className="flex flex-col items-center text-center space-y-5">
           {/* Icon */}
           <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-red-100">
@@ -114,24 +145,20 @@ export default function VerifyEmailModal({
             </svg>
           </div>
 
-          {/* Heading */}
           <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white">
             Email Verification
           </h1>
 
-          {/* Message */}
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 max-w-md">
             {message}
           </p>
 
-          {/* Email */}
           {email && (
             <p className="text-xs text-gray-400 dark:text-gray-500">
               Email: {email}
             </p>
           )}
 
-          {/* Actions */}
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
@@ -150,7 +177,6 @@ export default function VerifyEmailModal({
             </Link>
           </div>
 
-          {/* Flash Message */}
           {flash && (
             <p className="text-sm text-gray-600 dark:text-gray-300">
               {flash}
