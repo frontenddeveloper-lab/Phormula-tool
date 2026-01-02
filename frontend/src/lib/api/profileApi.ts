@@ -9,6 +9,7 @@ export type UserData = {
   annual_sales_range?: string;
   onboarding_complete?: boolean;
   homeCurrency?: string;
+  target_sales?: number;
 };
 
 

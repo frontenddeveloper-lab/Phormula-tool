@@ -349,6 +349,7 @@ const sliceByDayRange = (
 export default function DashboardPage() {
   const { platform } = usePlatform();
   const { data: userData } = useGetUserDataQuery();
+  console.log("DATAAA", userData)
 
   const isCountryMode = platform !== "global" && platform !== "shopify";
 
@@ -365,7 +366,6 @@ export default function DashboardPage() {
     }
   }, [platform]);
 
-  // const showLiveBI = isCountryMode;
   const showLiveBI = isCountryMode || platform === "global";
 
 
@@ -626,6 +626,16 @@ export default function DashboardPage() {
     },
     [displayCurrency, gbpToUsd, inrToUsd, cadToUsd]
   );
+
+  const userMonthlyTargetGBP = useMemo(() => {
+    return toNumberSafe(userData?.target_sales ?? 0);
+  }, [userData?.target_sales]);
+
+  const userMonthlyTargetHome = useMemo(() => {
+    if (!userMonthlyTargetGBP) return 0;
+    return convertToDisplayCurrency(userMonthlyTargetGBP, "GBP");
+  }, [userMonthlyTargetGBP, convertToDisplayCurrency]);
+
 
   const prevFullMonthNetSalesDisp = useMemo(() => {
     const v = liveBiPayload?.aligned_totals?.total_previous_net_sales_full_month;
@@ -1369,76 +1379,168 @@ export default function DashboardPage() {
   }, [amazonPrevNetDisp, shopifyPrevDeriv?.netSales, convertToDisplayCurrency]);
 
 
+  // const regions = useMemo(() => {
+  //   const globalLastMonthTotal = chooseLastMonthTotal(
+  //     MANUAL_LAST_MONTH_USD_GLOBAL,
+  //     globalPrevTotalUSD
+  //   );
+
+  //   const globalTarget =
+  //     userMonthlyTargetHome > 0
+  //       ? userMonthlyTargetHome
+  //       : (globalPrevFullMonthNetSalesDisp > 0 ? globalPrevFullMonthNetSalesDisp : globalPrevNetDisp);
+
+  //   const global: RegionMetrics = {
+  //     mtdUSD: globalCurrNetDisp,
+  //     lastMonthToDateUSD: globalPrevNetDisp,   // prev MTD
+  //     lastMonthTotalUSD: globalTarget,         // ✅ prev FULL month total
+  //     targetUSD: globalTarget,                 // ✅ target = prev FULL month total
+  //     decTargetUSD: globalTarget,
+  //   };
+
+  //   const ukTarget =
+  //     userMonthlyTargetHome > 0
+  //       ? userMonthlyTargetHome
+  //       : (prevFullMonthNetSalesDisp > 0 ? prevFullMonthNetSalesDisp : amazonPrevNetDisp);
+
+  //   const ukRegion: RegionMetrics = {
+  //     mtdUSD: amazonCurrNetDisp,
+  //     lastMonthToDateUSD: amazonPrevNetDisp,
+  //     lastMonthTotalUSD: ukTarget,
+  //     targetUSD: ukTarget,
+  //     // ✅ Dec target
+  //     decTargetUSD: ukTarget,
+  //   };
+
+
+  //   const ukLastMonthTotal = chooseLastMonthTotal(
+  //     MANUAL_LAST_MONTH_USD_UK,
+  //     prevAmazonUKTotalUSD
+  //   );
+
+
+
+  //   const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
+  //   const usRegion: RegionMetrics = {
+  //     mtdUSD: 0,
+  //     lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
+  //     lastMonthTotalUSD: usLastMonthTotal,
+  //     targetUSD: usLastMonthTotal,
+  //     decTargetUSD: usLastMonthTotal,
+  //   };
+
+  //   const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
+  //   const caRegion: RegionMetrics = {
+  //     mtdUSD: 0,
+  //     lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
+  //     lastMonthTotalUSD: caLastMonthTotal,
+  //     targetUSD: caLastMonthTotal,
+  //     // ✅ Dec target (fallback)
+  //     decTargetUSD: caLastMonthTotal,
+  //   };
+
+  //   return {
+  //     Global: global,
+  //     UK: ukRegion,
+  //     US: usRegion,
+  //     CA: caRegion,
+  //   } as Record<RegionKey, RegionMetrics>;
+  // }, [
+  //   globalCurrNetDisp,
+  //   globalPrevNetDisp,
+  //   amazonCurrNetDisp,
+  //   amazonPrevNetDisp,
+  //   prevFullMonthNetSalesDisp,
+  //   globalPrevFullMonthNetSalesDisp,
+  //   userMonthlyTargetHome,
+  // ]);
+
   const regions = useMemo(() => {
-    const globalLastMonthTotal = chooseLastMonthTotal(
-      MANUAL_LAST_MONTH_USD_GLOBAL,
-      globalPrevTotalUSD
-    );
+  // ✅ user target is stored in GBP; convert to display (home) currency
+  const userMonthlyTargetGBP = toNumberSafe(userData?.target_sales ?? 0);
+  const userMonthlyTargetHome =
+    userMonthlyTargetGBP > 0
+      ? convertToDisplayCurrency(userMonthlyTargetGBP, "GBP")
+      : 0;
 
-    const globalTarget =
-      globalPrevFullMonthNetSalesDisp > 0 ? globalPrevFullMonthNetSalesDisp : globalPrevNetDisp;
+  // ✅ GLOBAL: keep "sales" (lastMonthTotalUSD) as your computed prev full-month sales
+  const globalPrevFullMonthSales =
+    globalPrevFullMonthNetSalesDisp > 0
+      ? globalPrevFullMonthNetSalesDisp
+      : globalPrevNetDisp;
 
-    const global: RegionMetrics = {
-      mtdUSD: globalCurrNetDisp,
-      lastMonthToDateUSD: globalPrevNetDisp,   // prev MTD
-      lastMonthTotalUSD: globalTarget,         // ✅ prev FULL month total
-      targetUSD: globalTarget,                 // ✅ target = prev FULL month total
-      decTargetUSD: globalTarget,
-    };
+  // ✅ GLOBAL target: prefer user target, else fallback to sales baseline
+  const globalTarget =
+    userMonthlyTargetHome > 0 ? userMonthlyTargetHome : globalPrevFullMonthSales;
 
-    const ukTarget =
-      prevFullMonthNetSalesDisp > 0 ? prevFullMonthNetSalesDisp : amazonPrevNetDisp;
+  const global: RegionMetrics = {
+    mtdUSD: globalCurrNetDisp,
+    lastMonthToDateUSD: globalPrevNetDisp, // prev MTD
+    lastMonthTotalUSD: globalPrevFullMonthSales, // ✅ Dec/prev full-month SALES (as-is)
+    targetUSD: globalTarget, // ✅ Target from userData
+    decTargetUSD: globalTarget,
+  };
 
-    const ukRegion: RegionMetrics = {
-      mtdUSD: amazonCurrNetDisp,
-      lastMonthToDateUSD: amazonPrevNetDisp,
-      lastMonthTotalUSD: ukTarget,
-      targetUSD: ukTarget,
-      // ✅ Dec target
-      decTargetUSD: ukTarget,
-    };
+  // ✅ UK: keep "sales" (lastMonthTotalUSD) as your computed prev full-month sales
+  const ukPrevFullMonthSales =
+    prevFullMonthNetSalesDisp > 0
+      ? prevFullMonthNetSalesDisp
+      : amazonPrevNetDisp;
 
+  // ✅ UK target: prefer user target, else fallback
+  const ukTarget =
+    userMonthlyTargetHome > 0 ? userMonthlyTargetHome : ukPrevFullMonthSales;
 
-    const ukLastMonthTotal = chooseLastMonthTotal(
-      MANUAL_LAST_MONTH_USD_UK,
-      prevAmazonUKTotalUSD
-    );
+  const ukRegion: RegionMetrics = {
+    mtdUSD: amazonCurrNetDisp,
+    lastMonthToDateUSD: amazonPrevNetDisp, // prev MTD
+    lastMonthTotalUSD: ukPrevFullMonthSales, // ✅ Dec/prev full-month SALES (as-is)
+    targetUSD: ukTarget, // ✅ Target from userData
+    decTargetUSD: ukTarget,
+  };
 
+  // ✅ US/CA unchanged (you currently use manual env fallbacks)
+  const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
+  const usRegion: RegionMetrics = {
+    mtdUSD: 0,
+    lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
+    lastMonthTotalUSD: usLastMonthTotal,
+    targetUSD: usLastMonthTotal,
+    decTargetUSD: usLastMonthTotal,
+  };
 
+  const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
+  const caRegion: RegionMetrics = {
+    mtdUSD: 0,
+    lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
+    lastMonthTotalUSD: caLastMonthTotal,
+    targetUSD: caLastMonthTotal,
+    decTargetUSD: caLastMonthTotal,
+  };
 
-    const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
-    const usRegion: RegionMetrics = {
-      mtdUSD: 0,
-      lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
-      lastMonthTotalUSD: usLastMonthTotal,
-      targetUSD: usLastMonthTotal,
-      decTargetUSD: usLastMonthTotal,
-    };
+  return {
+    Global: global,
+    UK: ukRegion,
+    US: usRegion,
+    CA: caRegion,
+  } as Record<RegionKey, RegionMetrics>;
+}, [
+  // existing deps you already had
+  globalCurrNetDisp,
+  globalPrevNetDisp,
+  amazonCurrNetDisp,
+  amazonPrevNetDisp,
+  prevFullMonthNetSalesDisp,
+  globalPrevFullMonthNetSalesDisp,
 
-    const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
-    const caRegion: RegionMetrics = {
-      mtdUSD: 0,
-      lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
-      lastMonthTotalUSD: caLastMonthTotal,
-      targetUSD: caLastMonthTotal,
-      // ✅ Dec target (fallback)
-      decTargetUSD: caLastMonthTotal,
-    };
+  // ✅ add these because we use them inside now
+  userData?.target_sales,
+  convertToDisplayCurrency,
 
-    return {
-      Global: global,
-      UK: ukRegion,
-      US: usRegion,
-      CA: caRegion,
-    } as Record<RegionKey, RegionMetrics>;
-  }, [
-    globalCurrNetDisp,
-    globalPrevNetDisp,
-    amazonCurrNetDisp,
-    amazonPrevNetDisp,
-    prevFullMonthNetSalesDisp,
-    globalPrevFullMonthNetSalesDisp,
-  ]);
+  // these are referenced by US/CA regions
+  chooseLastMonthTotal,
+  prorateToDate,
+]);
 
 
   const anyLoading = loading || shopifyLoading;
@@ -2228,12 +2330,12 @@ export default function DashboardPage() {
                       label="ASP"
                       current={
                         showLiveBI && rangeActive
-                          ? biCardKpis.curr.asp                        // ✅ no conversion
+                          ? biCardKpis.curr.asp
                           : convertToDisplayCurrency(uk.aspGBP ?? 0, amazonDataCurrency)
                       }
                       previous={
                         showLiveBI && rangeActive
-                          ? biCardKpis.prev.asp                        // ✅ no conversion
+                          ? biCardKpis.prev.asp
                           : convertToDisplayCurrency(prev.asp, amazonDataCurrency)
                       }
                       deltaPct={useBiForAmazonCards ? biCardKpis.deltas.asp : deltas.aspPct}
@@ -2430,6 +2532,7 @@ export default function DashboardPage() {
                 targetTrendPct={stats_targetTrendPct}
                 currentReimbursement={reimbursementHome.current}
                 previousReimbursement={reimbursementHome.previous}
+                 targetHome={stats_targetHome}
               />
             </div>
 
