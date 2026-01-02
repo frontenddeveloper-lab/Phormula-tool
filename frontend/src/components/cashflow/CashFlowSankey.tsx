@@ -290,7 +290,7 @@ links: rows.map((r) => ({
           return (
             <div
               key={c.label}
-              className={`rounded-2xl border ${c.border} ${c.bg} shadow-sm px-4 py-3`}
+              className={`rounded-2xl border ${c.border} ${c.bg} shadow-sm xl:px-4 px-2 py-3`}
             >
               <div className="text-xs text-charcoal-500 mb-1">{c.label}</div>
 
@@ -311,10 +311,21 @@ links: rows.map((r) => ({
     </span>
   </>
 ) : (
-    <>
-      {c.isCurrency ? currency : ""}
-      {formatNumber(c.value)}
-    </>
+<>
+  {c.isCurrency ? currency : ""}
+  {formatNumber(c.value)}
+
+  {perUnitCards.includes(c.label) && (
+    <span className="ml-1 text-xs font-medium text-charcoal-500">
+      ({currency}
+      {getPerUnitValue(
+        c.value,
+        data.quantity_total
+      )}{" "}
+      / Unit)
+    </span>
+  )}
+</>
   )}
 </div>
 
@@ -352,7 +363,7 @@ links: rows.map((r) => ({
                 c.prev,
                 previous_summary?.quantity_total
               )}{" "}
-              Per Unit)
+              / Unit)
             </span>
           )}
         </>
@@ -362,7 +373,7 @@ links: rows.map((r) => ({
 
                   </div>
 
-                  <span className={isNegative ? "text-red-600" : "text-green-600"}>
+                  <span className={` text-nowrap ${isNegative ? "text-red-600" : "text-green-600"}`}>
                     {isNegative ? "▼" : "▲"} {Math.abs(Number(p))}%
                   </span>
                 </div>

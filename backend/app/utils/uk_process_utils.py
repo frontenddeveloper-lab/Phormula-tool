@@ -266,11 +266,18 @@ def process_skuwise_data(user_id, country, month, year):
         refund_fees["sku"] = refund_fees["sku"].astype(str).str.strip()
         df["sku"] = df["sku"].astype(str).str.strip()
 
-        df["type_norm"] = type_str.str.lower()
+        # df["type_norm"] = type_str.str.lower()
+        # df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
+
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
 
-        mask = df["type_norm"].isin(["order", "shipment"])
-        quantity_df = df[mask].groupby("sku", as_index=False)["quantity"].sum()
+        quantity_df = (
+            df.groupby("sku", as_index=False)["quantity"]
+            .sum()
+        )
+
+        # mask = df["type_norm"].isin(["order", "shipment"])
+        # quantity_df = df[mask].groupby("sku", as_index=False)["quantity"].sum()
 
         # Aggregate data SKU-wise (base columns)
         sku_grouped = df.groupby('sku').agg({

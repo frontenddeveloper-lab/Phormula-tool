@@ -1236,15 +1236,18 @@ PRICE_RANGE_BUCKETS = {
 def get_price_bucket(price_val: float, marketplace_id: str):
     """
     Given a price and marketplace, return (price_from, price_to) bucket.
-    Falls back to (price_val, price_val) if no bucket matches.
+    Replace 0 lower bound with -50.
     """
     buckets = PRICE_RANGE_BUCKETS.get(marketplace_id) or []
     for low, high in buckets:
         if low <= price_val <= high:
-            return low, high
+            # 👇 replace 0 with -50
+            price_from = -50 if low == 0 else low
+            return price_from, high
 
-    # Fallback: no defined bucket => treat as its own range
+    # Fallback: no defined bucket
     return price_val, price_val
+
 
 
 def _extract_currency_and_flags(offers_payload: dict):
