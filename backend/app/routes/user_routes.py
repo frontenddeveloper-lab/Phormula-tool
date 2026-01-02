@@ -326,10 +326,12 @@ def get_user_data():
         'phone_number': user.phone_number,
         'annual_sales_range': user.annual_sales_range,
         'password': user.password,
-        'platform': user.platform,
+        'marketplace_id': user.marketplace_id,
         'country': user.country,
-        'homeCurrency': user.homeCurrency
+        'homeCurrency': user.homeCurrency,
+        'target_sales': float(user.target_sales) if user.target_sales is not None else None,  # ✅ add
     })
+
 
 
 @user_bp.route('/passcountry', methods=['GET'])
@@ -359,6 +361,42 @@ def get_user_countries():
     return jsonify({'countries': country_list}), 200
 
 
+ALLOWED_MARKETPLACES = {
+    "ATVPDKIKX0DER",  # US
+    "A1F83G8C2ARO7P", # UK
+    "A2EUQ1WTGCTBG2", # CA
+}
+
+COUNTRY_TO_MARKETPLACE = {
+    "us": "ATVPDKIKX0DER",
+    "uk": "A1F83G8C2ARO7P",
+    "ca": "A2EUQ1WTGCTBG2",
+}
+
+def compute_marketplace_ids_from_country(country_value: str) -> str:
+    """
+    country_value can be:
+      - 'uk'
+      - 'uk,us'
+      - 'UK, US'
+    returns comma-separated marketplace ids in stable order.
+    """
+    if not country_value:
+        return ""
+
+    countries = [c.strip().lower() for c in country_value.split(",") if c.strip()]
+    ids = []
+
+    for c in countries:
+        mp = COUNTRY_TO_MARKETPLACE.get(c)
+        if mp and mp in ALLOWED_MARKETPLACES:
+            ids.append(mp)
+
+    # remove duplicates while preserving order
+    seen = set()
+    ids = [x for x in ids if not (x in seen or seen.add(x))]
+
+    return ",".join(ids)
 
 
 
@@ -378,13 +416,11 @@ def add_sales():
         return jsonify({'error': 'Invalid token'}), 401
 
     data = request.get_json()
-
-    country = data.get('country')
+    country = data.get('country')  # can be 'uk' or 'uk,us'
     annual_sales_range = data.get('annual_sales_range')
     brand_name = data.get('brand_name')
     company_name = data.get('company_name')
     homeCurrency = data.get('homeCurrency')
-
 
     if not country:
         return jsonify({'success': False, 'message': 'Country is required.'}), 400
@@ -394,19 +430,22 @@ def add_sales():
         return jsonify({'success': False, 'message': 'User not found.'}), 404
 
     user.country = country
+    user.marketplace_id = compute_marketplace_ids_from_country(country)
+
     user.company_name = company_name
     user.brand_name = brand_name
     user.homeCurrency = homeCurrency
     if annual_sales_range:
         user.annual_sales_range = annual_sales_range
-        
 
     db.session.commit()
     db.session.refresh(user)
 
-    return jsonify({'success': True, 'message': 'Sales data submitted successfully.'}), 201
- 
-
+    return jsonify({
+        'success': True,
+        'message': 'Sales data submitted successfully.',
+        'marketplace_id': user.marketplace_id
+    }), 201
 
 
 
@@ -471,15 +510,12 @@ def switch_profile(profile_id):
 
 @user_bp.route('/profileupdate', methods=['POST'])
 def profileupdate():
-    # Step 1: Get the Authorization header
-    auth_header = request.headers.get('Authorization') 
+    auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
 
-    # Step 2: Extract the token from the header
     token = auth_header.split(' ')[1]
     try:
-        # Decode the JWT token
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
         user_id = payload['user_id']
     except jwt.ExpiredSignatureError:
@@ -487,31 +523,47 @@ def profileupdate():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
-    # Step 3: Fetch the user from the database using the decoded user_id
-    user = User.query.filter_by(id=user_id).first()
+    user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    # Step 4: Get the updated data from the request
-    data = request.json
-    user.password = data.get('password', user.password)
+    data = request.get_json() or {}
+
+    # -------- SAFE FIELD UPDATES --------
     user.email = data.get('email', user.email)
     user.phone_number = data.get('phone_number', user.phone_number)
     user.annual_sales_range = data.get('annual_sales_range', user.annual_sales_range)
     user.company_name = data.get('company_name', user.company_name)
     user.brand_name = data.get('brand_name', user.brand_name)
-    user.country = data.get('country', user.country)
-    user.platform = data.get('platform', user.platform)
     user.homeCurrency = data.get('homeCurrency', user.homeCurrency)
 
-    # Step 5: Commit the changes to the database
+    # -------- PASSWORD (HASHED) --------
+    new_password = data.get('password')
+    if new_password:
+        user.password = generate_password_hash(
+            new_password, method='pbkdf2:sha256', salt_length=8
+        )
+
+    # -------- COUNTRY + MARKETPLACE --------
+    new_country = data.get('country')
+    if new_country:
+        user.country = new_country
+        user.marketplace_id = compute_marketplace_ids_from_country(new_country)
+
+    # -------- TARGET SALES (VALIDATED) --------
+    target_sales = data.get('target_sales')
+    if target_sales is not None:
+        try:
+            user.target_sales = float(target_sales)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'target_sales must be a number'}), 400
+
     try:
         db.session.commit()
         return jsonify({'message': 'Profile updated successfully'}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
-
 
 
 

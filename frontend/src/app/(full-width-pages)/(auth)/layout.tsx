@@ -78,7 +78,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </Link>
 
           {/* Centered content */}
-          <div className="flex flex-col 2xl:gap-20 gap-28">
+          <div className="flex flex-col 2xl:gap-12 gap-28 mt-10">
             {/* Heading */}
             <h1 className="text-[#414042] text-xl sm:text-xl lg:text-5xl 2xl:text-6xl font-medium leading-tight text-right pr-10">
               <span className="xl:text-nowrap">Trusted Finance Partner </span>
@@ -93,7 +93,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                 alt="Trusted Finance partner for D2C Entrepreneur"
                 width={700}
                 height={500}
-                className="object-contain 2xl:w-[700px] 2xl:h-[500px] xl:w-[600px]"
+                className="object-contain 2xl:w-[800px] 2xl:h-[600px] xl:w-[600px]"
                 priority
               />
             </div>
@@ -165,7 +165,7 @@ if (
           </Link>
 
           {/* Heading */}
-          <div className="flex flex-col gap-20">
+          <div className="flex flex-col 2xl:gap-12 gap-28 mt-10">
             {/* Heading */}
             <h1 className="text-[#414042] text-xl sm:text-xl lg:text-5xl xl:text-6xl font-medium leading-tight text-right pr-12">
               Built for Founders,
@@ -179,9 +179,9 @@ if (
               <Image
                 src="/images/auth/signin.png"
                 alt="Performance Analysis dashboard"
-                 width={800}
+                 width={700}
                 height={500}
-                className="object-contain 2xl:w-[800px] 2xl:h-[500px] xl:w-[600px] "
+                className="object-contain 2xl:w-[800px] 2xl:h-[600px] xl:w-[600px]"
                 priority
               />
             </div>
@@ -208,7 +208,7 @@ if (
           </Link>
 
           {/* Heading */}
-          <div className="flex flex-col gap-20">
+          <div className="flex flex-col 2xl:gap-12 gap-28 mt-10">
             {/* Heading */}
             <h1 className="text-[#414042] text-xl sm:text-xl lg:text-5xl 2xl:text-6xl font-medium leading-tight text-right pr-12">
              Control Expenses with
@@ -223,9 +223,9 @@ if (
               <Image
                 src="/images/auth/country.png"
                 alt="Performance Analysis dashboard"
-                 width={800}
+                width={700}
                 height={500}
-                className="object-contain 2xl:w-[700px] 2xl:h-[500px] xl:w-[600px]"
+                className="object-contain 2xl:w-[800px] 2xl:h-[600px] xl:w-[600px]"
                 priority
               />
             </div>
@@ -251,7 +251,7 @@ if (
           </Link>
 
           {/* Heading */}
-          <div className="flex flex-col gap-20">
+          <div className="flex flex-col 2xl:gap-12 gap-28 mt-10">
             {/* Heading */}
             <h1 className="text-[#414042] text-xl sm:text-xl lg:text-5xl 2xl:text-6xl font-medium leading-tight text-right pr-12">
              CXO’s tool for&nbsp; 
@@ -265,9 +265,9 @@ if (
               <Image
                 src="/images/auth/brand.png"
                 alt="Performance Analysis dashboard"
-                 width={800}
+                 width={700}
                 height={500}
-               className="object-contain 2xl:w-[700px] 2xl:h-[500px] xl:w-[600px]"
+                className="object-contain 2xl:w-[800px] 2xl:h-[600px] xl:w-[600px]"
                 priority
               />
             </div>
@@ -304,9 +304,9 @@ if (
               <Image
                 src="/images/auth/revenue.png"
                 alt="Performance Analysis dashboard"
-                width={800}
+                width={700}
                 height={500}
-               className="object-contain 2xl:w-[700px] 2xl:h-[500px] xl:w-[600px]"
+                className="object-contain 2xl:w-[800px] 2xl:h-[600px] xl:w-[600px]"
                 priority
               />
           </div>

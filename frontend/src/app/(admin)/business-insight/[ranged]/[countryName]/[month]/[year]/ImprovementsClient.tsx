@@ -3075,9 +3075,9 @@ const MonthsforBI: React.FC = () => {
         ) && (
             <div className='border border-gray-200 rounded-xl p-4 mt-6 w-full bg-white'>
               <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start '>
-                <div className='flex 2xl:flex-row flex-col lg:justify-between justify-start 2xl:items-center  items-start w-full xl:gap-0 gap-3'>
-                  <h2 className="xl:text-2xl text-xl font-bold text-[#414042]">SKU Analysis MTD</h2>
-                  <div className='flex flex-col md:flex-row 2xl:justify-center justify-between 2xl:gap-3 mt-2 2xl:mt-0 w-full'>
+                <div className='flex 2xl:flex-row flex-col justify-between  2xl:items-center  items-start w-full xl:gap-0 gap-3'>
+                  <h2 className="xl:text-2xl text-xl font-bold text-[#414042] text-nowrap">SKU Analysis MTD</h2>
+                  <div className='flex flex-col md:flex-row 2xl:justify-end justify-between 2xl:gap-3 mt-2 2xl:mt-0 w-full'>
 
                     <div
                       style={{
@@ -3128,9 +3128,9 @@ const MonthsforBI: React.FC = () => {
                           )
                         }
                         className="
-    bg-custom-effect text-[#F8EDCE]
+    bg-custom-effect shin text-[#F8EDCE]
     rounded-sm xl:px-4 px-3
-    text-nowrap flex items-center gap-1 justify-end
+    text-nowrap flex items-center gap-1 justify-end 
 
     transition-all duration-200 ease-out
     hover:-translate-y-[2px]

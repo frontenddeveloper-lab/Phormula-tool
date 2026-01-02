@@ -6,6 +6,7 @@ from sqlalchemy import Text
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy import Numeric
 
 
 # ------------------------------------------------- SuperAdmin Models -------------------------------------------------
@@ -52,10 +53,11 @@ class User(db.Model):
     email = db.Column(db.String(150), unique=True, nullable=False)
     phone_number = db.Column(db.String(20), nullable=False)
     annual_sales_range = db.Column(db.String(50), nullable=True)   
-    company_name = db.Column(db.String(50), nullable=True)   
+    company_name = db.Column(db.String(50), nullable=True)
+    target_sales = db.Column(Numeric(12, 2), nullable=True)  # ✅ FIXED   
     brand_name = db.Column(db.String(50), nullable=True)       
-    country = db.Column(db.String(50), nullable=True)   
-    platform = db.Column(db.String(50), nullable=True)   
+    country = db.Column(db.String(50), nullable=True)    
+    marketplace_id = db.Column(db.String(200), nullable=True)
     is_google_user = db.Column(db.Boolean, default=False)
     is_verified = db.Column(db.Boolean, default=False)
     homeCurrency = db.Column(db.String(50), nullable=True)

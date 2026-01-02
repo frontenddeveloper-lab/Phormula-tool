@@ -8,8 +8,7 @@ UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 from config import basedir
 import os
 import pandas as pd
-import numpy as np 
-import base64
+import numpy as np
 from app.models.user_models import User, CountryProfile
 from sqlalchemy import MetaData, Table
 from datetime import datetime, timedelta
@@ -17,10 +16,8 @@ from flask_mail import Message
 from flask import current_app
 from app import mail
 from calendar import month_name
-from pmdarima import auto_arima
 from dotenv import load_dotenv
 from datetime import datetime
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from app.utils.formulas_utils import uk_sales, uk_tax, uk_credits, uk_amazon_fee, uk_profit,uk_platform_fee, uk_advertising
 import warnings
 
@@ -266,11 +263,18 @@ def process_skuwise_data(user_id, country, month, year):
         refund_fees["sku"] = refund_fees["sku"].astype(str).str.strip()
         df["sku"] = df["sku"].astype(str).str.strip()
 
-        df["type_norm"] = type_str.str.lower()
+        # df["type_norm"] = type_str.str.lower()
+        # df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
+
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
 
-        mask = df["type_norm"].isin(["order", "shipment"])
-        quantity_df = df[mask].groupby("sku", as_index=False)["quantity"].sum()
+        quantity_df = (
+            df.groupby("sku", as_index=False)["quantity"]
+            .sum()
+        )
+
+        # mask = df["type_norm"].isin(["order", "shipment"])
+        # quantity_df = df[mask].groupby("sku", as_index=False)["quantity"].sum()
 
         # Aggregate data SKU-wise (base columns)
         sku_grouped = df.groupby('sku').agg({

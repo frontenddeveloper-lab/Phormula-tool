@@ -2763,12 +2763,6 @@ class FormulaEngine:
         if n == 0:
             return pd.Series(dtype=float)
 
-        # Normalize type column
-        if "type" in df.columns:
-            t = df["type"].astype(str).str.strip().str.lower()
-        else:
-            t = pd.Series([""] * n, index=df.index)
-
         # Normalize quantity column
         if "quantity" in df.columns:
             q_raw = df["quantity"].astype(str)
@@ -2783,28 +2777,19 @@ class FormulaEngine:
         else:
             has_sku = pd.Series([True] * n, index=df.index)
 
-        # ✅ UPDATED: allow both "order" and "shipment"
-        is_order_or_shipment = (
-            t.str.startswith("order") |
-            t.str.startswith("shipment")
-        )
+        # ✅ NO type filtering — take all rows
+        mask = has_sku
 
-        mask = is_order_or_shipment & has_sku
-
-        # Units calculation
         units = pd.Series(0.0, index=df.index)
 
-        # Missing quantity → default to 1 (only for valid rows)
+        # Missing quantity → default to 1 for valid rows
         q_filled = q.copy()
         q_filled[mask & q_filled.isna()] = 1.0
 
         units[mask] = q_filled[mask].fillna(0.0)
 
-        # 🔍 Optional debug (keep while validating)
-        # print("[DEBUG][_order_units_only] matched rows:", int(mask.sum()))
-        # print("[DEBUG][_order_units_only] type value counts:\n", t.value_counts().head(10))
-
         return units
+
 
 
     def _order_units_by_sku(self, df: pd.DataFrame) -> pd.DataFrame:

@@ -157,28 +157,27 @@ const onSubmit = (e: React.FormEvent) => {
   setLoading(true);
 
   // Pull values already collected in earlier steps
-  const countries = JSON.parse(
-    localStorage.getItem("selectedCountries") || "[]"
-  ) as string[];
-  const companyName = localStorage.getItem("companyName") || "";
-  const brandName = localStorage.getItem("brandName") || "";
-  const homeCurrency = localStorage.getItem("homeCurrency") || "";
+ const countries = JSON.parse(
+  localStorage.getItem("selectedCountries") || "[]"
+) as string[];
+const companyName = localStorage.getItem("companyName") || "";
+const brandName = localStorage.getItem("brandName") || "";
+const homeCurrency = localStorage.getItem("homeCurrency") || "";
 
-  // Mark onboarding done on client immediately
-  localStorage.setItem("onboardDone", "true");
+// ✅ ADD THESE TWO LINES HERE
+localStorage.setItem("annualRevenue", selectedRevenue);
+localStorage.setItem("onboardDone", "true");
 
-  // 🔥 Fire-and-forget submit + mark complete
-  submitSelectForm({
-    annual_sales_range: selectedRevenue,
-    country: countries.join(", "),
-    company_name: companyName,
-    brand_name: brandName,
-    homeCurrency,
-  })
+// 🔥 Fire-and-forget submit + mark complete
+submitSelectForm({
+  annual_sales_range: selectedRevenue,
+  country: countries.join(", "),
+  company_name: companyName,
+  brand_name: brandName,
+  homeCurrency,
+})
     .unwrap()
-    .then(() =>
-      markOnboardingComplete({ onboarding_complete: true }).unwrap()
-    )
+    
     .catch((e) => {
       console.warn("Onboarding completion failed (non-blocking):", e);
     });
@@ -208,7 +207,7 @@ const onSubmit = (e: React.FormEvent) => {
 
   const onBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back();
+      router.replace("/brand?onboard=1");
     } else {
       router.push("/brand?onboard=1");
     }

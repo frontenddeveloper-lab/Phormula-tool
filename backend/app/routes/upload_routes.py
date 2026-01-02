@@ -1163,6 +1163,186 @@ def ConfirmationFeepreview():
     return jsonify({'message': 'ConfirmationFeepreview successful!'}), 200
 
 
+# @upload_bp.route('/multiCountry', methods=['POST'])
+# def multiCountry():
+#     # ---------- Auth ----------
+#     auth_header = request.headers.get('Authorization')
+#     if not auth_header or not auth_header.startswith('Bearer '):
+#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+#     token = auth_header.split(' ')[1]
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+#         user_id = payload['user_id']
+#     except jwt.ExpiredSignatureError:
+#         return jsonify({'error': 'Token has expired'}), 401
+#     except jwt.InvalidTokenError:
+#         return jsonify({'error': 'Invalid token'}), 401
+
+#     # ---------- File ----------
+#     file = request.files.get('file')
+#     if not file:
+#         return jsonify({'error': 'No file provided'}), 400
+#     if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx')):
+#         return jsonify({'error': 'Invalid file type. Only CSV or XLSX files are allowed.'}), 400
+
+#     # ---------- DB ----------
+#     db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
+#     engine = create_engine(db_url)
+#     inspector = inspect(engine)
+#     metadata = MetaData()  # SQLAlchemy 2.x: no bind here
+#     table_name = f"sku_{user_id}_data_table"
+
+#     # Relaxed schema (only user_id is NOT NULL)
+#     user_specific_table = Table(
+#         table_name, metadata,
+#         Column('id', Integer, primary_key=True),
+#         Column('user_id', Integer, nullable=False),
+#         Column('s_no', Integer, nullable=True),
+#         Column('product_name', String(255), nullable=True),
+#         Column('product_barcode', String(255), nullable=True),
+#         Column('sku_uk', String(255), nullable=True),
+#         Column('sku_us', String(255), nullable=True),
+#         Column('asin', String(255), nullable=True),
+#         Column('price', Float, nullable=True),
+#         Column('currency', String(255), nullable=True),
+#         Column('month', String(20), nullable=True),
+#         Column('year', String(20), nullable=True),
+
+#     )
+
+#     session = None
+#     try:
+#         # ---------- Read into DataFrame ----------
+#         if file.filename.endswith('.csv'):
+#             try:
+#                 df = pd.read_csv(BytesIO(file.read()))
+#             except UnicodeDecodeError:
+#                 file.stream.seek(0)
+#                 df = pd.read_csv(BytesIO(file.read()), encoding='latin-1')
+#         else:
+#             df = pd.read_excel(BytesIO(file.read()))
+
+#         # Fix “Unnamed” header case, then normalize
+#         df = _promote_first_row_to_header_if_needed(df)
+#         df = _normalize_columns(df)
+#         df = df.where(pd.notnull(df), None)
+
+#         # (Re)create fresh table per upload
+#         if inspector.has_table(table_name):
+#             Table(table_name, MetaData(), autoload_with=engine).drop(engine, checkfirst=True)
+#         metadata.create_all(engine)  # SQLAlchemy 2.x: pass engine here
+
+#         Session = sessionmaker(bind=engine)
+#         session = Session()
+
+#         inserts = []
+#         for _, r in df.iterrows():
+#             row = r.to_dict()
+
+#             s_no = _pick(row, ['s_no', 's_no.', 's._no.', 'no', '#'])
+#             try:
+#                 s_no = int(s_no) if s_no not in (None, '') else None
+#             except Exception:
+#                 s_no = None
+
+#             product_name = _pick(row, ['product_name', 'product-name', 'title', 'item_name'])
+#             product_barcode = _pick(row, ['product_barcode', 'barcode', 'ean', 'upc'])
+#             asin = _pick(row, ['asin'])
+
+#             amazon_store = _pick(row, ['amazon_store', 'amazon-store', 'marketplace'])
+#             country = _marketplace_to_country(amazon_store)
+
+#             raw_sku = _pick(row, ['sku', 'seller_sku', 'merchant_sku', 'sku_uk', 'sku_us'])
+#             sku_uk = _pick(row, ['sku_uk'])
+#             sku_us = _pick(row, ['sku_us'])
+#             if not sku_uk and not sku_us and raw_sku:
+#                 if country == 'UK':
+#                     sku_uk = str(raw_sku).strip()
+#                 elif country == 'US':
+#                     sku_us = str(raw_sku).strip()
+
+#             price_value = _pick(row, ['landing_cost', 'your_price', 'sales_price', 'price'])
+#             try:
+#                 price_value = float(price_value) if price_value not in (None, '') else None
+#             except Exception:
+#                 price_value = None
+
+#             currency = _pick(row, ['currency'])
+
+#             month = _pick(row, ['month', 'Month', 'mon', 'mm'])
+#             year  = _pick(row, ['year', 'Year', 'yyyy', 'yy'])
+
+#             # int conversion (safe)
+#             try:
+#                 month = str(month).strip().lower() if month not in (None, '') else None
+#             except Exception:
+#                 month = None
+
+#             try:
+#                 year = str(year) if year not in (None, '') else None
+#             except Exception:
+#                 year = None
+
+
+#             # Skip fully empty lines
+#             if not any([s_no, product_name, product_barcode, asin, sku_uk, sku_us, price_value, currency]):
+#                 continue
+
+#             def _s(x):
+#                 if x is None:
+#                     return None
+#                 x = str(x).strip()
+#                 return x if x else None
+
+#             inserts.append({
+#                 'user_id': user_id,
+#                 's_no': s_no,
+#                 'product_name': _s(product_name),
+#                 'product_barcode': _s(product_barcode),
+#                 'sku_uk': _s(sku_uk),
+#                 'sku_us': _s(sku_us),
+#                 'asin': _s(asin),
+#                 'price': price_value,
+#                 'currency': _s(currency),
+#                 'month': month,
+#                 'year': year,
+#             })
+
+#         if inserts:
+#             session.execute(user_specific_table.insert(), inserts)
+#             session.commit()
+#             msg = 'File uploaded and data saved successfully'
+#         else:
+#             msg = 'File processed, but no valid rows found to insert.'
+
+#         session.close()
+#         engine.dispose()
+#         return jsonify({'message': msg}), 200
+
+#     except Exception as e:
+#         try:
+#             if session is not None:
+#                 session.rollback()
+#                 session.close()
+#         except Exception:
+#             pass
+#         try:
+#             engine.dispose()
+#         except Exception:
+#             pass
+#         print(f"Error processing file: {str(e)}")
+#         return jsonify({'error': f'Error processing file: {str(e)}'}), 500
+
+# BACKEND: full updated route (merged changes)
+# - Supports your uploaded template: single "Date" column (Excel date) -> month="January", year="2024"
+# - Also supports "MM/YYYY" strings if they come in (from CSV or frontend formatting)
+# - Keeps DB columns month/year as strings, month stored as month name (not 01)
+
+from io import BytesIO
+import os
+import calendar
+
 @upload_bp.route('/multiCountry', methods=['POST'])
 def multiCountry():
     # ---------- Auth ----------
@@ -1183,14 +1363,14 @@ def multiCountry():
     file = request.files.get('file')
     if not file:
         return jsonify({'error': 'No file provided'}), 400
-    if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx')):
+    if not (file.filename.lower().endswith('.csv') or file.filename.lower().endswith('.xlsx')):
         return jsonify({'error': 'Invalid file type. Only CSV or XLSX files are allowed.'}), 400
 
     # ---------- DB ----------
     db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
     engine = create_engine(db_url)
     inspector = inspect(engine)
-    metadata = MetaData()  # SQLAlchemy 2.x: no bind here
+    metadata = MetaData()
     table_name = f"sku_{user_id}_data_table"
 
     # Relaxed schema (only user_id is NOT NULL)
@@ -1206,15 +1386,115 @@ def multiCountry():
         Column('asin', String(255), nullable=True),
         Column('price', Float, nullable=True),
         Column('currency', String(255), nullable=True),
+
+        # ✅ keep month/year columns, but store month as name (January) not "01"
         Column('month', String(20), nullable=True),
         Column('year', String(20), nullable=True),
-
     )
+
+    # ---------- helpers ----------
+    def _month_name_from_num(mi: int):
+        if 1 <= mi <= 12:
+            return calendar.month_name[mi]  # "January"
+        return None
+
+    def _parse_mm_yyyy(val):
+        """
+        Accepts '01/2024', '1/2024', '01-2024', '2024-01'
+        Returns (month_name, year_str) or (None, None)
+        """
+        if val in (None, ''):
+            return None, None
+
+        s = str(val).strip()
+        if not s:
+            return None, None
+
+        # normalize separators
+        s = s.replace('.', '/').replace('-', '/')
+
+        parts = s.split('/')
+        if len(parts) == 2 and parts[0].strip().isdigit() and parts[1].strip().isdigit():
+            a, b = parts[0].strip(), parts[1].strip()
+
+            # MM/YYYY
+            if len(b) == 4:
+                mi = int(a)
+                month_name = _month_name_from_num(mi)
+                if month_name:
+                    return month_name, b
+
+            # YYYY/MM
+            if len(a) == 4:
+                yi = a
+                mi = int(b)
+                month_name = _month_name_from_num(mi)
+                if month_name:
+                    return month_name, yi
+
+        return None, None
+
+    def _extract_month_year(row_dict):
+        """
+        Priority:
+          1) date column from your template (normalized key: 'date') -> pandas Timestamp/datetime
+          2) date column as string MM/YYYY (csv)
+          3) fallback separate month/year columns if someone uploads old template
+        """
+        # Your template column is "Date" -> after _normalize_columns it should become "date"
+        date_val = _pick(row_dict, ['date', 'Date'])
+
+        month = None
+        year = None
+
+        # 1) datetime-like from pandas
+        if date_val not in (None, '') and hasattr(date_val, 'month') and hasattr(date_val, 'year'):
+            try:
+                mi = int(date_val.month)
+                yi = int(date_val.year)
+                month = _month_name_from_num(mi)
+                year = str(yi)
+                if month and year:
+                    return month, year
+            except Exception:
+                pass
+
+        # 2) string like "01/2024"
+        if month is None or year is None:
+            m2, y2 = _parse_mm_yyyy(date_val)
+            if m2 and y2:
+                return m2, y2
+
+        # 3) fallback separate month/year columns
+        month_raw = _pick(row_dict, ['month', 'Month', 'mon', 'mm'])
+        year_raw  = _pick(row_dict, ['year', 'Year', 'yyyy', 'yy'])
+
+        # normalize month
+        if month_raw not in (None, ''):
+            s = str(month_raw).strip()
+            if s.isdigit():
+                month = _month_name_from_num(int(s))
+            else:
+                # accept "jan", "january"
+                s_lower = s.lower()
+                for i in range(1, 13):
+                    if s_lower in (calendar.month_name[i].lower(), calendar.month_abbr[i].lower()):
+                        month = calendar.month_name[i]
+                        break
+
+        # normalize year
+        if year_raw not in (None, ''):
+            y = str(year_raw).strip()
+            if y.isdigit() and len(y) == 2:
+                y = "20" + y
+            year = y
+
+        return month, year
 
     session = None
     try:
         # ---------- Read into DataFrame ----------
-        if file.filename.endswith('.csv'):
+        if file.filename.lower().endswith('.csv'):
             try:
                 df = pd.read_csv(BytesIO(file.read()))
             except UnicodeDecodeError:
@@ -1231,7 +1511,7 @@ def multiCountry():
         # (Re)create fresh table per upload
         if inspector.has_table(table_name):
             Table(table_name, MetaData(), autoload_with=engine).drop(engine, checkfirst=True)
-        metadata.create_all(engine)  # SQLAlchemy 2.x: pass engine here
+        metadata.create_all(engine)
 
         Session = sessionmaker(bind=engine)
         session = Session()
@@ -1270,23 +1550,11 @@ def multiCountry():
 
             currency = _pick(row, ['currency'])
 
-            month = _pick(row, ['month', 'Month', 'mon', 'mm'])
-            year  = _pick(row, ['year', 'Year', 'yyyy', 'yy'])
-
-            # int conversion (safe)
-            try:
-                month = str(month).strip().lower() if month not in (None, '') else None
-            except Exception:
-                month = None
-
-            try:
-                year = str(year) if year not in (None, '') else None
-            except Exception:
-                year = None
-
+            # ✅ month/year from your template "Date" column
+            month, year = _extract_month_year(row)
 
             # Skip fully empty lines
-            if not any([s_no, product_name, product_barcode, asin, sku_uk, sku_us, price_value, currency]):
+            if not any([s_no, product_name, product_barcode, asin, sku_uk, sku_us, price_value, currency, month, year]):
                 continue
 
             def _s(x):
@@ -1305,8 +1573,8 @@ def multiCountry():
                 'asin': _s(asin),
                 'price': price_value,
                 'currency': _s(currency),
-                'month': month,
-                'year': year,
+                'month': _s(month),   # "January"
+                'year': _s(year),     # "2024"
             })
 
         if inserts:
