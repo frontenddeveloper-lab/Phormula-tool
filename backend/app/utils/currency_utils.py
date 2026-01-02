@@ -22,7 +22,6 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
 
     engine = create_engine(db_url)
     conn = engine.connect()
-    print("enter in global monthly")
 
     # 4 source tables + unke logical country names
     config_list = [
@@ -34,7 +33,6 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
 
     try:
         for source_table, logical_country in config_list:
-            print(f"\n==== Processing global monthly for source_table={source_table}, country={logical_country} ====")
 
             quarter_table = f"skuwisemonthly_{user_id}_{logical_country}_{month}{year}_table"
 
@@ -151,9 +149,6 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
             total_product_sales = abs(temp["product_sales"].sum())
             total_profit = abs(temp["profit"].sum())
 
-            print(total_profit)
-            print(total_sales)
-            print(total_product_sales)
             sku_grouped["profit_mix"] = sku_grouped.apply(
                 lambda row: (row["profit"] / total_profit) * 100 if total_profit != 0 else 0,
                 axis=1
@@ -163,14 +158,6 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
                 lambda row: (row["net_sales"] / total_sales) * 100 if total_sales != 0 else 0,
                 axis=1
             )
-
-            
-            
-            # print(sku_grouped[["product_name", "profit_mix"]])
-            
-            
-            # print(sku_grouped[["product_name", "sales_mix"]])
-
 
 
             total_row = sku_grouped[sku_grouped["product_name"].str.lower() == "total"]
@@ -242,7 +229,6 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
                 chunksize=1000
             )
             conn.commit()
-            print(f"✅ global monthly SKU-wise data saved in {quarter_table}!")
 
             # ------------------- Upload History Section -------------------
             from app.models.user_models import UploadHistory
@@ -293,13 +279,12 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
                 if existing_entry:
                     session.delete(existing_entry)
                     session.commit()
-                    print(f"Existing upload history entry deleted for {logical_country}.")
 
                 upload_history_entry = UploadHistory(
                     user_id=int(user_id),
                     year=str(year),
                     month=str(month),
-                    country=logical_country,   # 👈 yahan ab "global", "global_inr", "global_cad", "global_gbp"
+                    country=logical_country,   
                     file_name=None,
                     sales_chart_img=None,
                     expense_chart_img=None,
@@ -329,7 +314,7 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
 
                 session.add(upload_history_entry)
                 session.commit()
-                print(f"✅ Upload history entry saved successfully for {logical_country}.")
+               
 
             except Exception as e:
                 print(f"Failed to save upload history for {logical_country}: {e}")
@@ -382,10 +367,6 @@ def process_global_quarterly_skuwise_data(user_id, country, month, year, q, db_u
 
         # ---------- LOOP: same logic har currency table ke liye ----------
         for source_table, logical_country in config_list:
-            print(f"\n==== Processing quarterly for source={source_table}, country={logical_country} ====")
-
-            # Tumhara hi pattern:
-            # quarter2_{user_id}_{country}_{year}_table
             quarter_table = f"{quarter_key}_{user_id}_{logical_country}_{year}_table"
 
             # Get only available months from THIS source table
@@ -504,9 +485,6 @@ def process_global_quarterly_skuwise_data(user_id, country, month, year, q, db_u
             total_product_sales = abs(temp["product_sales"].sum())
             total_profit = abs(temp["profit"].sum())
 
-            print(total_profit)
-            print(total_sales)
-            print(total_product_sales)
 
             sku_grouped["profit_mix"] = sku_grouped.apply(
                 lambda row: (row["profit"] / total_profit) * 100 if total_profit != 0 else 0,
@@ -573,8 +551,6 @@ def process_global_quarterly_skuwise_data(user_id, country, month, year, q, db_u
 
                 sku_grouped.columns = sku_grouped.columns.str.lower()
                 sku_grouped.to_sql(quarter_table, conn_inner, if_exists="replace", index=False)
-                # conn_inner.commit()  # engine.begin() khud handle karega
-                print(f"✅ Quarterly SKU-wise data saved to `{quarter_table}`")
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -590,7 +566,6 @@ def process_global_yearly_skuwise_data(user_id, country, year):
     # Connect to PostgreSQL database
     engine = create_engine(db_url)
     conn = engine.connect()
-    print("enter in global monthly")   
     config_list = [
         (f"skuwisemonthly_{user_id}",      "global"),       # USD (pehle se)
         (f"skuwisemonthlyind_{user_id}",  "global_inr"),   # INR
@@ -605,7 +580,6 @@ def process_global_yearly_skuwise_data(user_id, country, year):
     
     try:
         for source_table, logical_country in config_list:
-            print(f"\n==== Processing global monthly for source_table={source_table}, country={logical_country} ====")
 
             quarter_table = f"skuwiseyearly_{user_id}_{logical_country}_{year}_table"
 
@@ -731,9 +705,6 @@ def process_global_yearly_skuwise_data(user_id, country, year):
             total_product_sales = abs(temp["product_sales"].sum())
             total_profit = abs(temp["profit"].sum())
 
-            print(total_profit)
-            print(total_sales)
-            print(total_product_sales)
 
             sku_grouped["profit_mix"] = sku_grouped.apply(
                 lambda row: (row["profit"] / total_profit) * 100 if total_profit != 0 else 0,
@@ -744,13 +715,6 @@ def process_global_yearly_skuwise_data(user_id, country, year):
                 lambda row: (row["net_sales"] / total_sales) * 100 if total_sales != 0 else 0,
                 axis=1
             )
-
-            
-            
-            # print(sku_grouped[["product_name", "profit_mix"]])
-            
-            
-            # print(sku_grouped[["product_name", "sales_mix"]])
 
 
 
@@ -820,10 +784,6 @@ def process_global_yearly_skuwise_data(user_id, country, year):
                             schema="public", method="multi", chunksize=1000)
             
             conn.commit()
-            print(f"Yearly SKU-wise data saved in {quarter_table}!")
-
-       
-
     except Exception as e:
         print(f"Error processing yearly SKU-wise data: {e}")
         conn.rollback()

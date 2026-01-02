@@ -445,7 +445,7 @@ def compute_inventory_coverage_ratio(user_id: int, country: str) -> pd.DataFrame
             df["product_name"] = None
 
     except Exception as e:
-        print("[WARN] Failed to attach product_name to inventory coverage:", e)
+        
         df["product_name"] = None
 
     # reorder columns (nice for printing)
@@ -629,7 +629,7 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
         year=prev_start.year,
     )
 
-    print(f"[DEBUG] Previous Period Table: {table_name}")
+    
 
     query = text(f"""
         SELECT *
@@ -749,7 +749,7 @@ def fetch_current_mtd_data(user_id, country, curr_start: date, curr_end: date):
         res = conn.execute(query_live, params)
         rows = res.fetchall()
         if not rows:
-            print("[DEBUG] No current MTD rows found in liveorders for this user/date range.")
+            
             return [], []
 
         df = pd.DataFrame(rows, columns=res.keys())
@@ -1835,7 +1835,7 @@ Product name - Classic
 The increase in ASP by 13.27% resulted in a dip in units by 25.91%, which also resulted in sales falling by 16.08%. The sales mix is down by 15.93%, reducing its contribution, and profit is up by 10.74%.
 
 Reduce ASP slightly to improve traction.
-⚠ Inventory: Initiate inventory replenishment as current cover is below lead time.
+Inventory: Initiate inventory replenishment as current cover is below lead time.
 
 -----------------------------
 Metrics paragraph rules (Line 2-3)
@@ -1886,9 +1886,9 @@ Use exactly ONE of these sentences, verbatim:
 -----------------------------
 Allowed inventory alerts (Line 6 only, OPTIONAL)
 -----------------------------
-- "⚠ Inventory: Initiate inventory replenishment as current cover is below lead time."
-- "⚠ Inventory: Push promotions or ads to clear around <aged_units> units of aged inventory and reduce storage costs."
-- "⚠ Inventory: Amazon has flagged this SKU for inventory optimization; review the recommendation in Seller Central."
+- "Inventory: Initiate inventory replenishment as current cover is below lead time."
+- "Inventory: Push promotions or ads to clear around <aged_units> units of aged inventory and reduce storage costs."
+- "Inventory: Amazon has flagged this SKU for inventory optimization; review the recommendation in Seller Central."
 
 Ignore:
 - Any row where product_name is "Total" or contains "Total".
@@ -1926,11 +1926,52 @@ DATA
         )
 
         parsed = json.loads(ai_response.choices[0].message.content.strip())
+        
+        def _fix_action_bullet_format(s: str) -> str:
+            """
+            Ensures Inventory line is on a new line
+            and always AFTER the action sentence.
+            """
+
+            if not s:
+                return s
+
+            # 1️⃣ Force newline before Inventory
+            s = s.replace(".Inventory:", ".\n\n⚠ Inventory:")
+            s = s.replace(" Inventory:", "\n\n⚠ Inventory:")
+
+            # 2️⃣ Ensure Inventory comes AFTER action line
+            lines = [l.strip() for l in s.split("\n") if l.strip()]
+
+            product = lines[0]
+            rest = lines[1:]
+
+            inventory = [l for l in rest if l.lower().startswith("⚠ inventory")]
+            action = [l for l in rest if l.lower().startswith(("check ", "review ", "reduce ", "increase ", "maintain ", "monitor "))]
+            metrics = [l for l in rest if l not in inventory and l not in action]
+
+            final_lines = [product, ""]
+
+            if metrics:
+                final_lines.append(" ".join(metrics))
+                final_lines.append("")
+
+            if action:
+                final_lines.append(action[0])
+
+            if inventory:
+                final_lines.append(inventory[0])
+
+            return "\n".join(final_lines)
+
 
         return {
-            "summary_bullets": [str(b).strip() for b in parsed.get("summary_bullets", [])][:5],
-            "action_bullets": [str(b).strip() for b in parsed.get("action_bullets", [])][:5],
-        }
+        "summary_bullets": [str(b).strip() for b in parsed.get("summary_bullets", [])][:5],
+        "action_bullets": [
+            _fix_action_bullet_format(str(b))
+            for b in parsed.get("action_bullets", [])
+        ][:5],
+    }
 
     except Exception as e:
         print("[ERROR] AI summary generation failed, falling back:", e)
@@ -2100,12 +2141,12 @@ def generate_live_insight(item, country, prev_label, curr_label):
     check inventory_signals for this SKU.
     - ONLY IF inventory_signals indicate an issue, add ONE final bullet.
     - The inventory bullet MUST:
-    • Start with "⚠ Inventory:"
+    • Start with "Inventory:"
     • Use EXACTLY one of the allowed inventory alert sentences below, verbatim.
     - Allowed inventory alerts (verbatim only):
-    • "⚠ Inventory: Initiate inventory replenishment as current cover is below lead time."
-    • "⚠ Inventory: Push promotions or ads to clear around <aged_units> units of aged inventory and reduce storage costs."
-    • "⚠ Inventory: Amazon has flagged this SKU for inventory optimization; review the recommendation in Seller Central."
+    • "Inventory: Initiate inventory replenishment as current cover is below lead time."
+    • "Inventory: Push promotions or ads to clear around <aged_units> units of aged inventory and reduce storage costs."
+    • "Inventory: Amazon has flagged this SKU for inventory optimization; review the recommendation in Seller Central."
     - If no inventory issue exists, DO NOT add any inventory bullet.
     - Do NOT add more than ONE inventory bullet.
     - Do NOT let inventory influence sales, ASP, profit, or pricing explanations.
