@@ -3547,25 +3547,44 @@ const GraphPage: React.FC<GraphPageProps> = ({
 
       const colorMap: Record<string, string> = {
         sales: "#2CA9E0",
-        AmazonExpense: "#ff5c5c",
-        taxncredit: "#FFBE26",
+        AmazonExpense: "#FFBE25",
+        taxncredit: "#C03030",
         total_cous: "#AB64B5",
-        profit: "#5EA49B",
+        profit: "#2DA49A",
         advertisingCosts: "#F47A00",
         Other: "#00627D",
         profit2: "#87AD12",
       };
 
+      // const datasets = Object.entries(selectedGraphs)
+      //   .filter(([, checked]) => checked)
+      //   .map(([metric]) => ({
+      //     label: labelMap[metric] ?? metric,
+      //     data: labels.map((l) => dataToUse[l]?.[metric as keyof (typeof dataToUse)[string]] || 0),
+      //     fill: false,
+      //     borderColor: colorMap[metric] ?? "#000",
+      //     backgroundColor: colorMap[metric] ?? "#000",
+      //     tension: 0.1,
+      //   }));
+
       const datasets = Object.entries(selectedGraphs)
-        .filter(([, checked]) => checked)
-        .map(([metric]) => ({
-          label: labelMap[metric] ?? metric,
-          data: labels.map((l) => dataToUse[l]?.[metric as keyof (typeof dataToUse)[string]] || 0),
-          fill: false,
-          borderColor: colorMap[metric] ?? "#000",
-          backgroundColor: colorMap[metric] ?? "#000",
-          tension: 0.1,
-        }));
+  .filter(([, checked]) => checked)
+  .map(([metric]) => ({
+    label: labelMap[metric] ?? metric,
+    data: labels.map(
+      (l) => dataToUse[l]?.[metric as keyof (typeof dataToUse)[string]] || 0
+    ),
+    fill: false,
+    borderColor: colorMap[metric] ?? "#000",
+    backgroundColor: colorMap[metric] ?? "#000",
+
+    // 👇 Make the line curved
+    tension: 0.35,        // try 0.3 – 0.5
+    cubicInterpolationMode: "monotone", // keeps curve smooth & realistic
+    pointRadius: 3,
+    pointHoverRadius: 5,
+  }));
+
 
       return { labels, datasets, isAllZero };
     }
@@ -3761,12 +3780,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
             {[
               { name: "sales", label: "Net Sales", color: "#2CA9E0" },
               { name: "total_cous", label: "COGS", color: "#AB64B5" },
-              { name: "AmazonExpense", label: "Amazon Fees", color: "#FF5C5C" },
-              { name: "taxncredit", label: "Taxes & Credits", color: "#FFBE26" },
+              { name: "AmazonExpense", label: "Amazon Fees", color: "#FFBE25" },
+              { name: "taxncredit", label: "Taxes & Credits", color: "#C03030" },
               { name: "profit2", label: "CM1 Profit", color: "#87AD12" },
               { name: "advertisingCosts", label: "Advertising Costs", color: "#F47A00" },
-              { name: "Other", label: "Other", color: "#00627D" },
-              { name: "profit", label: "CM2 Profit", color: "#5EA49B" },
+              { name: "Other", label: "Other", color: "#01627F" },
+              { name: "profit", label: "CM2 Profit", color: "#2DA49A" },
             ].map(({ name, label, color }) => {
               const isChecked = !!selectedGraphs[name];
 

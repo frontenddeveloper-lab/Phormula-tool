@@ -19,6 +19,8 @@ from app import db
 from sqlalchemy import delete
 from app.models.user_models import Inventory, CountryProfile, MonthwiseInventory , InventoryAged
 from app.routes.amazon_api_routes import amazon_client, _apply_region_and_marketplace_from_request
+from app.utils.live_bi_utils import generate_inventory_alerts_for_all_skus
+
 from config import Config
 
 # ---------------------------------------------------------------------------
@@ -906,6 +908,16 @@ def _attach_sku_product_names(objs: list["InventoryAged"], user_id: int | None) 
 
 # ------------------------------- route: sync InventoryAged --------------------------
 
+MARKETPLACE_TO_COUNTRY = {
+    "A1F83G8C2ARO7P": "uk",
+    "ATVPDKIKX0DER": "us",
+    "A2EUQ1WTGCTBG2": "ca",
+    "A1PA6795UKMFR9": "de",
+    "A13V1IB3VIYZZH": "fr",
+    "A1RKKUPIHCS9HS": "es",
+    "APJ6JRA9NG5V4": "it",
+}
+
 @inventory_bp.route("/amazon_api/inventory/aged", methods=["GET"])
 def sync_inventory_aged():
     """
@@ -1028,6 +1040,18 @@ def sync_inventory_aged():
             "success": False,
             "error": f"Failed to save rows: {str(e)}",
         }), 500
+    
+        # ---------------- INVENTORY ALERTS ----------------
+    try:
+        country = MARKETPLACE_TO_COUNTRY.get(mp, "uk")
+        inventory_alerts = generate_inventory_alerts_for_all_skus(
+            user_id=user_id,
+            country=country,
+        )
+    except Exception as e:
+        logger.exception("Failed to generate inventory alerts")
+        inventory_alerts = {}
+    # ---------------- RESPONSE ----------------
 
     return jsonify({
         "success": True,
@@ -1037,6 +1061,7 @@ def sync_inventory_aged():
         "rows_in_report": rows_count,
         "rows_saved": saved,
         "snapshot_dates": [d.isoformat() for d in snapshot_dates],
+        "inventory_alerts": inventory_alerts,
     }), 200
 
 

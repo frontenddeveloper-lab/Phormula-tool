@@ -8,12 +8,14 @@ import os
 import base64
 import pandas as pd
 from config import Config
+import logging
 from app.models.user_models import User, CountryProfile
 from app import db
 from dotenv import load_dotenv
 from datetime import datetime
 from calendar import monthrange
 from sqlalchemy.exc import ProgrammingError
+from app.utils.live_bi_utils import generate_inventory_alerts_for_all_skus
 
 # ===== Setup =====
 SECRET_KEY = Config.SECRET_KEY
@@ -21,6 +23,7 @@ UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 
 load_dotenv()
 db_url = os.getenv("DATABASE_URL")
+logger = logging.getLogger(__name__)
 
 current_inventory_bp = Blueprint("current_inventory_bp", __name__)
 
@@ -403,10 +406,22 @@ def current_inventory():
         out_name = f"currentinventory_{user_id}_{country_key}_{month_name.lower()}{year}.xlsx"
         out_path = os.path.join(UPLOAD_FOLDER, out_name)
         final_df.to_excel(out_path, index=False)
+        # ---------------- INVENTORY ALERTS ----------------
+        try:
+            inventory_alerts = generate_inventory_alerts_for_all_skus(
+                user_id=user_id,
+                country=country_key,
+            )
+        except Exception as e:
+            logger.exception("Failed to generate inventory alerts in current_inventory")
+            inventory_alerts = {}
+
 
         return jsonify({
             "message": "Current inventory report generated successfully",
             "data": encode_file_to_base64(out_path),
+             # ✅ NEW
+            "inventory_alerts": inventory_alerts,
         }), 200
 
     finally:

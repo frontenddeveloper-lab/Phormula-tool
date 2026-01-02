@@ -88,6 +88,11 @@ const formatRatio = (n: number | null | undefined) => {
   return v.toFixed(1);
 };
 
+const normalizeSku = (v: any) =>
+  String(v || "")
+    .trim()
+    .toUpperCase();
+
 const normKey = (s: string) =>
   String(s || "")
     .toLowerCase()
@@ -110,6 +115,10 @@ export default function CurrentInventorySection({
   const [invLoading, setInvLoading] = useState(false);
   const [invError, setInvError] = useState<string>("");
   const [invRows, setInvRows] = useState<InventoryRow[]>([]);
+  const [inventoryAlerts, setInventoryAlerts] = useState<Record<
+  string,
+  { alert?: string; alert_type?: string }
+>>({});
 
   // ✅ follow graphRegion, but send lowercase/“global” to backend
   const inventoryCountry = useMemo(() => {
@@ -199,6 +208,17 @@ export default function CurrentInventorySection({
       }
 
       const json = await res.json();
+     const rawAlerts = json?.inventory_alerts || {};
+const normalizedAlerts: Record<
+  string,
+  { alert?: string; alert_type?: string }
+> = {};
+
+Object.keys(rawAlerts).forEach((k) => {
+  normalizedAlerts[normalizeSku(k)] = rawAlerts[k];
+});
+
+setInventoryAlerts(normalizedAlerts);
       const fileData: string | undefined = json?.data;
       if (!fileData) throw new Error(json?.message || "Empty file received from server");
 
@@ -253,6 +273,10 @@ export default function CurrentInventorySection({
       if (isInventoryTotalRow(r)) return false;
       return true;
     });
+
+ 
+
+    
 
     type CalcRow = {
       index: number;
@@ -354,14 +378,8 @@ export default function CurrentInventorySection({
         mtdSales: formatInt(mtdSales),
         sales30: formatInt(mtdSales + sales30),
         coverageMonths: formatRatio(coverage),
-        alert:
-          mtdSales + sales30 <= 0
-            ? ""
-            : coverage < 1
-              ? "Low"
-              : coverage < 2
-                ? "Watch"
-                : "",
+       alert: inventoryAlerts[normalizeSku(row["SKU"])]?.alert || "",
+
       };
     });
 

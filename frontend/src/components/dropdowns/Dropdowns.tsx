@@ -816,33 +816,33 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 ].join(" ")}
               >
                 {/* Units */}
-                <div className="w-full rounded-2xl border border-[#87AD12] bg-[#87AD1226] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">Units</span>
-                    <FaBoxArchive color="#87AD12" size={16} />
+                    {/* <FaBoxArchive color="#87AD12" size={16} /> */}
                   </div>
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatUnits(summary.unit_sold)}
                   </div>
                   {renderComparisons("unit_sold", formatUnits)}
                 </div>
 
                 {/* Gross Sales (✅ uses homeCurrency symbol when global because currencySymbol comes from homeCurrency) */}
-                <div className="w-full rounded-2xl border border-[#FFD54F] bg-[#FFD54F26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#F47A00] bg-[#F47A0026] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">Gross Sales</span>
-                    <FcSalesPerformance fill="000" color="#000" size={16} />
+                    {/* <FcSalesPerformance fill="000" color="#000" size={16} /> */}
                   </div>
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(getGrossSales(summary))}
                   </div>
                   {renderGrossSalesComparisons()}
                 </div>
 
                 {/* Net Sales */}
-                <div className="w-full rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#2CA9E0] bg-[#2CA9E026] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <span className="text-xs text-charcoal-500">Net Sales</span>
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(netSales)}
                   </div>
                   {renderComparisons("total_sales", formatMoney)}
@@ -853,31 +853,31 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 <div className="w-full rounded-2xl border border-[#FF5C5C] bg-[#FF5C5C26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">Expenses</span>
-                    <MdEditDocument color="#FF5C5C" size={16} />
+                    {/* <MdEditDocument color="#FF5C5C" size={16} /> */}
                   </div>
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(summary.total_expense)}
                   </div>
                   {renderComparisons("total_expense", formatMoney)}
                 </div>
 
                 {/* CM2 Profit */}
-                <div className="w-full rounded-2xl border border-[#AB64B5] bg-[#AB64B526] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#2DA49A] bg-[#2DA49A26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">CM2 Profit</span>
-                    <TbMoneybag fill="#AB64B5" color="#AB64B5" size={16} />
+                    {/* <TbMoneybag fill="#AB64B5" color="#AB64B5" size={16} /> */}
                   </div>
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(summary.cm2_profit)}
                   </div>
                   {renderComparisons("cm2_profit", formatMoney)}
                 </div>
 
                 {/* CM2 Profit % */}
-                <div className="w-full rounded-2xl border border-[#00627B] bg-[#00627B26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#01627F] bg-[#01627F26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">CM2 Profit %</span>
-                    <FaMoneyBillTrendUp color="#00627B" size={16} />
+                    {/* <FaMoneyBillTrendUp color="#00627B" size={16} /> */}
                   </div>
                   <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
                     {formatPercent(cm2Percent)}

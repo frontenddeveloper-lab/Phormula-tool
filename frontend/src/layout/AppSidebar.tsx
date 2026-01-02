@@ -355,8 +355,8 @@ const handleInventoryForecastFetch = async () => {
         case "live-business-insight":
           newPath = `/live-business-insight/${ranged}/${newCountryName}/${month}/${year}`;
           break;
-        case "improvements":
-          newPath = `/improvements/${ranged}/${newCountryName}/${month}/${year}`;
+        case "business-insight":
+          newPath = `/business-insight/${ranged}/${newCountryName}/${month}/${year}`;
           break;
         case "chatbot":
           newPath = `/chatbot/${ranged}/${newCountryName}/${month}/${year}`;
@@ -468,7 +468,7 @@ const handleInventoryForecastFetch = async () => {
       subItems: [
         {
           name: "Business Insights",
-          path: `/improvements/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+          path: `/business-insight/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
         },
         {
           name: "Chatbot",

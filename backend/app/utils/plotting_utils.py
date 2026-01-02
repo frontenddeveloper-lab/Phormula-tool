@@ -1364,6 +1364,7 @@ def apply_modifications_fatch(df, country):
 
             # Calculate total_value
             total_value = ((additions - deductions) / quantity)
+            total_value = float(Decimal(total_value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
             
             df.at[index, 'total_value'] = total_value
            

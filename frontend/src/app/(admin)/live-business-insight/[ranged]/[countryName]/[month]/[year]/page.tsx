@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -17,7 +16,6 @@ import DownloadIconButton from '@/components/ui/button/DownloadIconButton';
 import SegmentedToggle from '@/components/ui/SegmentedToggle';
 import { AiButton } from '@/components/ui/button/AiButton';
 
-// import DataTable, { ColumnDef, Row as DataTableRow } from '@/components/DataTable'; 
 
 type MonthsforBIProps = {
   countryName: string; // "uk" | "us" | "ca"
@@ -1053,7 +1051,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
       const lower = part.toLowerCase();
       if (greenWords.includes(lower)) {
         return (
-          <span key={idx} style={{ color: '#16a34a', fontWeight: 600 }}>
+          <span key={idx} style={{ color: '#5EA68E', fontWeight: 600 }}>
             {part}
           </span>
         );
@@ -1331,7 +1329,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
       out.push({
         type: 'num',
         value: `${Number(num).toFixed(2)}${suffix}`,
-        color: isIncrease ? '#16a34a' : '#dc2626',
+        color: isIncrease ? '#5EA68E' : '#dc2626',
       });
 
       lastIndex = end;
@@ -1354,57 +1352,69 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
     });
   };
 
-  const renderAiActionLine = (line: string) => {
-    if (!line) return null;
+const renderAiActionLine = (line: string) => {
+  if (!line) return null;
 
-    // Step 1: Remove "Product name -"
-    const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, '');
+  // 1️⃣ Remove "Product name -"
+  const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, '');
 
-    // Step 2: Product name = first word(s) before "The / Increase / Decrease"
-    const productSplit = cleaned.split(/\s+(The|Increase|Decrease|An increase|A decrease)/i);
+  // 2️⃣ Extract Inventory line (even if stuck or ⚠ prefixed)
+  const inventoryMatch = cleaned.match(/⚠?\s*Inventory\s*:\s*[^.]+\.?/i);
+  const inventoryLine = inventoryMatch?.[0]?.trim() || null;
 
-    const productName = productSplit[0]?.trim();
+  // 3️⃣ Extract Action line (Check / Review / Monitor etc, even with ⚠)
+  const actionMatch = cleaned.match(
+    /⚠?\s*(Check|Review|Monitor|Increase|Reduce|Maintain)[^.]+\.?/i
+  );
+  const actionLine = actionMatch?.[0]?.trim() || null;
 
-    // Step 3: Remaining description
-    const remainingText = cleaned.replace(productName, '').trim();
+  // 4️⃣ Remove extracted lines from description
+  let descriptionText = cleaned;
+  if (inventoryLine) descriptionText = descriptionText.replace(inventoryLine, '');
+  if (actionLine) descriptionText = descriptionText.replace(actionLine, '');
 
-    // Step 4: Split sentences
-    const sentences = remainingText
-      .split('.')
-      .map(s => s.trim())
-      .filter(Boolean);
+  // 5️⃣ Split product name from description
+  const split = descriptionText.split(
+    /\s+(There is|There was|There are|An increase|A decrease|Increase|Decrease)/i
+  );
 
-    // Last sentence = action
-    const actionLine = sentences[sentences.length - 1];
+  const productName = split[0]?.trim();
+  const description = descriptionText.replace(productName, '').trim();
 
-    // Middle description
-    const description = sentences.slice(0, -1).join('. ');
+  return (
+    <div className="space-y-2">
+      {/* Product Name */}
+      {productName && (
+        <div className="font-bold text-[#414042]">
+          Product name – {productName}
+        </div>
+      )}
 
-    return (
-      <div className="space-y-1">
-        {/* Product Name */}
-        {productName && (
-          <div className="font-bold">
-            Product name - {productName}
-          </div>
-        )}
+      {/* Description */}
+      {description && (
+        <div className="text-sm text-[#414042]">
+          {formatBulletLine(description)}
+        </div>
+      )}
 
-        {/* Description */}
-        {description && (
-          <div className="text-sm">
-            {formatBulletLine(description)}
-          </div>
-        )}
+      {/* Action line */}
+      {actionLine && (
+        <div className="font-bold text-[#414042]">
+          {actionLine.replace(/^⚠\s*/, '')}
+        </div>
+      )}
 
-        {/* Recommendation */}
-        {actionLine && (
-          <div className="font-bold">
-            {actionLine}.
-          </div>
-        )}
-      </div>
-    );
-  };
+      {/* Inventory line (always last) */}
+      {inventoryLine && (
+        <div className="font-bold text-[#414042]">
+          ⚠ {inventoryLine.replace(/^⚠?\s*Inventory\s*:\s*/i, 'Inventory: ')}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 
 
 
@@ -1577,91 +1587,82 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
   // DataTable wiring
   // =========================
 
-  type BIGridRow = {
-    __isTotal?: boolean;
-    sNo?: number | string;
-    product?: React.ReactNode;
-    salesMix?: React.ReactNode;
-    unit?: React.ReactNode;
-    asp?: React.ReactNode;
-    sales?: React.ReactNode;
-    mixChange?: React.ReactNode;
-    unitProfit?: React.ReactNode;
-    profit?: React.ReactNode;
-    ai?: React.ReactNode;
-  };
+type BIGridRow = {
+  __isTotal?: boolean;
+  sNo?: number | string;
+  product?: React.ReactNode;
+  salesMix?: React.ReactNode;
+  unit?: React.ReactNode;
+  asp?: React.ReactNode;
+  sales?: React.ReactNode;
+  mixChange?: React.ReactNode;
+  unitProfit?: React.ReactNode;
+  ai?: React.ReactNode;
+  profit?: React.ReactNode;
+};
 
-  const calcGrowthValue = (prev: number, curr: number) => {
-    if (!prev || prev === 0 || curr == null) return null;
-    return ((curr - prev) / prev) * 100;
-  };
+const calcGrowthValue = (prev: number, curr: number) => {
+  if (!prev || prev === 0 || curr == null) return null;
+  return ((curr - prev) / prev) * 100;
+};
 
-  const safePct = (prev: number, curr: number) => {
-    if (!prev || prev === 0 || curr == null) return null;
-    return ((curr - prev) / prev) * 100;
-  };
+const safePct = (prev: number, curr: number) => {
+  if (!prev || prev === 0 || curr == null) return null;
+  return ((curr - prev) / prev) * 100;
+};
 
-  // 🔹 wrap into GrowthCategory for existing renderer
-  const makeGrowth = (prev: number, curr: number): GrowthCategory | undefined => {
-    const v = calcGrowthValue(prev, curr);
-    if (v == null) return undefined;
-    return { value: v, category: '' };
-  };
+const makeGrowth = (prev: number, curr: number): GrowthCategory | undefined => {
+  const v = calcGrowthValue(prev, curr);
+  if (v == null) return undefined;
+  return { value: v, category: "" };
+};
 
-  const renderGrowthOrNA = (g?: GrowthCategory) => {
-    if (!g || g.value == null) return <span>N/A</span>;
+const GrowthCell = ({
+  val,
+  color,
+  showArrow,
+}: {
+  val: number;
+  color: string;
+  showArrow: boolean;
+}) => {
+  const text = `${val > 0 ? "+" : ""}${val.toFixed(2)}%`; // keeps + only for positive
+  const Icon = val > 0 ? FaArrowUp : FaArrowDown;
 
-    const val = Number(g.value);
-    const abs = Math.abs(val).toFixed(2);
-
-    const baseStyle: React.CSSProperties = {
-      display: 'inline-flex',        // 🔑 NOT flex
-      alignItems: 'center',           // 🔑 vertical fix
-      justifyContent: 'center',
-      gap: 6,
-      width: '100%',
-      lineHeight: '1',                // 🔑 arrow/text same line
-      fontWeight: 600,
-      fontSize: 13,
-    };
-
-    // 0% → no arrow
-    if (val === 0) {
-      return (
-        <span style={{ ...baseStyle, color: '#414042' }}>
-          0.00%
-        </span>
-      );
-    }
-
-    // > +5% (High positive)
-    if (val > 5) {
-      return (
-        <span style={{ ...baseStyle, color: '#16a34a' }}>
-          <FaArrowUp size={12} />
-          +{abs}%
-        </span>
-      );
-    }
-
-    // < -5% (High negative)
-    if (val < -5) {
-      return (
-        <span style={{ ...baseStyle, color: '#dc2626' }}>
-          <FaArrowDown size={12} />
-          -{abs}%
-        </span>
-      );
-    }
-
-    // -5% to +5% (Low growth → black)
-    return (
-      <span style={{ ...baseStyle, color: '#414042' }}>
-        {val > 0 ? <FaArrowUp size={12} /> : <FaArrowDown size={12} />}
-        {val > 0 ? `+${abs}%` : `-${abs}%`}
+  return (
+    <span
+      className="inline-flex items-center justify-center gap-2 w-full font-semibold"
+      style={{ color }}
+    >
+      {/* ✅ fixed icon slot (never collapses) */}
+      <span className="w-4 flex justify-center shrink-0">
+        {showArrow ? (
+          <Icon size={12} />
+        ) : (
+          <Icon size={12} style={{ visibility: "hidden" }} />
+        )}
       </span>
-    );
-  };
+
+      {/* ✅ fixed number width so columns stay aligned */}
+      <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
+        {val === 0 ? "0.00%" : text}
+      </span>
+    </span>
+  );
+};
+
+const renderGrowthOrNA = (g?: GrowthCategory) => {
+  if (!g || g.value == null) return <span>N/A</span>;
+
+  const val = Number(g.value);
+
+  let color = "#414042";
+  if (val > 5) color = "#5EA68E";
+  else if (val < -5) color = "#dc2626";
+
+  // ✅ keep icon space even for 0
+  return <GrowthCell val={val} color={color} showArrow={val !== 0} />;
+};
 
 
   const renderNewRevGrowthOrDash = (g?: GrowthCategory) => {
@@ -1759,13 +1760,6 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
         header: isNewRev ? 'Unit Profit (%)' : 'CM1 Profit Per Unit (%)',
         width: '190px',
       },
-      {
-        key: 'profit',
-        header: isNewRev ? 'Profit (%)' : 'CM1 Profit Impact (%)',
-        width: '200px',
-      },
-
-      // ✅ AI column ONLY ONCE and ALWAYS LAST
       ...(showAI
         ? [
           {
@@ -1775,6 +1769,13 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
           },
         ]
         : []),
+
+      {
+        key: 'profit',
+        header: isNewRev ? 'Profit (%)' : 'CM1 Profit Impact (%)',
+        width: '200px',
+      },
+
     ];
 
     return cols;
@@ -2003,6 +2004,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
     return 'bg-white';
   };
 
+
   // =========================
   // Render
   // =========================
@@ -2082,7 +2084,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
 
 
                   <div className="flex gap-3">
-                    <button
+                    {/* <button
                       onClick={analyzeSkus}
                       disabled={!hasAnySkus}
                       className="
@@ -2105,15 +2107,16 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                     >
                       <BsStars style={{ fontSize: '12px', color: '#F8EDCE' }} />
                       {loadingInsight ? 'Generating...' : 'AI Insights'}
-                    </button>
+                    </button> */}
 
-                    {/* <AiButton
-                      onClick={analyzeSkus}
-                      disabled={!hasAnySkus}
-                      loading={loadingInsight}
-                    >
-                      AI Insights
-                    </AiButton> */}
+                    <AiButton onClick={analyzeSkus}
+                      disabled={
+                        !['top_80_skus', 'new_or_reviving_skus', 'other_skus'].some(
+                          (k) =>
+                            (categorizedGrowth[k as keyof CategorizedGrowth] as SkuItem[])?.length > 0
+                        )
+                      } >  {loadingInsight ? "Generating..." : "AI Insights"}</AiButton>
+
 
                     {/* <button
                       onClick={() => {
@@ -2173,7 +2176,7 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 42,            
+                    gap: 42,
                     flexWrap: 'wrap',
                     fontSize: 14,
                     color: '#414042',

@@ -64,9 +64,19 @@ import { SidebarProvider } from "@/context/SidebarContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import Providers from "./providers";
 import { Toaster } from "sonner";
-
-// ✅ add this
 import { PlatformProvider } from "@/components/context/PlatformContext";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: {
+    default: "Phormula",
+    template: "%s | Phormula",
+  },
+  description: "Phormula dashboard",
+  icons: {
+    icon: "/favicon.ico",
+  },
+};
 
 // 🆕 Replace Outfit with Lato
 const lato = Lato({
