@@ -1336,6 +1336,21 @@ def _build_rule_based_summary(prev_totals, curr_totals, top_80_skus, new_revivin
     # keep between 2 and 4 bullet points
     return bullets[:4]
 
+def safe_strip(x, default=""):
+    # handles None, NaN, numbers, etc.
+    if x is None:
+        return default
+    if isinstance(x, float) and np.isnan(x):
+        return default
+    try:
+        s = str(x)
+    except Exception:
+        return default
+    s = s.strip()
+    return s if s else default
+
+
+
 def build_sku_context(sku_rows, max_items=5):
     """
     Poore portfolio (ya jo bhi SKU list tum pass karo) ko kuch logical buckets
@@ -1349,13 +1364,11 @@ def build_sku_context(sku_rows, max_items=5):
     # IMPORTANT: Only product name as label
     # ------------------------
     def make_label(row):
-        name = (row.get("product_name") or "").strip()
-        sku = (row.get("sku") or "").strip()
-
+        name = safe_strip(row.get("product_name"), default="")
         if name:
-            return name   # ✅ product name first
-        # fallback if product_name missing
+            return name
         return "Unnamed SKU"
+
 
     fast_growing_profitable = []
     declining_high_mix = []
@@ -1956,8 +1969,9 @@ def generate_live_insight(item, country, prev_label, curr_label):
     Generate AI insight for a single SKU row from live_mtd_vs_previous growth_data.
     item: one dict from growth_data/top_80_skus/new_reviving/etc.
     """
-    sku = item.get("sku")
-    product_name = (item.get("product_name") or "this product").strip()
+    sku = safe_strip(item.get("sku"), default=None)
+    product_name = safe_strip(item.get("product_name"), default="this product")
+
 
     # ✅ single, deterministic key (no global logic)
     key = sku or product_name

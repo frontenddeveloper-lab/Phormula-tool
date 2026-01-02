@@ -1,6 +1,1738 @@
+// // "use client";
+
+// // import React, { useState } from "react";
+// // import { useRouter } from "next/navigation";
+// // import {
+// //   FaCheckCircle as CheckCircle2,
+// //   FaExclamationCircle as AlertCircle,
+// // } from "react-icons/fa";
+// // import { ImInfinite } from "react-icons/im";
+
+// // import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+// // import Button from "@/components/ui/button/Button";
+
+// // const API_BASE =
+// //   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
+
+// // const getAuthToken = () =>
+// //   typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
+
+// // /** ======= HARD OVERRIDE FOR TESTING ======= **/
+// // const FORCE = {
+// //   enabled: true,
+// //   country: "uk",
+// //   region: "eu-west-1",
+// //   marketplaceId: "A1F83G8C2ARO7P",
+
+// //   // // US
+// //   // enabled: true,
+// //   // country: "us",
+// //   // region: "us-east-1",
+// //   // marketplaceId: "ATVPDKIKX0DER",
+// // };
+// // /** ======================================== **/
+
+// // const fullMonthNames = [
+// //   "January",
+// //   "February",
+// //   "March",
+// //   "April",
+// //   "May",
+// //   "June",
+// //   "July",
+// //   "August",
+// //   "September",
+// //   "October",
+// //   "November",
+// //   "December",
+// // ];
+
+// // const monthSlugOrder = fullMonthNames.map((m) => m.toLowerCase());
+
+// // const two = (n: number | string) => String(n).padStart(2, "0");
+
+// // /** Canonical mappings (kept only for inferring default country/marketplace) */
+// // const marketplaceForCountry = (c: string) =>
+// //   c === "uk"
+// //     ? "A1F83G8C2ARO7P"
+// //     : c === "us"
+// //       ? "ATVPDKIKX0DER"
+// //       : c === "canada"
+// //         ? "A2EUQ1WTGCTBG2"
+// //         : "";
+
+// // /**
+// //  * Only update localStorage.latestFetchedPeriod if the new (year, month)
+// //  * is later than or equal to what is already stored.
+// //  */
+// // function updateLatestFetchedPeriod(monthSlug: string, yearStr: string) {
+// //   if (typeof window === "undefined") return;
+
+// //   const key = "latestFetchedPeriod";
+
+// //   const newMonthIdx = monthSlugOrder.indexOf(monthSlug.toLowerCase());
+// //   if (newMonthIdx === -1) return;
+
+// //   const newYear = parseInt(yearStr, 10);
+// //   if (Number.isNaN(newYear)) return;
+
+// //   const newValue = newYear * 12 + newMonthIdx;
+
+// //   const existingRaw = window.localStorage.getItem(key);
+// //   if (!existingRaw) {
+// //     window.localStorage.setItem(
+// //       key,
+// //       JSON.stringify({ month: monthSlug, year: yearStr })
+// //     );
+// //     return;
+// //   }
+
+// //   try {
+// //     const existing = JSON.parse(existingRaw);
+// //     const existingMonthIdx = monthSlugOrder.indexOf(
+// //       String(existing.month || "").toLowerCase()
+// //     );
+// //     const existingYear = parseInt(existing.year, 10);
+
+// //     if (
+// //       Number.isNaN(existingYear) ||
+// //       existingMonthIdx === -1 ||
+// //       newValue >= existingYear * 12 + existingMonthIdx
+// //     ) {
+// //       window.localStorage.setItem(
+// //         key,
+// //         JSON.stringify({ month: monthSlug, year: yearStr })
+// //       );
+// //     }
+// //   } catch {
+// //     window.localStorage.setItem(
+// //       key,
+// //       JSON.stringify({ month: monthSlug, year: yearStr })
+// //     );
+// //   }
+// // }
+
+// // /** ---------------- JSON API helper ---------------- */
+// // async function apiJson(path: string, options: RequestInit = {}) {
+// //   const token = getAuthToken();
+
+// //   const res = await fetch(`${API_BASE}${path}`, {
+// //     ...options,
+// //     headers: {
+// //       "Content-Type": "application/json",
+// //       ...(options.headers || {}),
+// //       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+// //     },
+// //   });
+
+// //   const text = await res.text().catch(() => "");
+// //   let data: any = {};
+// //   try {
+// //     data = text ? JSON.parse(text) : {};
+// //   } catch {
+// //     data = { raw: text };
+// //   }
+
+// //   if (!res.ok) {
+// //     const msg =
+// //       data?.error ||
+// //       data?.message ||
+// //       text ||
+// //       `Request failed: ${res.status}`;
+// //     throw new Error(msg);
+// //   }
+
+// //   return data;
+// // }
+
+// // /** ---------------- localStorage run-once guards ---------------- */
+// // function lsKeyFees(country: string, year: number, month: number) {
+// //   return `feesSynced:${country}:${year}:${month}`;
+// // }
+// // function lsKeyFeeUpload(country: string) {
+// //   return `feeUploadReady:${country}`;
+// // }
+// // function wasDone(key: string) {
+// //   if (typeof window === "undefined") return false;
+// //   return window.localStorage.getItem(key) === "1";
+// // }
+// // function markDone(key: string) {
+// //   if (typeof window === "undefined") return;
+// //   window.localStorage.setItem(key, "1");
+// // }
+
+// // /**
+// //  * Ensure we hit:
+// //  * 1) /amazon_api/fees/sync_and_upload   (one-time per country)
+// //  * 2) /fetch_fees                       (one-time per country+year+month)
+// //  */
+// // async function ensureFeesPrimedOnce(params: {
+// //   country: string;
+// //   regionUsed?: string;
+// //   marketplaceId: string;
+// //   year: number;
+// //   month: number; // 1-12
+// // }) {
+// //   const { country, regionUsed, marketplaceId, year, month } = params;
+
+// //   // 1) fee upload table (usually one-time per country)
+// //   const uploadKey = lsKeyFeeUpload(country);
+// //   if (!wasDone(uploadKey)) {
+// //     await apiJson(`/amazon_api/fees/sync_and_upload`, {
+// //       method: "POST",
+// //       body: JSON.stringify({
+// //         country,
+// //         marketplace_id: marketplaceId,
+// //         region: regionUsed,
+// //         transit_time: 0,
+// //         stock_unit: 0,
+// //       }),
+// //     });
+
+// //     markDone(uploadKey);
+// //   }
+
+// //   // 2) fetch_fees (month-specific)
+// //   const feesKey = lsKeyFees(country, year, month);
+// //   if (!wasDone(feesKey)) {
+// //     const monthParam = `${year}-${two(month)}`; // e.g. 2025-01
+
+// //     await apiJson(`/fetch_fees`, {
+// //       method: "POST",
+// //       body: JSON.stringify({
+// //         region: regionUsed,
+// //         marketplace_id: marketplaceId,
+// //         month: monthParam,
+// //         year: String(year),
+// //         country,
+// //       }),
+// //     });
+
+// //     markDone(feesKey);
+// //   }
+// // }
+
+// // /** ---------------- Monthly transactions Excel fetch (no download) ---------------- */
+// // async function fetchMonthlyTransactionsExcel(params: {
+// //   year: number;
+// //   month: number;
+// //   marketplace_id: string;
+// //   country: string;
+// //   run_upload_pipeline: boolean;
+// //   store_in_db: boolean;
+// // }) {
+// //   const token = getAuthToken();
+// //   const qs = new URLSearchParams({
+// //     year: String(params.year),
+// //     month: String(params.month),
+// //     marketplace_id: params.marketplace_id,
+// //     run_upload_pipeline: String(params.run_upload_pipeline),
+// //     country: params.country,
+// //     format: "excel",
+// //     store_in_db: String(params.store_in_db),
+// //   });
+
+// //   const url = `${API_BASE}/amazon_api/finances/monthly_transactions?${qs.toString()}`;
+// //   const res = await fetch(url, {
+// //     method: "GET",
+// //     headers: {
+// //       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+// //     },
+// //   });
+
+// //   if (!res.ok) {
+// //     const ct = res.headers.get("content-type") || "";
+// //     const raw = await res.text().catch(() => "");
+// //     let msg = raw;
+
+// //     if (ct.includes("application/json")) {
+// //       try {
+// //         const j = JSON.parse(raw);
+// //         msg = j?.error || j?.message || JSON.stringify(j, null, 2);
+// //       } catch {}
+// //     }
+
+// //     throw new Error(`API ${res.status} ${res.statusText}\nURL: ${url}\n\n${msg}`);
+// //   }
+
+// //   // ✅ IMPORTANT: consume body so request completes, but do NOT download
+// //   await res.arrayBuffer();
+
+// //   return { ok: true, url };
+// // }
+
+// // /** Build a month range ending at previous month (not current ongoing month) */
+// // function buildMonthRange(count: number) {
+// //   const now = new Date();
+
+// //   // Anchor = previous month
+// //   const anchor = new Date(
+// //     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)
+// //   );
+
+// //   const out: { y: number; mIdx: number; mNum: number }[] = [];
+// //   for (let i = 0; i < count; i++) {
+// //     const d = new Date(
+// //       Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - i, 1)
+// //     );
+// //     const y = d.getUTCFullYear();
+// //     const mIdx = d.getUTCMonth();
+// //     out.push({ y, mIdx, mNum: mIdx + 1 });
+// //   }
+
+// //   return out.reverse(); // oldest -> newest
+// // }
+
+// // /** Build range from Jan 2024 up to previous month (current month - 1), oldest -> newest */
+// // function buildLifetimeRange() {
+// //   const startY = 2024;
+// //   const startMIdx = 0; // Jan
+
+// //   const now = new Date();
+// //   const anchor = new Date(
+// //     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)
+// //   ); // prev month
+// //   const endY = anchor.getUTCFullYear();
+// //   const endMIdx = anchor.getUTCMonth();
+
+// //   const startValue = startY * 12 + startMIdx;
+// //   const endValue = endY * 12 + endMIdx;
+
+// //   if (endValue < startValue) return [];
+
+// //   const out: { y: number; mIdx: number; mNum: number }[] = [];
+// //   for (let v = startValue; v <= endValue; v++) {
+// //     const y = Math.floor(v / 12);
+// //     const mIdx = v % 12;
+// //     out.push({ y, mIdx, mNum: mIdx + 1 });
+// //   }
+
+// //   return out;
+// // }
+
+// // type Props = {
+// //   region?: string; // not sent to monthly_transactions API anymore, but used for fee priming
+// //   country?: string;
+// //   onClose?: () => void;
+// // };
+
+// // const AmazonFinancialDashboard: React.FC<Props> = ({
+// //   region,
+// //   country,
+// //   onClose,
+// // }) => {
+// //   const router = useRouter();
+
+// //   // infer country
+// //   const countryNormalized = (country || "").toLowerCase();
+// //   let countryUsed = countryNormalized || "uk";
+// //   let marketplaceIdUsed = marketplaceForCountry(countryUsed) || "A1F83G8C2ARO7P";
+
+// //   /** ---- HARD OVERRIDE (testing) ---- */
+// //   const regionUsed = FORCE.enabled ? FORCE.region : region;
+// //   if (FORCE.enabled) {
+// //     countryUsed = FORCE.country;
+// //     marketplaceIdUsed = FORCE.marketplaceId;
+// //   }
+
+// //   // current month/year
+// //   const today = new Date();
+// //   const currentMonthIdx0 = today.getMonth(); // 0–11
+// //   const currentMonth01 = two(currentMonthIdx0 + 1);
+// //   const currentYear = today.getFullYear();
+
+// //   // default selection = previous month (not current ongoing month)
+// //   let defaultYear = currentYear;
+// //   let defaultMonthIdx0 = currentMonthIdx0 - 1;
+// //   if (defaultMonthIdx0 < 0) {
+// //     defaultMonthIdx0 = 11;
+// //     defaultYear -= 1;
+// //   }
+
+// //   const [error, setError] = useState<string>("");
+// //   const [message, setMessage] = useState<string>("");
+
+// //   const [selMonth, setSelMonth] = useState(two(defaultMonthIdx0 + 1)); // "01".."12"
+// //   const [selYear, setSelYear] = useState(String(defaultYear));
+
+// //   const [busy, setBusy] = useState(false);
+// //   const [progress, setProgress] = useState<{
+// //     active: boolean;
+// //     label: string;
+// //     detail?: string;
+// //     current: number;
+// //     total: number;
+// //     ok?: number;
+// //     fail?: number;
+// //   }>({
+// //     active: false,
+// //     label: "",
+// //     detail: "",
+// //     current: 0,
+// //     total: 0,
+// //     ok: 0,
+// //     fail: 0,
+// //   });
+
+// //   const startProgress = (total: number, label: string, detail = "") => {
+// //     setProgress({
+// //       active: true,
+// //       label,
+// //       detail,
+// //       current: 0,
+// //       total,
+// //       ok: 0,
+// //       fail: 0,
+// //     });
+// //   };
+
+// //   const setProgressStep = (current: number, label: string, detail = "") => {
+// //     setProgress((p) => ({
+// //       ...p,
+// //       active: true,
+// //       current,
+// //       label,
+// //       detail,
+// //     }));
+// //   };
+
+// //   const bumpOk = () =>
+// //     setProgress((p) => ({ ...p, ok: (p.ok || 0) + 1 }));
+
+// //   const bumpFail = () =>
+// //     setProgress((p) => ({ ...p, fail: (p.fail || 0) + 1 }));
+
+// //   const stopProgress = () =>
+// //     setProgress((p) => ({ ...p, active: false }));
+// //   const [selectedPeriod, setSelectedPeriod] = useState<
+// //     number | "lifetime" | null
+// //   >(12);
+
+// //     const wrap = async (fn: () => Promise<void>) => {
+// //     try {
+// //       setBusy(true);
+// //       setError("");
+// //       setMessage("");
+// //       // keep progress as-is (startProgress fn ke andar hoga)
+// //       await fn();
+// //     } catch (e: any) {
+// //       setError(e?.message || "Unknown error");
+// //     } finally {
+// //       setBusy(false);
+// //     }
+// //   };
+
+
+// //     const handleFetchByMonth = () =>
+// //     wrap(async () => {
+// //       const y = parseInt(selYear, 10);
+// //       const mNum = parseInt(selMonth, 10);
+
+// //       // total steps: 2 (fees priming + monthly fetch)
+// //       startProgress(2, "Starting fetch…", `Month: ${y}-${two(mNum)}`);
+
+// //       setProgressStep(1, "Priming fees…");
+
+// // // isolate backend call from React state cycle
+// // await Promise.resolve().then(() =>
+// //   ensureFeesPrimedOnce({
+// //     country: countryUsed,
+// //     regionUsed,
+// //     marketplaceId: marketplaceIdUsed,
+// //     year: y,
+// //     month: mNum,
+// //   })
+// // );
+
+
+// //       setProgressStep(2, "Fetching monthly transactions…", `Month: ${y}-${two(mNum)}`);
+// //       await fetchMonthlyTransactionsExcel({
+// //         year: y,
+// //         month: mNum,
+// //         marketplace_id: marketplaceIdUsed,
+// //         country: countryUsed,
+// //         run_upload_pipeline: true,
+// //         store_in_db: true,
+// //       });
+
+// //       const monthSlug = fullMonthNames[mNum - 1].toLowerCase();
+// //       updateLatestFetchedPeriod(monthSlug, String(y));
+
+// //       setMessage(
+// //         `Fetched ${countryUsed}: ${y}-${two(mNum)} (fees primed, no download)`
+// //       );
+
+// //       if (onClose) onClose();
+// //       router.push(`/country/MTD/${countryUsed}/${monthSlug}/${y}`);
+// //     });
+
+
+// //   const handleFetchRange = () =>
+// //     wrap(async () => {
+// //       const isLifetime = selectedPeriod === "lifetime";
+
+// //       const months = isLifetime
+// //         ? buildLifetimeRange()
+// //         : buildMonthRange((selectedPeriod as number) || 0); // ends at current-1 month
+
+// //       if (!months.length) {
+// //         setMessage("No months available to fetch.");
+// //         return;
+// //       }
+
+// //       if (!isLifetime && ![3, 6, 12].includes(selectedPeriod as number)) {
+// //         setMessage("Please select 3, 6, 12, or Lifetime.");
+// //         return;
+// //       }
+
+
+
+
+// //       const first = months[0];
+
+// //       setProgressStep(1, "Priming fees (once)…", `First month: ${first.y}-${two(first.mNum)}`);
+// //       await ensureFeesPrimedOnce({
+// //         country: countryUsed,
+// //         regionUsed,
+// //         marketplaceId: marketplaceIdUsed,
+// //         year: first.y,
+// //         month: first.mNum,
+// //       });
+
+// //       startProgress(1 + months.length, "Preparing range fetch…", 
+// //         isLifetime ? "Lifetime" : `${selectedPeriod} months`
+// //       );
+
+// //       let ok = 0;
+// //       let fail = 0;
+
+// //       let step = 1; // already used by priming
+// //       for (const { y, mNum } of months) {
+// //         step += 1;
+// //         setProgressStep(
+// //           step,
+// //           "Fetching monthly transactions…",
+// //           `Done: ${ok + fail}/${months.length} | Current: ${y}-${two(mNum)} | OK: ${ok} | Failed: ${fail}`
+// //         );
+
+// //         try {
+// //           await fetchMonthlyTransactionsExcel({
+// //             year: y,
+// //             month: mNum,
+// //             marketplace_id: marketplaceIdUsed,
+// //             country: countryUsed,
+// //             run_upload_pipeline: true,
+// //             store_in_db: true,
+// //           });
+// //           ok++;
+// //           bumpOk();
+// //         } catch (e) {
+// //           console.error("monthly_transactions excel failed for", y, mNum, e);
+// //           fail++;
+// //           bumpFail();
+// //         }
+// //       }
+
+// //       const last = months[months.length - 1];
+// //       const latestMonthSlug = fullMonthNames[last.mIdx].toLowerCase();
+// //       updateLatestFetchedPeriod(latestMonthSlug, String(last.y));
+
+// //       setMessage(
+// //         `Fetch complete for ${countryUsed}: ${
+// //           isLifetime ? "lifetime" : `requested ${selectedPeriod}`
+// //         }, ok ${ok}, failed ${fail} (fees primed once, no downloads)`
+// //       );
+
+// //       if (onClose) onClose();
+// //       router.push(`/country/MTD/${countryUsed}/${latestMonthSlug}/${last.y}`);
+// //     });
+
+// //   return (
+// //     <div className="w-full">
+// //       <div className="rounded-xl bg-white">
+// //         {/* Header */}
+// //         <div className="items-center mb-2 p-4">
+// //           <div className="text-center">
+// //             <PageBreadcrumb
+// //               pageTitle="Select Data Fetch Period"
+// //               textSize="2xl"
+// //               variant="table"
+// //             />
+// //             <p className="text-charcoal-500 text-sm mt-1">
+// //               Link your Amazon Seller Central to sync your sales data
+// //             </p>
+// //           </div>
+// //         </div>
+
+// //         <p className="text-charcoal-500 text-center font-bold text-md mt-1">
+// //           Data Fetch Period
+// //         </p>
+
+// //         {/* Period Buttons */}
+// //         <div
+// //           className="
+// //             mt-2
+// //             grid grid-cols-5 gap-2
+// //             sm:grid-cols-5 sm:gap-3
+// //             max-w-xl mx-auto
+// //           "
+// //         >
+// //           {[1, 3, 6, 12, "lifetime"].map((m) => {
+// //             const isActive = selectedPeriod === m;
+
+// //             return (
+// //               <div key={String(m)} className="relative w-full">
+// //                 {m === 12 && (
+// //                   <div
+// //                     className={[
+// //                       "absolute -top-2 left-1/2 -translate-x-1/2",
+// //                       "text-[10px] px-2 py-0.5 rounded-full z-10",
+// //                       selectedPeriod !== 12
+// //                         ? "bg-green-500 text-yellow-200"
+// //                         : "bg-gray-200 text-gray-700",
+// //                     ].join(" ")}
+// //                   >
+// //                     Recommended
+// //                   </div>
+// //                 )}
+
+// //                 <button
+// //                   type="button"
+// //                   onClick={() => setSelectedPeriod(m as any)}
+// //                   className={[
+// //                     `
+// //                       w-full
+// //                       rounded-lg border
+// //                       p-2 sm:p-3
+// //                       text-center transition
+// //                     `,
+// //                     isActive
+// //                       ? "border-green-500 bg-green-500 text-yellow-200"
+// //                       : "border-slate-200 bg-slate-50 hover:bg-white text-charcoal-500",
+// //                   ].join(" ")}
+// //                 >
+// //                   {/* value row: fixed visual slot so ∞ doesn't look narrower */}
+// //                   <div className="w-full text-base sm:text-lg font-semibold flex items-center justify-center tabular-nums">
+// //                     <span className="inline-flex w-[1.6em] justify-center">
+// //                       {m === "lifetime" ? (
+// //                         <ImInfinite className="text-xl sm:text-2xl" />
+// //                       ) : (
+// //                         m
+// //                       )}
+// //                     </span>
+// //                   </div>
+
+// //                   <div className="text-[10px] sm:text-xs uppercase tracking-wide mt-1">
+// //                     {m === "lifetime"
+// //                       ? "Lifetime"
+// //                       : m === 1
+// //                         ? "Month"
+// //                         : "Months"}
+// //                   </div>
+// //                 </button>
+// //               </div>
+// //             );
+// //           })}
+// //         </div>
+
+// //         {/* Note Section */}
+// //         <div
+// //           className="
+// //             mt-4
+// //             max-w-xl mx-auto
+// //             rounded-lg
+// //             bg-[#D9D9D9E5]
+// //             p-2 text-[12px]
+// //             sm:p-3 sm:text-sm
+// //             border border-[#D9D9D9]
+// //           "
+// //           style={{ borderLeft: "6px solid #5EA68E" }}
+// //         >
+// //           Note:&nbsp; A longer time range gives better trend and forecast.
+// //           However, it may take longer to complete the initial data fetch.
+// //         </div>
+
+// //                 {/* Progress UI */}
+// //         {busy && progress.active && progress.total > 0 && (
+// //           <div className="mt-4 max-w-xl mx-auto">
+// //             <div className="rounded-lg border border-slate-200 bg-white p-3">
+// //               <div className="flex items-center justify-between gap-3">
+// //                 <div className="text-sm font-semibold text-slate-700">
+// //                   {progress.label}
+// //                 </div>
+// //                 <div className="text-xs text-slate-500 tabular-nums">
+// //                   {Math.min(100, Math.round((progress.current / progress.total) * 100))}%
+// //                 </div>
+// //               </div>
+
+// //               <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+// //                 <div
+// //                   className="h-full bg-[#5EA68E] transition-all duration-300"
+// //                   style={{
+// //                     width: `${Math.min(
+// //                       100,
+// //                       Math.round((progress.current / progress.total) * 100)
+// //                     )}%`,
+// //                   }}
+// //                 />
+// //               </div>
+
+// //               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+// //                 <div>
+// //                   Step {progress.current}/{progress.total}
+// //                 </div>
+
+// //                 <div className="flex items-center gap-3">
+// //                   <span>OK: {progress.ok || 0}</span>
+// //                   <span>Failed: {progress.fail || 0}</span>
+// //                 </div>
+// //               </div>
+
+// //               {!!progress.detail && (
+// //                 <div className="mt-2 text-xs text-slate-500">
+// //                   {progress.detail}
+// //                 </div>
+// //               )}
+// //             </div>
+// //           </div>
+// //         )}
+
+
+// //         {/* 1 month controls */}
+// //         {selectedPeriod === 1 && (
+// //           <div className="mt-6">
+// //             <div className="flex flex-wrap items-center gap-3 justify-center">
+// //               {/* Month */}
+// //               <div className="flex items-center gap-2">
+// //                 <label className="text-xs text-slate-500">Month</label>
+// //                 <select
+// //                   value={selMonth}
+// //                   onChange={(e) => setSelMonth(e.target.value)}
+// //                   className="rounded-lg border-2 border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-[#5EA68E] focus:ring-4 focus:ring-[#5EA68E]/20"
+// //                 >
+// //                   {[
+// //                     ["01", "Jan"],
+// //                     ["02", "Feb"],
+// //                     ["03", "Mar"],
+// //                     ["04", "Apr"],
+// //                     ["05", "May"],
+// //                     ["06", "Jun"],
+// //                     ["07", "Jul"],
+// //                     ["08", "Aug"],
+// //                     ["09", "Sep"],
+// //                     ["10", "Oct"],
+// //                     ["11", "Nov"],
+// //                     ["12", "Dec"],
+// //                   ].map(([val, label]) => {
+// //                     const isCurrentMonthAndYear =
+// //                       val === currentMonth01 && selYear === String(currentYear);
+// //                     const shouldDisable = isCurrentMonthAndYear && selMonth !== val;
+
+// //                     return (
+// //                       <option key={val} value={val} disabled={shouldDisable}>
+// //                         {label}
+// //                       </option>
+// //                     );
+// //                   })}
+// //                 </select>
+// //               </div>
+
+// //               {/* Year */}
+// //               <div className="flex items-center gap-2">
+// //                 <label className="text-xs text-slate-500">Year</label>
+// //                 <select
+// //                   value={selYear}
+// //                   onChange={(e) => {
+// //                     const newYear = e.target.value;
+// //                     setSelYear(newYear);
+
+// //                     if (
+// //                       newYear === String(currentYear) &&
+// //                       selMonth === currentMonth01
+// //                     ) {
+// //                       const prevIdx = (currentMonthIdx0 - 1 + 12) % 12;
+// //                       setSelMonth(two(prevIdx + 1));
+// //                     }
+// //                   }}
+// //                   className="rounded-lg border-2 border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-[#5EA68E] focus:ring-4 focus:ring-[#5EA68E]/20"
+// //                 >
+// //                   {Array.from(
+// //                     { length: new Date().getFullYear() - 2024 + 1 },
+// //                     (_, i) => 2024 + i
+// //                   ).map((year) => (
+// //                     <option key={year} value={year}>
+// //                       {year}
+// //                     </option>
+// //                   ))}
+// //                 </select>
+// //               </div>
+// //             </div>
+
+// //             <div className="w-full flex justify-center gap-3 mt-4">
+// //               <Button onClick={onClose} variant="outline" size="sm">
+// //                 Cancel
+// //               </Button>
+// //               <Button
+// //                 onClick={handleFetchByMonth}
+// //                 variant="primary"
+// //                 size="sm"
+// //                 disabled={busy}
+// //               >
+// //                 {busy ? "Fetching..." : "Continue"}
+// //               </Button>
+// //             </div>
+// //           </div>
+// //         )}
+
+// //         {/* >1 month controls (includes Lifetime) */}
+// //         {selectedPeriod &&
+// //           (selectedPeriod === "lifetime" || selectedPeriod > 1) && (
+// //             <div className="w-full flex justify-center gap-3 mt-4">
+// //               <Button onClick={onClose} variant="outline" size="sm">
+// //                 Cancel
+// //               </Button>
+
+// //               <Button
+// //                 onClick={handleFetchRange}
+// //                 variant="primary"
+// //                 size="sm"
+// //                 disabled={busy}
+// //               >
+// //                 {busy ? "Fetching..." : `Continue`}
+// //               </Button>
+// //             </div>
+// //           )}
+// //       </div>
+
+// //       {/* Messages */}
+// //       <div className="mt-4 space-y-4">
+// //         {message && (
+// //           <div className="flex items-center gap-2 rounded-md bg-emerald-50 border border-emerald-200 p-3 text-emerald-800 text-sm">
+// //             <CheckCircle2 />
+// //             <span>{message}</span>
+// //           </div>
+// //         )}
+// //         {error && (
+// //           <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 p-3 text-red-700 text-sm">
+// //             <AlertCircle />
+// //             <span>{error}</span>
+// //           </div>
+// //         )}
+// //       </div>
+// //     </div>
+// //   );
+// // };
+
+// // export default AmazonFinancialDashboard;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// "use client";
+
+// import React, { useMemo, useState } from "react";
+// import { useRouter } from "next/navigation";
+// import {
+//   FaCheckCircle as CheckCircle2,
+//   FaExclamationCircle as AlertCircle,
+// } from "react-icons/fa";
+// import { ImInfinite } from "react-icons/im";
+
+// import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+// import Button from "@/components/ui/button/Button";
+
+// const API_BASE =
+//   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
+
+// const getAuthToken = () =>
+//   typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
+
+// /** ======= HARD OVERRIDE FOR TESTING ======= **/
+// const FORCE = {
+//   enabled: true,
+//   country: "uk",
+//   region: "eu-west-1",
+//   marketplaceId: "A1F83G8C2ARO7P",
+// };
+// /** ======================================== **/
+
+// const fullMonthNames = [
+//   "January",
+//   "February",
+//   "March",
+//   "April",
+//   "May",
+//   "June",
+//   "July",
+//   "August",
+//   "September",
+//   "October",
+//   "November",
+//   "December",
+// ];
+
+// const monthSlugOrder = fullMonthNames.map((m) => m.toLowerCase());
+// const two = (n: number | string) => String(n).padStart(2, "0");
+
+// /** Canonical mappings */
+// const marketplaceForCountry = (c: string) =>
+//   c === "uk"
+//     ? "A1F83G8C2ARO7P"
+//     : c === "us"
+//       ? "ATVPDKIKX0DER"
+//       : c === "canada"
+//         ? "A2EUQ1WTGCTBG2"
+//         : "";
+
+// /**
+//  * Only update localStorage.latestFetchedPeriod if the new (year, month)
+//  * is later than or equal to what is already stored.
+//  */
+// function updateLatestFetchedPeriod(monthSlug: string, yearStr: string) {
+//   if (typeof window === "undefined") return;
+
+//   const key = "latestFetchedPeriod";
+
+//   const newMonthIdx = monthSlugOrder.indexOf(monthSlug.toLowerCase());
+//   if (newMonthIdx === -1) return;
+
+//   const newYear = parseInt(yearStr, 10);
+//   if (Number.isNaN(newYear)) return;
+
+//   const newValue = newYear * 12 + newMonthIdx;
+
+//   const existingRaw = window.localStorage.getItem(key);
+//   if (!existingRaw) {
+//     window.localStorage.setItem(
+//       key,
+//       JSON.stringify({ month: monthSlug, year: yearStr })
+//     );
+//     return;
+//   }
+
+//   try {
+//     const existing = JSON.parse(existingRaw);
+//     const existingMonthIdx = monthSlugOrder.indexOf(
+//       String(existing.month || "").toLowerCase()
+//     );
+//     const existingYear = parseInt(existing.year, 10);
+
+//     if (
+//       Number.isNaN(existingYear) ||
+//       existingMonthIdx === -1 ||
+//       newValue >= existingYear * 12 + existingMonthIdx
+//     ) {
+//       window.localStorage.setItem(
+//         key,
+//         JSON.stringify({ month: monthSlug, year: yearStr })
+//       );
+//     }
+//   } catch {
+//     window.localStorage.setItem(
+//       key,
+//       JSON.stringify({ month: monthSlug, year: yearStr })
+//     );
+//   }
+// }
+
+// /** ---------------- JSON API helper ---------------- */
+// async function apiJson(path: string, options: RequestInit = {}) {
+//   const token = getAuthToken();
+
+//   const res = await fetch(`${API_BASE}${path}`, {
+//     ...options,
+//     headers: {
+//       "Content-Type": "application/json",
+//       ...(options.headers || {}),
+//       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+//     },
+//   });
+
+//   const text = await res.text().catch(() => "");
+//   let data: any = {};
+//   try {
+//     data = text ? JSON.parse(text) : {};
+//   } catch {
+//     data = { raw: text };
+//   }
+
+//   if (!res.ok) {
+//     const msg =
+//       data?.error || data?.message || text || `Request failed: ${res.status}`;
+//     throw new Error(msg);
+//   }
+
+//   return data;
+// }
+
+// /** ---------------- localStorage run-once guards ---------------- */
+// function lsKeyFees(country: string, year: number, month: number) {
+//   return `feesSynced:${country}:${year}:${month}`;
+// }
+// function lsKeyFeeUpload(country: string) {
+//   return `feeUploadReady:${country}`;
+// }
+// function wasDone(key: string) {
+//   if (typeof window === "undefined") return false;
+//   return window.localStorage.getItem(key) === "1";
+// }
+// function markDone(key: string) {
+//   if (typeof window === "undefined") return;
+//   window.localStorage.setItem(key, "1");
+// }
+
+// /**
+//  * Ensure we hit:
+//  * 1) /amazon_api/fees/sync_and_upload   (one-time per country)
+//  * 2) /fetch_fees                       (one-time per country+year+month)
+//  */
+// async function ensureFeesPrimedOnce(params: {
+//   country: string;
+//   regionUsed?: string;
+//   marketplaceId: string;
+//   year: number;
+//   month: number; // 1-12
+// }) {
+//   const { country, regionUsed, marketplaceId, year, month } = params;
+
+//   const uploadKey = lsKeyFeeUpload(country);
+//   if (!wasDone(uploadKey)) {
+//     await apiJson(`/amazon_api/fees/sync_and_upload`, {
+//       method: "POST",
+//       body: JSON.stringify({
+//         country,
+//         marketplace_id: marketplaceId,
+//         region: regionUsed,
+//         transit_time: 0,
+//         stock_unit: 0,
+//       }),
+//     });
+//     markDone(uploadKey);
+//   }
+
+//   const feesKey = lsKeyFees(country, year, month);
+//   if (!wasDone(feesKey)) {
+//     const monthParam = `${year}-${two(month)}`;
+//     await apiJson(`/fetch_fees`, {
+//       method: "POST",
+//       body: JSON.stringify({
+//         region: regionUsed,
+//         marketplace_id: marketplaceId,
+//         month: monthParam,
+//         year: String(year),
+//         country,
+//       }),
+//     });
+//     markDone(feesKey);
+//   }
+// }
+
+// /** -------- Better error parsing for monthly_transactions -------- */
+// async function readErrorMessage(res: Response) {
+//   const ct = res.headers.get("content-type") || "";
+//   const raw = await res.text().catch(() => "");
+//   if (!raw) return `API ${res.status} ${res.statusText}`;
+
+//   if (ct.includes("application/json")) {
+//     try {
+//       const j = JSON.parse(raw);
+//       const e = j?.error || j?.message || j;
+//       return typeof e === "string" ? e : JSON.stringify(e, null, 2);
+//     } catch {
+//       return raw;
+//     }
+//   }
+//   return raw;
+// }
+
+// /** ---------------- Monthly transactions Excel fetch (no download) ---------------- */
+// async function fetchMonthlyTransactionsExcel(params: {
+//   year: number;
+//   month: number; // 1-12
+//   marketplace_id: string;
+//   country: string;
+//   run_upload_pipeline: boolean;
+//   store_in_db: boolean;
+// }) {
+//   const token = getAuthToken();
+
+//   if (params.month < 1 || params.month > 12) {
+//     throw new Error(`Invalid month: ${params.month}. Expected 1-12.`);
+//   }
+
+//   const qs = new URLSearchParams({
+//     year: String(params.year),
+//     month: String(params.month),
+//     marketplace_id: params.marketplace_id,
+//     run_upload_pipeline: String(params.run_upload_pipeline),
+//     country: params.country,
+//     format: "excel",
+//     store_in_db: String(params.store_in_db),
+//   });
+
+//   const url = `${API_BASE}/amazon_api/finances/monthly_transactions?${qs.toString()}`;
+//   const res = await fetch(url, {
+//     method: "GET",
+//     headers: {
+//       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+//     },
+//   });
+
+//   if (!res.ok) {
+//     const msg = await readErrorMessage(res);
+//     throw new Error(`API ${res.status} ${res.statusText}\nURL: ${url}\n\n${msg}`);
+//   }
+
+//   await res.arrayBuffer();
+//   return { ok: true, url };
+// }
+
+// /** ===========================
+//  *  SP-API 2-year window helpers
+//  *  Enforce: earliest = current UTC month - 24 months
+//  *  Also enforce: latest selectable = previous UTC month (no current ongoing month)
+//  * =========================== */
+// function monthValue(y: number, m1: number) {
+//   // m1: 1..12
+//   return y * 12 + (m1 - 1);
+// }
+
+// function addMonthsUTC(year: number, month1to12: number, delta: number) {
+//   const base = monthValue(year, month1to12);
+//   const v = base + delta;
+//   const y = Math.floor(v / 12);
+//   const m1 = (v % 12) + 1;
+//   return { y, m1 };
+// }
+
+// function getEarliestAllowedMonthUTC() {
+//   const now = new Date();
+
+//   // cutoff = now - 2 years (UTC)
+//   const cutoff = new Date(now.getTime());
+//   cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 2);
+
+//   // monthStart = first day of cutoff's month (00:00Z)
+//   const monthStart = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), 1));
+
+//   // If cutoff is AFTER the month start, that month is not fully allowed (because postedAfter would be the 1st),
+//   // so earliest month must be NEXT month.
+//   const cutoffIsAfterMonthStart = cutoff.getTime() > monthStart.getTime();
+
+//   const earliest = cutoffIsAfterMonthStart
+//     ? new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1, 1))
+//     : monthStart;
+
+//   return {
+//     y: earliest.getUTCFullYear(),
+//     m1: earliest.getUTCMonth() + 1, // 1..12
+//   };
+// }
+
+
+// function getLatestAllowedMonthUTC() {
+//   // latest allowed = previous UTC month (avoid current ongoing)
+//   const now = new Date();
+//   const y = now.getUTCFullYear();
+//   const m1 = now.getUTCMonth() + 1;
+//   return addMonthsUTC(y, m1, -1);
+// }
+
+// function clampToAllowedRangeUTC(year: number, month1to12: number) {
+//   const earliest = getEarliestAllowedMonthUTC();
+//   const latest = getLatestAllowedMonthUTC();
+
+//   const sel = monthValue(year, month1to12);
+//   const minV = monthValue(earliest.y, earliest.m1);
+//   const maxV = monthValue(latest.y, latest.m1);
+
+//   if (sel < minV) return { y: earliest.y, m1: earliest.m1, clamped: true };
+//   if (sel > maxV) return { y: latest.y, m1: latest.m1, clamped: true };
+//   return { y: year, m1: month1to12, clamped: false };
+// }
+
+// function isSelectableUTC(year: number, month1to12: number) {
+//   const earliest = getEarliestAllowedMonthUTC();
+//   const latest = getLatestAllowedMonthUTC();
+//   const v = monthValue(year, month1to12);
+//   return (
+//     v >= monthValue(earliest.y, earliest.m1) &&
+//     v <= monthValue(latest.y, latest.m1)
+//   );
+// }
+
+// /** Build range ending at previous month (latest allowed) */
+// function buildMonthRange(count: number) {
+//   const latest = getLatestAllowedMonthUTC();
+//   const anchor = new Date(Date.UTC(latest.y, latest.m1 - 1, 1));
+
+//   const out: { y: number; mIdx: number; mNum: number }[] = [];
+//   for (let i = 0; i < count; i++) {
+//     const d = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - i, 1));
+//     const y = d.getUTCFullYear();
+//     const mIdx = d.getUTCMonth();
+//     out.push({ y, mIdx, mNum: mIdx + 1 });
+//   }
+//   return out.reverse();
+// }
+
+// /** Build "Lifetime" range from earliest allowed month to latest allowed month */
+// function buildLifetimeRange() {
+//   const earliest = getEarliestAllowedMonthUTC();
+//   const latest = getLatestAllowedMonthUTC();
+
+//   const startY = earliest.y;
+//   const startMIdx = earliest.m1 - 1;
+
+//   const endY = latest.y;
+//   const endMIdx = latest.m1 - 1;
+
+//   const startValue = startY * 12 + startMIdx;
+//   const endValue = endY * 12 + endMIdx;
+//   if (endValue < startValue) return [];
+
+//   const out: { y: number; mIdx: number; mNum: number }[] = [];
+//   for (let v = startValue; v <= endValue; v++) {
+//     const y = Math.floor(v / 12);
+//     const mIdx = v % 12;
+//     out.push({ y, mIdx, mNum: mIdx + 1 });
+//   }
+//   return out;
+// }
+
+// type Props = {
+//   region?: string;
+//   country?: string;
+//   onClose?: () => void;
+// };
+
+// const AmazonFinancialDashboard: React.FC<Props> = ({ region, country, onClose }) => {
+//   const router = useRouter();
+
+//   const countryNormalized = (country || "").toLowerCase();
+//   let countryUsed = countryNormalized || "uk";
+//   let marketplaceIdUsed = marketplaceForCountry(countryUsed) || "A1F83G8C2ARO7P";
+
+//   const regionUsed = FORCE.enabled ? FORCE.region : region;
+//   if (FORCE.enabled) {
+//     countryUsed = FORCE.country;
+//     marketplaceIdUsed = FORCE.marketplaceId;
+//   }
+
+//   const earliest = useMemo(() => getEarliestAllowedMonthUTC(), []);
+//   const latest = useMemo(() => getLatestAllowedMonthUTC(), []);
+
+//   // Default selection = latest allowed month (previous month)
+//   const [selYear, setSelYear] = useState(String(latest.y));
+//   const [selMonth, setSelMonth] = useState(two(latest.m1));
+
+//   const [error, setError] = useState<string>("");
+//   const [message, setMessage] = useState<string>("");
+
+//   const [busy, setBusy] = useState(false);
+//   const [progress, setProgress] = useState<{
+//     active: boolean;
+//     label: string;
+//     detail?: string;
+//     current: number;
+//     total: number;
+//     ok?: number;
+//     fail?: number;
+//   }>({
+//     active: false,
+//     label: "",
+//     detail: "",
+//     current: 0,
+//     total: 0,
+//     ok: 0,
+//     fail: 0,
+//   });
+
+//   const startProgress = (total: number, label: string, detail = "") => {
+//     setProgress({
+//       active: true,
+//       label,
+//       detail,
+//       current: 0,
+//       total,
+//       ok: 0,
+//       fail: 0,
+//     });
+//   };
+
+//   const setProgressStep = (current: number, label: string, detail = "") => {
+//     setProgress((p) => ({
+//       ...p,
+//       active: true,
+//       current,
+//       label,
+//       detail,
+//     }));
+//   };
+
+//   const bumpOk = () => setProgress((p) => ({ ...p, ok: (p.ok || 0) + 1 }));
+//   const bumpFail = () => setProgress((p) => ({ ...p, fail: (p.fail || 0) + 1 }));
+
+//   const [selectedPeriod, setSelectedPeriod] = useState<number | "lifetime" | null>(12);
+
+//   const wrap = async (fn: () => Promise<void>) => {
+//     try {
+//       setBusy(true);
+//       setError("");
+//       setMessage("");
+//       await fn();
+//     } catch (e: any) {
+//       setError(e?.message || "Unknown error");
+//     } finally {
+//       setBusy(false);
+//     }
+//   };
+
+//   /** Years allowed in dropdown: earliest.y ... latest.y */
+//   const allowedYears = useMemo(() => {
+//     const ys: number[] = [];
+//     for (let y = earliest.y; y <= latest.y; y++) ys.push(y);
+//     return ys;
+//   }, [earliest.y, latest.y]);
+
+//   const handleFetchByMonth = () =>
+//     wrap(async () => {
+//       const yRaw = parseInt(selYear, 10);
+//       const mRaw = parseInt(selMonth, 10);
+
+//       const clamped = clampToAllowedRangeUTC(yRaw, mRaw);
+//       const y = clamped.y;
+//       const mNum = clamped.m1;
+
+//       if (clamped.clamped) {
+//         setMessage(
+//           `Amazon allows ~2 years of finance transactions. Adjusted selection to ${y}-${two(mNum)}.`
+//         );
+//         setSelYear(String(y));
+//         setSelMonth(two(mNum));
+//       }
+
+//       startProgress(2, "Starting fetch…", `Month: ${y}-${two(mNum)}`);
+
+//       setProgressStep(1, "Priming fees…");
+//       await ensureFeesPrimedOnce({
+//         country: countryUsed,
+//         regionUsed,
+//         marketplaceId: marketplaceIdUsed,
+//         year: y,
+//         month: mNum,
+//       });
+
+//       setProgressStep(2, "Fetching monthly transactions…", `Month: ${y}-${two(mNum)}`);
+//       await fetchMonthlyTransactionsExcel({
+//         year: y,
+//         month: mNum,
+//         marketplace_id: marketplaceIdUsed,
+//         country: countryUsed,
+//         run_upload_pipeline: true,
+//         store_in_db: true,
+//       });
+
+//       const monthSlug = fullMonthNames[mNum - 1].toLowerCase();
+//       updateLatestFetchedPeriod(monthSlug, String(y));
+
+//       setMessage(`Fetched ${countryUsed}: ${y}-${two(mNum)} (fees primed, no download)`);
+
+//       if (onClose) onClose();
+//       router.push(`/country/MTD/${countryUsed}/${monthSlug}/${y}`);
+//     });
+
+//   const handleFetchRange = () =>
+//     wrap(async () => {
+//       const isLifetime = selectedPeriod === "lifetime";
+
+//       // Note: buildLifetimeRange already clamps to allowed window
+//       const months = isLifetime
+//         ? buildLifetimeRange()
+//         : buildMonthRange((selectedPeriod as number) || 0);
+
+//       if (!months.length) {
+//         setMessage("No months available to fetch.");
+//         return;
+//       }
+
+//       if (!isLifetime && ![3, 6, 12].includes(selectedPeriod as number)) {
+//         setMessage("Please select 3, 6, 12, or Lifetime.");
+//         return;
+//       }
+
+//       startProgress(
+//         months.length * 2,
+//         "Preparing range fetch…",
+//         isLifetime ? "Lifetime (allowed window)" : `${selectedPeriod} months`
+//       );
+
+//       let ok = 0;
+//       let fail = 0;
+
+//       let step = 0;
+//       for (const { y, mNum, mIdx } of months) {
+//         step += 1;
+//         setProgressStep(step, "Priming fees…", `Month: ${y}-${two(mNum)} | OK: ${ok} | Failed: ${fail}`);
+//         try {
+//           await ensureFeesPrimedOnce({
+//             country: countryUsed,
+//             regionUsed,
+//             marketplaceId: marketplaceIdUsed,
+//             year: y,
+//             month: mNum,
+//           });
+//         } catch (e) {
+//           console.error("fees priming failed for", y, mNum, e);
+//         }
+
+//         step += 1;
+//         setProgressStep(step, "Fetching monthly transactions…", `Month: ${y}-${two(mNum)} | OK: ${ok} | Failed: ${fail}`);
+
+//         try {
+//           await fetchMonthlyTransactionsExcel({
+//             year: y,
+//             month: mNum,
+//             marketplace_id: marketplaceIdUsed,
+//             country: countryUsed,
+//             run_upload_pipeline: true,
+//             store_in_db: true,
+//           });
+//           ok++;
+//           bumpOk();
+//         } catch (e: any) {
+//           console.error("monthly_transactions failed for", y, mNum, e?.message || e);
+//           fail++;
+//           bumpFail();
+//         }
+
+//         const monthSlug = fullMonthNames[mIdx].toLowerCase();
+//         updateLatestFetchedPeriod(monthSlug, String(y));
+//       }
+
+//       const last = months[months.length - 1];
+//       const latestMonthSlug = fullMonthNames[last.mIdx].toLowerCase();
+
+//       setMessage(
+//         `Fetch complete for ${countryUsed}: ${isLifetime ? "lifetime (allowed window)" : `${selectedPeriod} months`}, ok ${ok}, failed ${fail}.`
+//       );
+
+//       if (onClose) onClose();
+//       router.push(`/country/MTD/${countryUsed}/${latestMonthSlug}/${last.y}`);
+//     });
+
+//   const selectedIsValid =
+//     isSelectableUTC(parseInt(selYear, 10), parseInt(selMonth, 10));
+
+
+//   return (
+//     <div className="w-full">
+//       <div className="rounded-xl bg-white">
+//         {/* Header */}
+//         <div className="items-center mb-2 p-4">
+//           <div className="text-center">
+//             <PageBreadcrumb pageTitle="Select Data Fetch Period" textSize="2xl" variant="table" />
+//             <p className="text-charcoal-500 text-sm mt-1">
+//               Link your Amazon Seller Central to sync your sales data
+//             </p>
+//             <p className="text-xs text-slate-500 mt-2">
+//               Allowed window: {earliest.y}-{two(earliest.m1)} to {latest.y}-{two(latest.m1)}
+//             </p>
+//           </div>
+//         </div>
+
+//         <p className="text-charcoal-500 text-center font-bold text-md mt-1">
+//           Data Fetch Period
+//         </p>
+
+//         {/* Period Buttons */}
+//         <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-5 sm:gap-3 max-w-xl mx-auto">
+//           {[1, 3, 6, 12, "lifetime"].map((m) => {
+//             const isActive = selectedPeriod === m;
+
+//             return (
+//               <div key={String(m)} className="relative w-full">
+//                 {m === 12 && (
+//                   <div
+//                     className={[
+//                       "absolute -top-2 left-1/2 -translate-x-1/2",
+//                       "text-[10px] px-2 py-0.5 rounded-full z-10",
+//                       selectedPeriod !== 12
+//                         ? "bg-green-500 text-yellow-200"
+//                         : "bg-gray-200 text-gray-700",
+//                     ].join(" ")}
+//                   >
+//                     Recommended
+//                   </div>
+//                 )}
+
+//                 <button
+//                   type="button"
+//                   onClick={() => setSelectedPeriod(m as any)}
+//                   className={[
+//                     "w-full rounded-lg border p-2 sm:p-3 text-center transition",
+//                     isActive
+//                       ? "border-green-500 bg-green-500 text-yellow-200"
+//                       : "border-slate-200 bg-slate-50 hover:bg-white text-charcoal-500",
+//                   ].join(" ")}
+//                 >
+//                   <div className="w-full text-base sm:text-lg font-semibold flex items-center justify-center tabular-nums">
+//                     <span className="inline-flex w-[1.6em] justify-center">
+//                       {m === "lifetime" ? <ImInfinite className="text-xl sm:text-2xl" /> : m}
+//                     </span>
+//                   </div>
+
+//                   <div className="text-[10px] sm:text-xs uppercase tracking-wide mt-1">
+//                     {m === "lifetime" ? "Lifetime" : m === 1 ? "Month" : "Months"}
+//                   </div>
+//                 </button>
+//               </div>
+//             );
+//           })}
+//         </div>
+
+//         {/* Note Section */}
+//         <div
+//           className="mt-4 max-w-xl mx-auto rounded-lg bg-[#D9D9D9E5] p-2 text-[12px] sm:p-3 sm:text-sm border border-[#D9D9D9]"
+//           style={{ borderLeft: "6px solid #5EA68E" }}
+//         >
+//           Note:&nbsp; Amazon SP-API finances transactions supports roughly a 2-year rolling window.
+//           Older months are disabled automatically.
+//         </div>
+
+//         {/* Progress UI */}
+//         {busy && progress.active && progress.total > 0 && (
+//           <div className="mt-4 max-w-xl mx-auto">
+//             <div className="rounded-lg border border-slate-200 bg-white p-3">
+//               <div className="flex items-center justify-between gap-3">
+//                 <div className="text-sm font-semibold text-slate-700">{progress.label}</div>
+//                 <div className="text-xs text-slate-500 tabular-nums">
+//                   {Math.min(100, Math.round((progress.current / progress.total) * 100))}%
+//                 </div>
+//               </div>
+
+//               <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+//                 <div
+//                   className="h-full bg-[#5EA68E] transition-all duration-300"
+//                   style={{
+//                     width: `${Math.min(
+//                       100,
+//                       Math.round((progress.current / progress.total) * 100)
+//                     )}%`,
+//                   }}
+//                 />
+//               </div>
+
+//               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+//                 <div>
+//                   Step {progress.current}/{progress.total}
+//                 </div>
+
+//                 <div className="flex items-center gap-3">
+//                   <span>OK: {progress.ok || 0}</span>
+//                   <span>Failed: {progress.fail || 0}</span>
+//                 </div>
+//               </div>
+
+//               {!!progress.detail && (
+//                 <div className="mt-2 text-xs text-slate-500">{progress.detail}</div>
+//               )}
+//             </div>
+//           </div>
+//         )}
+
+//         {/* 1 month controls */}
+//         {selectedPeriod === 1 && (
+//           <div className="mt-6">
+//             <div className="flex flex-wrap items-center gap-3 justify-center">
+//               {/* Month */}
+//               <div className="flex items-center gap-2">
+//                 <label className="text-xs text-slate-500">Month</label>
+//                 <select
+//                   value={selMonth}
+//                   onChange={(e) => setSelMonth(e.target.value)}
+//                   className="rounded-lg border-2 border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-[#5EA68E] focus:ring-4 focus:ring-[#5EA68E]/20"
+//                 >
+//                   {Array.from({ length: 12 }, (_, i) => {
+//                     const m1 = i + 1;
+//                     const label = fullMonthNames[i].slice(0, 3);
+//                     const y = parseInt(selYear, 10);
+//                     const disabled = !Number.isFinite(y) || !isSelectableUTC(y, m1);
+//                     return (
+//                       <option key={m1} value={two(m1)} disabled={disabled}>
+//                         {label}
+//                       </option>
+//                     );
+//                   })}
+//                 </select>
+//               </div>
+
+//               {/* Year */}
+//               <div className="flex items-center gap-2">
+//                 <label className="text-xs text-slate-500">Year</label>
+//                 <select
+//                   value={selYear}
+//                   onChange={(e) => {
+//                     const newYearStr = e.target.value;
+//                     setSelYear(newYearStr);
+
+//                     const newYear = parseInt(newYearStr, 10);
+//                     const currentMonthNum = parseInt(selMonth, 10);
+
+//                     // If current selected month becomes invalid for this year, clamp it.
+//                     if (Number.isFinite(newYear)) {
+//                       const clamped = clampToAllowedRangeUTC(newYear, currentMonthNum);
+//                       if (clamped.clamped) {
+//                         setSelYear(String(clamped.y));
+//                         setSelMonth(two(clamped.m1));
+//                       }
+//                     }
+//                   }}
+//                   className="rounded-lg border-2 border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-[#5EA68E] focus:ring-4 focus:ring-[#5EA68E]/20"
+//                 >
+//                   {allowedYears.map((y) => (
+//                     <option key={y} value={y}>
+//                       {y}
+//                     </option>
+//                   ))}
+//                 </select>
+//               </div>
+//             </div>
+
+//             <div className="w-full flex justify-center gap-3 mt-4">
+//               <Button onClick={onClose} variant="outline" size="sm">
+//                 Cancel
+//               </Button>
+//               <Button
+//                 onClick={handleFetchByMonth}
+//                 variant="primary"
+//                 size="sm"
+//                 disabled={busy}
+//               >
+//                 {busy ? "Fetching..." : "Continue"}
+//               </Button>
+//             </div>
+//           </div>
+//         )}
+
+//         {/* >1 month controls (includes Lifetime) */}
+//         {selectedPeriod && (selectedPeriod === "lifetime" || selectedPeriod > 1) && (
+//           <div className="w-full flex justify-center gap-3 mt-4">
+//             <Button onClick={onClose} variant="outline" size="sm">
+//               Cancel
+//             </Button>
+
+//             <Button onClick={handleFetchRange} variant="primary" size="sm" disabled={busy}>
+//               {busy ? "Fetching..." : `Continue`}
+//             </Button>
+//           </div>
+//         )}
+//       </div>
+
+//       {/* Messages */}
+//       <div className="mt-4 space-y-4">
+//         {message && (
+//           <div className="flex items-center gap-2 rounded-md bg-emerald-50 border border-emerald-200 p-3 text-emerald-800 text-sm">
+//             <CheckCircle2 />
+//             <span>{message}</span>
+//           </div>
+//         )}
+//         {error && (
+//           <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 p-3 text-red-700 text-sm">
+//             <AlertCircle />
+//             <span style={{ whiteSpace: "pre-wrap" }}>{error}</span>
+//           </div>
+//         )}
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default AmazonFinancialDashboard;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FaCheckCircle as CheckCircle2,
@@ -23,12 +1755,6 @@ const FORCE = {
   country: "uk",
   region: "eu-west-1",
   marketplaceId: "A1F83G8C2ARO7P",
-
-  // // US
-  // enabled: true,
-  // country: "us",
-  // region: "us-east-1",
-  // marketplaceId: "ATVPDKIKX0DER",
 };
 /** ======================================== **/
 
@@ -48,10 +1774,9 @@ const fullMonthNames = [
 ];
 
 const monthSlugOrder = fullMonthNames.map((m) => m.toLowerCase());
-
 const two = (n: number | string) => String(n).padStart(2, "0");
 
-/** Canonical mappings (kept only for inferring default country/marketplace) */
+/** Canonical mappings */
 const marketplaceForCountry = (c: string) =>
   c === "uk"
     ? "A1F83G8C2ARO7P"
@@ -135,10 +1860,7 @@ async function apiJson(path: string, options: RequestInit = {}) {
 
   if (!res.ok) {
     const msg =
-      data?.error ||
-      data?.message ||
-      text ||
-      `Request failed: ${res.status}`;
+      data?.error || data?.message || text || `Request failed: ${res.status}`;
     throw new Error(msg);
   }
 
@@ -152,6 +1874,12 @@ function lsKeyFees(country: string, year: number, month: number) {
 function lsKeyFeeUpload(country: string) {
   return `feeUploadReady:${country}`;
 }
+
+/** ✅ NEW: run-once key for inventory aged (per country) */
+function lsKeyInventoryAged(country: string) {
+  return `inventoryAgedSynced:${country}`;
+}
+
 function wasDone(key: string) {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(key) === "1";
@@ -161,10 +1889,21 @@ function markDone(key: string) {
   window.localStorage.setItem(key, "1");
 }
 
+/** ✅ NEW: hit /amazon_api/inventory/aged with NO params, once per country */
+async function syncInventoryAgedOnce(country: string) {
+  const key = lsKeyInventoryAged(country);
+  if (wasDone(key)) return;
+
+  await apiJson(`/amazon_api/inventory/aged`, { method: "GET" });
+
+  markDone(key);
+}
+
 /**
  * Ensure we hit:
  * 1) /amazon_api/fees/sync_and_upload   (one-time per country)
- * 2) /fetch_fees                       (one-time per country+year+month)
+ * 2) /amazon_api/inventory/aged         (one-time per country)   ✅ NEW (no params)
+ * 3) /fetch_fees                       (one-time per country+year+month)
  */
 async function ensureFeesPrimedOnce(params: {
   country: string;
@@ -175,7 +1914,6 @@ async function ensureFeesPrimedOnce(params: {
 }) {
   const { country, regionUsed, marketplaceId, year, month } = params;
 
-  // 1) fee upload table (usually one-time per country)
   const uploadKey = lsKeyFeeUpload(country);
   if (!wasDone(uploadKey)) {
     await apiJson(`/amazon_api/fees/sync_and_upload`, {
@@ -189,14 +1927,16 @@ async function ensureFeesPrimedOnce(params: {
       }),
     });
 
+    // ✅ NEW: Immediately after fees sync/upload, call inventory aged with NO params
+    // (run-once per country; does not affect existing flow)
+    await syncInventoryAgedOnce(country);
+
     markDone(uploadKey);
   }
 
-  // 2) fetch_fees (month-specific)
   const feesKey = lsKeyFees(country, year, month);
   if (!wasDone(feesKey)) {
-    const monthParam = `${year}-${two(month)}`; // e.g. 2025-01
-
+    const monthParam = `${year}-${two(month)}`;
     await apiJson(`/fetch_fees`, {
       method: "POST",
       body: JSON.stringify({
@@ -207,21 +1947,43 @@ async function ensureFeesPrimedOnce(params: {
         country,
       }),
     });
-
     markDone(feesKey);
   }
+}
+
+/** -------- Better error parsing for monthly_transactions -------- */
+async function readErrorMessage(res: Response) {
+  const ct = res.headers.get("content-type") || "";
+  const raw = await res.text().catch(() => "");
+  if (!raw) return `API ${res.status} ${res.statusText}`;
+
+  if (ct.includes("application/json")) {
+    try {
+      const j = JSON.parse(raw);
+      const e = j?.error || j?.message || j;
+      return typeof e === "string" ? e : JSON.stringify(e, null, 2);
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
 }
 
 /** ---------------- Monthly transactions Excel fetch (no download) ---------------- */
 async function fetchMonthlyTransactionsExcel(params: {
   year: number;
-  month: number;
+  month: number; // 1-12
   marketplace_id: string;
   country: string;
   run_upload_pipeline: boolean;
   store_in_db: boolean;
 }) {
   const token = getAuthToken();
+
+  if (params.month < 1 || params.month > 12) {
+    throw new Error(`Invalid month: ${params.month}. Expected 1-12.`);
+  }
+
   const qs = new URLSearchParams({
     year: String(params.year),
     month: String(params.month),
@@ -241,34 +2003,93 @@ async function fetchMonthlyTransactionsExcel(params: {
   });
 
   if (!res.ok) {
-    const ct = res.headers.get("content-type") || "";
-    const raw = await res.text().catch(() => "");
-    let msg = raw;
-
-    if (ct.includes("application/json")) {
-      try {
-        const j = JSON.parse(raw);
-        msg = j?.error || j?.message || JSON.stringify(j, null, 2);
-      } catch {}
-    }
-
+    const msg = await readErrorMessage(res);
     throw new Error(`API ${res.status} ${res.statusText}\nURL: ${url}\n\n${msg}`);
   }
 
-  // ✅ IMPORTANT: consume body so request completes, but do NOT download
   await res.arrayBuffer();
-
   return { ok: true, url };
 }
 
-/** Build a month range ending at previous month (not current ongoing month) */
-function buildMonthRange(count: number) {
+/** ===========================
+ *  SP-API 2-year window helpers
+ *  Enforce: earliest = current UTC month - 24 months
+ *  Also enforce: latest selectable = previous UTC month (no current ongoing month)
+ * =========================== */
+function monthValue(y: number, m1: number) {
+  // m1: 1..12
+  return y * 12 + (m1 - 1);
+}
+
+function addMonthsUTC(year: number, month1to12: number, delta: number) {
+  const base = monthValue(year, month1to12);
+  const v = base + delta;
+  const y = Math.floor(v / 12);
+  const m1 = (v % 12) + 1;
+  return { y, m1 };
+}
+
+function getEarliestAllowedMonthUTC() {
   const now = new Date();
 
-  // Anchor = previous month
-  const anchor = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)
+  // cutoff = now - 2 years (UTC)
+  const cutoff = new Date(now.getTime());
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 2);
+
+  // monthStart = first day of cutoff's month (00:00Z)
+  const monthStart = new Date(
+    Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), 1)
   );
+
+  // If cutoff is AFTER the month start, that month is not fully allowed (because postedAfter would be the 1st),
+  // so earliest month must be NEXT month.
+  const cutoffIsAfterMonthStart = cutoff.getTime() > monthStart.getTime();
+
+  const earliest = cutoffIsAfterMonthStart
+    ? new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1, 1))
+    : monthStart;
+
+  return {
+    y: earliest.getUTCFullYear(),
+    m1: earliest.getUTCMonth() + 1, // 1..12
+  };
+}
+
+function getLatestAllowedMonthUTC() {
+  // latest allowed = previous UTC month (avoid current ongoing)
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m1 = now.getUTCMonth() + 1;
+  return addMonthsUTC(y, m1, -1);
+}
+
+function clampToAllowedRangeUTC(year: number, month1to12: number) {
+  const earliest = getEarliestAllowedMonthUTC();
+  const latest = getLatestAllowedMonthUTC();
+
+  const sel = monthValue(year, month1to12);
+  const minV = monthValue(earliest.y, earliest.m1);
+  const maxV = monthValue(latest.y, latest.m1);
+
+  if (sel < minV) return { y: earliest.y, m1: earliest.m1, clamped: true };
+  if (sel > maxV) return { y: latest.y, m1: latest.m1, clamped: true };
+  return { y: year, m1: month1to12, clamped: false };
+}
+
+function isSelectableUTC(year: number, month1to12: number) {
+  const earliest = getEarliestAllowedMonthUTC();
+  const latest = getLatestAllowedMonthUTC();
+  const v = monthValue(year, month1to12);
+  return (
+    v >= monthValue(earliest.y, earliest.m1) &&
+    v <= monthValue(latest.y, latest.m1)
+  );
+}
+
+/** Build range ending at previous month (latest allowed) */
+function buildMonthRange(count: number) {
+  const latest = getLatestAllowedMonthUTC();
+  const anchor = new Date(Date.UTC(latest.y, latest.m1 - 1, 1));
 
   const out: { y: number; mIdx: number; mNum: number }[] = [];
   for (let i = 0; i < count; i++) {
@@ -279,25 +2100,22 @@ function buildMonthRange(count: number) {
     const mIdx = d.getUTCMonth();
     out.push({ y, mIdx, mNum: mIdx + 1 });
   }
-
-  return out.reverse(); // oldest -> newest
+  return out.reverse();
 }
 
-/** Build range from Jan 2024 up to previous month (current month - 1), oldest -> newest */
+/** Build "Lifetime" range from earliest allowed month to latest allowed month */
 function buildLifetimeRange() {
-  const startY = 2024;
-  const startMIdx = 0; // Jan
+  const earliest = getEarliestAllowedMonthUTC();
+  const latest = getLatestAllowedMonthUTC();
 
-  const now = new Date();
-  const anchor = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)
-  ); // prev month
-  const endY = anchor.getUTCFullYear();
-  const endMIdx = anchor.getUTCMonth();
+  const startY = earliest.y;
+  const startMIdx = earliest.m1 - 1;
+
+  const endY = latest.y;
+  const endMIdx = latest.m1 - 1;
 
   const startValue = startY * 12 + startMIdx;
   const endValue = endY * 12 + endMIdx;
-
   if (endValue < startValue) return [];
 
   const out: { y: number; mIdx: number; mNum: number }[] = [];
@@ -306,12 +2124,11 @@ function buildLifetimeRange() {
     const mIdx = v % 12;
     out.push({ y, mIdx, mNum: mIdx + 1 });
   }
-
   return out;
 }
 
 type Props = {
-  region?: string; // not sent to monthly_transactions API anymore, but used for fee priming
+  region?: string;
   country?: string;
   onClose?: () => void;
 };
@@ -323,37 +2140,26 @@ const AmazonFinancialDashboard: React.FC<Props> = ({
 }) => {
   const router = useRouter();
 
-  // infer country
   const countryNormalized = (country || "").toLowerCase();
   let countryUsed = countryNormalized || "uk";
-  let marketplaceIdUsed = marketplaceForCountry(countryUsed) || "A1F83G8C2ARO7P";
+  let marketplaceIdUsed =
+    marketplaceForCountry(countryUsed) || "A1F83G8C2ARO7P";
 
-  /** ---- HARD OVERRIDE (testing) ---- */
   const regionUsed = FORCE.enabled ? FORCE.region : region;
   if (FORCE.enabled) {
     countryUsed = FORCE.country;
     marketplaceIdUsed = FORCE.marketplaceId;
   }
 
-  // current month/year
-  const today = new Date();
-  const currentMonthIdx0 = today.getMonth(); // 0–11
-  const currentMonth01 = two(currentMonthIdx0 + 1);
-  const currentYear = today.getFullYear();
+  const earliest = useMemo(() => getEarliestAllowedMonthUTC(), []);
+  const latest = useMemo(() => getLatestAllowedMonthUTC(), []);
 
-  // default selection = previous month (not current ongoing month)
-  let defaultYear = currentYear;
-  let defaultMonthIdx0 = currentMonthIdx0 - 1;
-  if (defaultMonthIdx0 < 0) {
-    defaultMonthIdx0 = 11;
-    defaultYear -= 1;
-  }
+  // Default selection = latest allowed month (previous month)
+  const [selYear, setSelYear] = useState(String(latest.y));
+  const [selMonth, setSelMonth] = useState(two(latest.m1));
 
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
-
-  const [selMonth, setSelMonth] = useState(two(defaultMonthIdx0 + 1)); // "01".."12"
-  const [selYear, setSelYear] = useState(String(defaultYear));
 
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{
@@ -396,24 +2202,19 @@ const AmazonFinancialDashboard: React.FC<Props> = ({
     }));
   };
 
-  const bumpOk = () =>
-    setProgress((p) => ({ ...p, ok: (p.ok || 0) + 1 }));
-
+  const bumpOk = () => setProgress((p) => ({ ...p, ok: (p.ok || 0) + 1 }));
   const bumpFail = () =>
     setProgress((p) => ({ ...p, fail: (p.fail || 0) + 1 }));
 
-  const stopProgress = () =>
-    setProgress((p) => ({ ...p, active: false }));
   const [selectedPeriod, setSelectedPeriod] = useState<
     number | "lifetime" | null
   >(12);
 
-    const wrap = async (fn: () => Promise<void>) => {
+  const wrap = async (fn: () => Promise<void>) => {
     try {
       setBusy(true);
       setError("");
       setMessage("");
-      // keep progress as-is (startProgress fn ke andar hoga)
       await fn();
     } catch (e: any) {
       setError(e?.message || "Unknown error");
@@ -422,30 +2223,48 @@ const AmazonFinancialDashboard: React.FC<Props> = ({
     }
   };
 
+  /** Years allowed in dropdown: earliest.y ... latest.y */
+  const allowedYears = useMemo(() => {
+    const ys: number[] = [];
+    for (let y = earliest.y; y <= latest.y; y++) ys.push(y);
+    return ys;
+  }, [earliest.y, latest.y]);
 
-    const handleFetchByMonth = () =>
+  const handleFetchByMonth = () =>
     wrap(async () => {
-      const y = parseInt(selYear, 10);
-      const mNum = parseInt(selMonth, 10);
+      const yRaw = parseInt(selYear, 10);
+      const mRaw = parseInt(selMonth, 10);
 
-      // total steps: 2 (fees priming + monthly fetch)
+      const clamped = clampToAllowedRangeUTC(yRaw, mRaw);
+      const y = clamped.y;
+      const mNum = clamped.m1;
+
+      if (clamped.clamped) {
+        setMessage(
+          `Amazon allows ~2 years of finance transactions. Adjusted selection to ${y}-${two(
+            mNum
+          )}.`
+        );
+        setSelYear(String(y));
+        setSelMonth(two(mNum));
+      }
+
       startProgress(2, "Starting fetch…", `Month: ${y}-${two(mNum)}`);
 
       setProgressStep(1, "Priming fees…");
+      await ensureFeesPrimedOnce({
+        country: countryUsed,
+        regionUsed,
+        marketplaceId: marketplaceIdUsed,
+        year: y,
+        month: mNum,
+      });
 
-// isolate backend call from React state cycle
-await Promise.resolve().then(() =>
-  ensureFeesPrimedOnce({
-    country: countryUsed,
-    regionUsed,
-    marketplaceId: marketplaceIdUsed,
-    year: y,
-    month: mNum,
-  })
-);
-
-
-      setProgressStep(2, "Fetching monthly transactions…", `Month: ${y}-${two(mNum)}`);
+      setProgressStep(
+        2,
+        "Fetching monthly transactions…",
+        `Month: ${y}-${two(mNum)}`
+      );
       await fetchMonthlyTransactionsExcel({
         year: y,
         month: mNum,
@@ -466,14 +2285,14 @@ await Promise.resolve().then(() =>
       router.push(`/country/MTD/${countryUsed}/${monthSlug}/${y}`);
     });
 
-
   const handleFetchRange = () =>
     wrap(async () => {
       const isLifetime = selectedPeriod === "lifetime";
 
+      // Note: buildLifetimeRange already clamps to allowed window
       const months = isLifetime
         ? buildLifetimeRange()
-        : buildMonthRange((selectedPeriod as number) || 0); // ends at current-1 month
+        : buildMonthRange((selectedPeriod as number) || 0);
 
       if (!months.length) {
         setMessage("No months available to fetch.");
@@ -485,34 +2304,40 @@ await Promise.resolve().then(() =>
         return;
       }
 
-            
-
-
-      const first = months[0];
-
-      setProgressStep(1, "Priming fees (once)…", `First month: ${first.y}-${two(first.mNum)}`);
-      await ensureFeesPrimedOnce({
-        country: countryUsed,
-        regionUsed,
-        marketplaceId: marketplaceIdUsed,
-        year: first.y,
-        month: first.mNum,
-      });
-
-      startProgress(1 + months.length, "Preparing range fetch…", 
-        isLifetime ? "Lifetime" : `${selectedPeriod} months`
+      startProgress(
+        months.length * 2,
+        "Preparing range fetch…",
+        isLifetime ? "Lifetime (allowed window)" : `${selectedPeriod} months`
       );
 
       let ok = 0;
       let fail = 0;
 
-      let step = 1; // already used by priming
-      for (const { y, mNum } of months) {
+      let step = 0;
+      for (const { y, mNum, mIdx } of months) {
+        step += 1;
+        setProgressStep(
+          step,
+          "Priming fees…",
+          `Month: ${y}-${two(mNum)} | OK: ${ok} | Failed: ${fail}`
+        );
+        try {
+          await ensureFeesPrimedOnce({
+            country: countryUsed,
+            regionUsed,
+            marketplaceId: marketplaceIdUsed,
+            year: y,
+            month: mNum,
+          });
+        } catch (e) {
+          console.error("fees priming failed for", y, mNum, e);
+        }
+
         step += 1;
         setProgressStep(
           step,
           "Fetching monthly transactions…",
-          `Done: ${ok + fail}/${months.length} | Current: ${y}-${two(mNum)} | OK: ${ok} | Failed: ${fail}`
+          `Month: ${y}-${two(mNum)} | OK: ${ok} | Failed: ${fail}`
         );
 
         try {
@@ -526,26 +2351,36 @@ await Promise.resolve().then(() =>
           });
           ok++;
           bumpOk();
-        } catch (e) {
-          console.error("monthly_transactions excel failed for", y, mNum, e);
+        } catch (e: any) {
+          console.error(
+            "monthly_transactions failed for",
+            y,
+            mNum,
+            e?.message || e
+          );
           fail++;
           bumpFail();
         }
+
+        const monthSlug = fullMonthNames[mIdx].toLowerCase();
+        updateLatestFetchedPeriod(monthSlug, String(y));
       }
 
       const last = months[months.length - 1];
       const latestMonthSlug = fullMonthNames[last.mIdx].toLowerCase();
-      updateLatestFetchedPeriod(latestMonthSlug, String(last.y));
 
       setMessage(
         `Fetch complete for ${countryUsed}: ${
-          isLifetime ? "lifetime" : `requested ${selectedPeriod}`
-        }, ok ${ok}, failed ${fail} (fees primed once, no downloads)`
+          isLifetime ? "lifetime (allowed window)" : `${selectedPeriod} months`
+        }, ok ${ok}, failed ${fail}.`
       );
 
       if (onClose) onClose();
       router.push(`/country/MTD/${countryUsed}/${latestMonthSlug}/${last.y}`);
     });
+
+  const selectedIsValid =
+    isSelectableUTC(parseInt(selYear, 10), parseInt(selMonth, 10));
 
   return (
     <div className="w-full">
@@ -561,6 +2396,10 @@ await Promise.resolve().then(() =>
             <p className="text-charcoal-500 text-sm mt-1">
               Link your Amazon Seller Central to sync your sales data
             </p>
+            <p className="text-xs text-slate-500 mt-2">
+              Allowed window: {earliest.y}-{two(earliest.m1)} to {latest.y}-
+              {two(latest.m1)}
+            </p>
           </div>
         </div>
 
@@ -569,14 +2408,7 @@ await Promise.resolve().then(() =>
         </p>
 
         {/* Period Buttons */}
-        <div
-          className="
-            mt-2
-            grid grid-cols-5 gap-2
-            sm:grid-cols-5 sm:gap-3
-            max-w-xl mx-auto
-          "
-        >
+        <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-5 sm:gap-3 max-w-xl mx-auto">
           {[1, 3, 6, 12, "lifetime"].map((m) => {
             const isActive = selectedPeriod === m;
 
@@ -600,18 +2432,12 @@ await Promise.resolve().then(() =>
                   type="button"
                   onClick={() => setSelectedPeriod(m as any)}
                   className={[
-                    `
-                      w-full
-                      rounded-lg border
-                      p-2 sm:p-3
-                      text-center transition
-                    `,
+                    "w-full rounded-lg border p-2 sm:p-3 text-center transition",
                     isActive
                       ? "border-green-500 bg-green-500 text-yellow-200"
                       : "border-slate-200 bg-slate-50 hover:bg-white text-charcoal-500",
                   ].join(" ")}
                 >
-                  {/* value row: fixed visual slot so ∞ doesn't look narrower */}
                   <div className="w-full text-base sm:text-lg font-semibold flex items-center justify-center tabular-nums">
                     <span className="inline-flex w-[1.6em] justify-center">
                       {m === "lifetime" ? (
@@ -637,22 +2463,14 @@ await Promise.resolve().then(() =>
 
         {/* Note Section */}
         <div
-          className="
-            mt-4
-            max-w-xl mx-auto
-            rounded-lg
-            bg-[#D9D9D9E5]
-            p-2 text-[12px]
-            sm:p-3 sm:text-sm
-            border border-[#D9D9D9]
-          "
+          className="mt-4 max-w-xl mx-auto rounded-lg bg-[#D9D9D9E5] p-2 text-[12px] sm:p-3 sm:text-sm border border-[#D9D9D9]"
           style={{ borderLeft: "6px solid #5EA68E" }}
         >
-          Note:&nbsp; A longer time range gives better trend and forecast.
-          However, it may take longer to complete the initial data fetch.
+          Note:&nbsp; Amazon SP-API finances transactions supports roughly a
+          2-year rolling window. Older months are disabled automatically.
         </div>
 
-                {/* Progress UI */}
+        {/* Progress UI */}
         {busy && progress.active && progress.total > 0 && (
           <div className="mt-4 max-w-xl mx-auto">
             <div className="rounded-lg border border-slate-200 bg-white p-3">
@@ -661,7 +2479,11 @@ await Promise.resolve().then(() =>
                   {progress.label}
                 </div>
                 <div className="text-xs text-slate-500 tabular-nums">
-                  {Math.min(100, Math.round((progress.current / progress.total) * 100))}%
+                  {Math.min(
+                    100,
+                    Math.round((progress.current / progress.total) * 100)
+                  )}
+                  %
                 </div>
               </div>
 
@@ -697,7 +2519,6 @@ await Promise.resolve().then(() =>
           </div>
         )}
 
-
         {/* 1 month controls */}
         {selectedPeriod === 1 && (
           <div className="mt-6">
@@ -710,26 +2531,13 @@ await Promise.resolve().then(() =>
                   onChange={(e) => setSelMonth(e.target.value)}
                   className="rounded-lg border-2 border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-[#5EA68E] focus:ring-4 focus:ring-[#5EA68E]/20"
                 >
-                  {[
-                    ["01", "Jan"],
-                    ["02", "Feb"],
-                    ["03", "Mar"],
-                    ["04", "Apr"],
-                    ["05", "May"],
-                    ["06", "Jun"],
-                    ["07", "Jul"],
-                    ["08", "Aug"],
-                    ["09", "Sep"],
-                    ["10", "Oct"],
-                    ["11", "Nov"],
-                    ["12", "Dec"],
-                  ].map(([val, label]) => {
-                    const isCurrentMonthAndYear =
-                      val === currentMonth01 && selYear === String(currentYear);
-                    const shouldDisable = isCurrentMonthAndYear && selMonth !== val;
-
+                  {Array.from({ length: 12 }, (_, i) => {
+                    const m1 = i + 1;
+                    const label = fullMonthNames[i].slice(0, 3);
+                    const y = parseInt(selYear, 10);
+                    const disabled = !Number.isFinite(y) || !isSelectableUTC(y, m1);
                     return (
-                      <option key={val} value={val} disabled={shouldDisable}>
+                      <option key={m1} value={two(m1)} disabled={disabled}>
                         {label}
                       </option>
                     );
@@ -743,25 +2551,26 @@ await Promise.resolve().then(() =>
                 <select
                   value={selYear}
                   onChange={(e) => {
-                    const newYear = e.target.value;
-                    setSelYear(newYear);
+                    const newYearStr = e.target.value;
+                    setSelYear(newYearStr);
 
-                    if (
-                      newYear === String(currentYear) &&
-                      selMonth === currentMonth01
-                    ) {
-                      const prevIdx = (currentMonthIdx0 - 1 + 12) % 12;
-                      setSelMonth(two(prevIdx + 1));
+                    const newYear = parseInt(newYearStr, 10);
+                    const currentMonthNum = parseInt(selMonth, 10);
+
+                    // If current selected month becomes invalid for this year, clamp it.
+                    if (Number.isFinite(newYear)) {
+                      const clamped = clampToAllowedRangeUTC(newYear, currentMonthNum);
+                      if (clamped.clamped) {
+                        setSelYear(String(clamped.y));
+                        setSelMonth(two(clamped.m1));
+                      }
                     }
                   }}
                   className="rounded-lg border-2 border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-[#5EA68E] focus:ring-4 focus:ring-[#5EA68E]/20"
                 >
-                  {Array.from(
-                    { length: new Date().getFullYear() - 2024 + 1 },
-                    (_, i) => 2024 + i
-                  ).map((year) => (
-                    <option key={year} value={year}>
-                      {year}
+                  {allowedYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
                     </option>
                   ))}
                 </select>
@@ -776,32 +2585,32 @@ await Promise.resolve().then(() =>
                 onClick={handleFetchByMonth}
                 variant="primary"
                 size="sm"
-                disabled={busy}
+                disabled={busy || !selectedIsValid}
               >
                 {busy ? "Fetching..." : "Continue"}
               </Button>
             </div>
+
+            {!selectedIsValid && (
+              <p className="text-xs text-center text-red-500 mt-2">
+                Selected month is outside Amazon’s ~2-year allowed window.
+              </p>
+            )}
           </div>
         )}
 
         {/* >1 month controls (includes Lifetime) */}
-        {selectedPeriod &&
-          (selectedPeriod === "lifetime" || selectedPeriod > 1) && (
-            <div className="w-full flex justify-center gap-3 mt-4">
-              <Button onClick={onClose} variant="outline" size="sm">
-                Cancel
-              </Button>
+        {selectedPeriod && (selectedPeriod === "lifetime" || selectedPeriod > 1) && (
+          <div className="w-full flex justify-center gap-3 mt-4">
+            <Button onClick={onClose} variant="outline" size="sm">
+              Cancel
+            </Button>
 
-              <Button
-                onClick={handleFetchRange}
-                variant="primary"
-                size="sm"
-                disabled={busy}
-              >
-                {busy ? "Fetching..." : `Continue`}
-              </Button>
-            </div>
-          )}
+            <Button onClick={handleFetchRange} variant="primary" size="sm" disabled={busy}>
+              {busy ? "Fetching..." : `Continue`}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Messages */}
@@ -815,7 +2624,7 @@ await Promise.resolve().then(() =>
         {error && (
           <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 p-3 text-red-700 text-sm">
             <AlertCircle />
-            <span>{error}</span>
+            <span style={{ whiteSpace: "pre-wrap" }}>{error}</span>
           </div>
         )}
       </div>

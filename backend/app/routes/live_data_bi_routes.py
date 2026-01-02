@@ -8,6 +8,7 @@ from calendar import month_abbr, monthrange
 from datetime import date, datetime, timedelta
 from openai import OpenAI
 import json
+import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.utils.live_bi_utils import (build_inventory_signals, get_mtd_and_prev_ranges,fetch_previous_period_data,fetch_current_mtd_data,calculate_growth,aggregate_totals,build_segment_total_row,build_sku_context,build_ai_summary,generate_live_insight,fetch_historical_skus_last_6_months,round_numeric_values,totals_from_daily_series,construct_prev_table_name,compute_sku_metrics_from_df,
                                      compute_inventory_coverage_ratio,fetch_estimated_storage_cost_next_month)
@@ -40,6 +41,63 @@ live_data_bi_bp = Blueprint("live_data_bi_bp", __name__)
 # -----------------------------------------------------------------------------
 # MAIN ROUTE: LIVE MTD vs PREVIOUS-MONTH-SAME-PERIOD BI
 # # -----------------------------------------------------------------------------
+def align_prev_curr_by_sku(prev_data, curr_data):
+    prev_df = pd.DataFrame(prev_data)
+    curr_df = pd.DataFrame(curr_data)
+
+    # Guard
+    if prev_df.empty and curr_df.empty:
+        return prev_data, curr_data
+
+    def normalize_sku(x):
+        if x is None:
+            return None
+        try:
+            x = str(x)
+        except Exception:
+            return None
+        x = x.strip()
+        if x.lower() in ("", "nan", "none", "null"):
+            return None
+        return x
+
+    # ---- normalize SKU safely ----
+    for df in (prev_df, curr_df):
+        if "sku" in df.columns:
+            df["sku"] = df["sku"].apply(normalize_sku)
+
+    prev_df = prev_df[prev_df["sku"].notna()]
+    curr_df = curr_df[curr_df["sku"].notna()]
+
+    # ---- UNION of SKUs ----
+    all_skus = set(prev_df["sku"]) | set(curr_df["sku"])
+
+    base = pd.DataFrame({"sku": list(all_skus)})
+
+    prev_df = base.merge(prev_df, on="sku", how="left")
+    curr_df = base.merge(curr_df, on="sku", how="left")
+
+    NUM_COLS = [
+        "quantity",
+        "net_sales",
+        "product_sales",
+        "profit",
+        "asp",
+        "unit_wise_profitability",
+        "sales_mix",
+    ]
+
+    for c in NUM_COLS:
+        if c in prev_df.columns:
+            prev_df[c] = prev_df[c].fillna(0.0)
+        if c in curr_df.columns:
+            curr_df[c] = curr_df[c].fillna(0.0)
+
+    return (
+        prev_df.to_dict(orient="records"),
+        curr_df.to_dict(orient="records"),
+    )
+
 
 
 @live_data_bi_bp.route("/live_mtd_bi", methods=["GET"])
@@ -100,6 +158,21 @@ def live_mtd_vs_previous():
             user_id, country, prev_start, prev_end
         )
 
+        curr_data, curr_daily = fetch_current_mtd_data(
+            user_id, country, curr_start, curr_end
+        )
+
+        # ---------------------------
+        # ALIGN SKUs (PREVIOUS + CURRENT)  🔥 IMPORTANT FIX
+        # ---------------------------
+        prev_data_aligned, curr_data = align_prev_curr_by_sku(
+            prev_data_aligned,
+            curr_data
+        )
+
+        # ---------------------------
+        # FULL PREVIOUS MONTH (for charts)
+        # ---------------------------
         _, prev_daily_full = fetch_previous_period_data(
             user_id, country, prev_full_start, prev_full_end
         )
@@ -107,10 +180,6 @@ def live_mtd_vs_previous():
         prev_full_totals = totals_from_daily_series(prev_daily_full)
         total_previous_net_sales_full_month = float(
             prev_full_totals.get("net_sales", 0) or 0
-        )
-
-        curr_data, curr_daily = fetch_current_mtd_data(
-            user_id, country, curr_start, curr_end
         )
 
         # ---------------------------
@@ -122,7 +191,11 @@ def live_mtd_vs_previous():
         # ---------------------------
         # GROWTH
         # ---------------------------
-        growth_data = calculate_growth(prev_data_aligned, curr_data, key=key_column)
+        growth_data = calculate_growth(
+            prev_data_aligned,
+            curr_data,
+            key=key_column
+        )
 
         prev_keys = {r.get(key_column) for r in prev_data_aligned if r.get(key_column)}
         curr_keys = {r.get(key_column) for r in curr_data if r.get(key_column)}
@@ -144,6 +217,7 @@ def live_mtd_vs_previous():
             r for r in growth_data
             if r.get(key_column) in new_reviving_keys
         ]
+
 
         # ---------------------------
         # TOP 80 / OTHER

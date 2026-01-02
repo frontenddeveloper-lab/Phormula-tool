@@ -575,6 +575,13 @@ def run_upload_pipeline_from_df(
     if not db_url:
         return {"success": False, "message": "DATABASE_URL not configured"}
 
+    db_url_amazon = os.getenv("DATABASE_AMAZON_URL")  # amazon_db
+    if not db_url_amazon:
+        return {"success": False, "message": "DATABASE_AMAZON_URL not configured"}
+
+    amazon_engine = create_engine(db_url_amazon, pool_pre_ping=True)
+
+
     # ---------------------------
     # NORMALIZE INPUTS
     # ---------------------------
@@ -705,6 +712,17 @@ def run_upload_pipeline_from_df(
         Column("net_reimbursement", Float),
         Column("platform_fees", Float),
         Column("product_group", String),
+        Column('errorstatus', String),
+        # apply_modifications_fatch added/used columns
+        Column("referral_fee", Float),
+        Column("total_value", Float),
+        Column("answer", Float),
+        Column("difference", Float),
+        Column("fbaanswer", Float),
+        Column("fbaerrorstatus", String),
+        
+
+
     )
 
     user_global_table = Table(
@@ -906,10 +924,64 @@ def run_upload_pipeline_from_df(
 
 
 
-    with engine.connect() as conn:
-        countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)
+    # with engine.connect() as conn:
+    #     countries_df = pd.read_sql(f"SELECT sku, product_group FROM {countris_table_name}", conn)
 
-    df = df.merge(countries_df, on="sku", how="left")
+    # df = df.merge(countries_df, on="sku", how="left")
+
+    from sqlalchemy import bindparam
+
+    # sku list jo pipeline me aa rahi hai
+    sku_list = df["sku"].dropna().astype(str).str.strip().unique().tolist()
+
+    inv_pg_sql = text("""
+        SELECT sku, product_group
+        FROM (
+            SELECT
+                sku,
+                "product-group" AS product_group,
+                ROW_NUMBER() OVER (
+                    PARTITION BY sku
+                    ORDER BY "snapshot-date" DESC NULLS LAST, id DESC
+                ) AS rn
+            FROM inventory_aged
+            WHERE user_id = :user_id
+            AND sku IN :skus
+        ) t
+        WHERE t.rn = 1
+    """).bindparams(bindparam("skus", expanding=True))
+
+    with amazon_engine.connect() as conn:
+        inv_pg_df = pd.read_sql(inv_pg_sql, conn, params={"user_id": user_id, "skus": sku_list})
+
+    # merge (amazon inventory_aged product_group)
+
+    df = df.merge(inv_pg_df, on="sku", how="left")
+
+    def normalize_product_group(v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        if not s:
+            return None
+
+        s_low = s.lower()
+
+        # examples:
+        # "gl_beauty" -> "beauty"
+        # "GL_BEAUTY_something" -> "beauty"
+        if "gl_" in s_low:
+            part = s_low.split("gl_", 1)[1]
+            # split by underscore / space, take first word
+            part = re.split(r"[_\s]+", part)[0]
+            return part
+
+        # if already like "beauty" -> keep first token (optional)
+        return re.split(r"[_\s]+", s_low)[0]
+
+    df["product_group"] = df["product_group"].apply(normalize_product_group)
+
+
 
     if "currency" not in df.columns and "currency_x" in df.columns:
         df["currency"] = df.pop("currency_x")
@@ -978,14 +1050,14 @@ def run_upload_pipeline_from_df(
 
 
     # consolidated
-    df_cons = df.copy()
-    df_cons["month"] = month
-    df_cons["year"] = year
+    # df_cons = df.copy()
+    # df_cons["month"] = month
+    # df_cons["year"] = year
 
-    valid_cols = [c.name for c in user_consolidated_data.columns if c.name != "id"]
-    df_cons = df_cons.reindex(columns=valid_cols)
+    # valid_cols = [c.name for c in user_consolidated_data.columns if c.name != "id"]
+    # df_cons = df_cons.reindex(columns=valid_cols)
 
-    df_cons.to_sql(consolidated_table_name, con=engine, if_exists="append", index=False)
+    # df_cons.to_sql(consolidated_table_name, con=engine, if_exists="append", index=False)
     df.to_sql(table_name, con=engine, if_exists="append", index=False)
 
     df["month"] = month
@@ -1053,8 +1125,46 @@ def run_upload_pipeline_from_df(
     with engine.begin() as conn:
         conn.execute(user_global_table.insert(), df_usd.to_dict(orient="records"))
 
+    # ---------------------------
+    # CONSOLIDATED BASE DF (before modifications)
+    # ---------------------------
+    df_cons = df.copy()
+    df_cons["month"] = month
+    df_cons["year"] = year
+
+
     # apply modifications
     df_modified = apply_modifications_fatch(df_cons, country)
+
+    # ✅ Ensure month/year exist in df_modified
+    df_modified["month"] = month
+    df_modified["year"] = year
+
+    # ✅ Normalize column names (safety)
+    if "ErrorStatus" in df_modified.columns and "errorstatus" not in df_modified.columns:
+        df_modified.rename(columns={"ErrorStatus": "errorstatus"}, inplace=True)
+
+    # ✅ Ensure all required new cols exist (if apply_modifications_fatch missed any)
+    for col in ["answer", "difference", "errorstatus", "fbaanswer", "fbaerrorstatus", "total_value", "referral_fee"]:
+        if col not in df_modified.columns:
+            df_modified[col] = "" if col in ["errorstatus", "fbaerrorstatus"] else 0.0
+
+    # ✅ Only insert columns that consolidated table supports
+    valid_cols = [c.name for c in user_consolidated_data.columns if c.name != "id"]
+    df_merge_insert = df_modified.reindex(columns=valid_cols)
+
+    print("✅ DEBUG: inserting into merge table:", consolidated_table_name)
+    print("✅ DEBUG: merge insert columns:", df_merge_insert.columns.tolist())
+    print("✅ DEBUG: merge insert rows:", len(df_merge_insert))
+
+    # df_merge_insert.to_sql(
+    #     consolidated_table_name,
+    #     con=engine,
+    #     if_exists="append",
+    #     index=False,
+    #     method="multi"
+    # )
+
 
     for col in numeric_columns:
         if col in df_modified.columns:
@@ -1065,6 +1175,19 @@ def run_upload_pipeline_from_df(
     excel_output = io.BytesIO()
     df_modified.to_excel(excel_output, index=False)
     excel_output.seek(0)
+
+    # ✅ ensure month/year in df_modified too
+    df_modified["month"] = month
+    df_modified["year"] = year
+
+    print("✅ DEBUG: df_modified columns:", df_modified.columns.tolist())
+    print("✅ DEBUG: df_modified errorstatus present?", "errorstatus" in df_modified.columns)
+
+    # ✅ remove old month/year records from merge table (already doing earlier, ok)
+    # ✅ now append modified data to consolidated merge table
+    df_modified.to_sql(consolidated_table_name, con=engine, if_exists='append', index=False, method='multi')
+    print("✅ DEBUG: inserted into consolidated_table_name:", consolidated_table_name)
+
 
     # -------- your analytics remain as-is ----------
     quarter_mapping = {
