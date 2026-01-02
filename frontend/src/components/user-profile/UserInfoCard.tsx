@@ -325,8 +325,406 @@
 
 
 
+// "use client";
+// import React, { useEffect, useState } from "react";
+// import { useModal } from "../../hooks/useModal";
+// import { Modal } from "../ui/modal";
+// import Button from "../ui/button/Button";
+// import Input from "../form/input/InputField";
+// import Label from "../form/Label";
+// import {
+//   useForgotPasswordMutation,
+//   useGetUserDataQuery,
+//   useUpdateProfileMutation,
+// } from "@/lib/api/profileApi";
+// import PageBreadcrumb from "../common/PageBreadCrumb";
+// import { RiPencilFill } from "react-icons/ri";
+
+// type FormState = {
+//   brand_name: string;
+//   company_name: string;
+//   annual_sales_range: string;
+//   email: string;
+//   phone_number: string;
+//   homeCurrency: string;
+//   target_sales: string; // keep as string in the form to handle empty/partial input
+// };
+
+
+// const REVENUE_OPTIONS = [
+//   "",
+//   "$0 - $50K",
+//   "$50K - $100K",
+//   "$100K - $500K",
+//   "$500K - $1M",
+//   "$1M+",
+// ];
+
+// // ✅ Currency dropdown options
+// const CURRENCY_OPTIONS = ["USD", "GBP", "INR", "CAD"];
+
+// export default function UserInfoCard() {
+//   const { isOpen, openModal, closeModal } = useModal();
+
+//   // ✅ fetch user data
+//   const { data, isLoading, isError } = useGetUserDataQuery();
+//   console.log("User data:", data);
+
+//   // ✅ mutation
+//   const [updateProfile, { isLoading: isSaving }] = useUpdateProfileMutation();
+
+//   const [form, setForm] = useState<FormState>({
+//     brand_name: "",
+//     company_name: "",
+//     annual_sales_range: "",
+//     email: "",
+//     phone_number: "",
+//     homeCurrency: "",
+//     target_sales: "",
+//   });
+
+
+//   useEffect(() => {
+//     if (data) {
+//       setForm({
+//         brand_name: data.brand_name ?? "",
+//         company_name: data.company_name ?? "",
+//         annual_sales_range: data.annual_sales_range ?? "",
+//         email: data.email ?? "",
+//         phone_number: data.phone_number ?? "",
+//         homeCurrency: (data as any).homeCurrency ?? "",
+//         target_sales:
+//           (data as any).target_sales != null ? String((data as any).target_sales) : "",
+//       });
+//     }
+//   }, [data]);
+
+
+//   const show = (v?: string | null) => (v && v.trim().length ? v : "-");
+
+//   const handleInput =
+//     (key: keyof FormState) =>
+//       (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+//         setForm((prev) => ({ ...prev, [key]: e.target.value }));
+//       };
+
+//   const handleSave = async () => {
+//     try {
+//       // Only send editable fields (email is read-only here)
+//       const payload = {
+//         brand_name: form.brand_name,
+//         company_name: form.company_name,
+//         annual_sales_range: form.annual_sales_range,
+//         phone_number: form.phone_number,
+//         homeCurrency: form.homeCurrency,
+//         target_sales: form.target_sales === "" ? null : Number(form.target_sales), // Numeric(12,2)
+//       };
+//       await updateProfile(payload).unwrap();
+
+//       closeModal();
+//     } catch (err: any) {
+//       console.error(err);
+//       alert(err?.data?.message ?? "Failed to update profile.");
+//     }
+//   };
+
+//   const [forgotPassword, { isLoading: isSending, isSuccess }] =
+//     useForgotPasswordMutation();
+
+//   // Handler for reset password
+//   const handleForgotPassword = async () => {
+//     if (!data?.email) return;
+//     try {
+//       await forgotPassword({ email: data.email }).unwrap();
+//     } catch (err: any) {
+//       console.error(err);
+//       alert(err?.data?.message || "Failed to send reset email.");
+//     }
+//   };
+
+//   const formatCurrency = (value: string | number | null | undefined, currency: string) => {
+//     const n = typeof value === "string" ? Number(value) : value ?? NaN;
+//     if (!currency || !Number.isFinite(n)) return "-";
+//     return new Intl.NumberFormat(undefined, {
+//       style: "currency",
+//       currency,
+//       minimumFractionDigits: 2,
+//       maximumFractionDigits: 2,
+//     }).format(n);
+//   };
+
+
+//   return (
+//     <div className="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6">
+//       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+//         <div>
+//           <PageBreadcrumb
+//             pageTitle="Personal Information"
+//             align="left"
+//             textSize="2xl"
+//             className="lg:mb-4"
+//           />
+
+//           {isLoading && (
+//             <div className="text-sm text-gray-500 dark:text-gray-400">
+//               Loading…
+//             </div>
+//           )}
+//           {isError && (
+//             <div className="text-sm text-red-500">Failed to load profile.</div>
+//           )}
+
+//           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-7 2xl:gap-x-32">
+//             <div>
+//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+//                 Brand Name
+//               </p>
+//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+//                 {show(data?.brand_name)}
+//               </p>
+//             </div>
+
+//             <div>
+//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+//                 Company Name
+//               </p>
+//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+//                 {show(data?.company_name)}
+//               </p>
+//             </div>
+
+//             <div>
+//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+//                 Revenue
+//               </p>
+//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+//                 {show(data?.annual_sales_range)}
+//               </p>
+//             </div>
+
+//             <div>
+//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+//                 Email
+//               </p>
+//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+//                 {show(data?.email)}
+//               </p>
+//             </div>
+
+//             <div>
+//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+//                 Phone
+//               </p>
+//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+//                 {show(data?.phone_number)}
+//               </p>
+//             </div>
+
+//             <div>
+//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+//                 Home Currency
+//               </p>
+//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+//                 {show(data?.homeCurrency)}
+//               </p>
+//             </div>
+
+//             <div>
+//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+//                 Reset Password
+//               </p>
+//               <p
+//                 onClick={handleForgotPassword}
+//                 className={`text-sm font-medium cursor-pointer ${isSuccess
+//                   ? "text-green-600 dark:text-green-400"
+//                   : "text-blue-600 hover:underline"
+//                   }`}
+//               >
+//                 {isSending
+//                   ? "Sending..."
+//                   : isSuccess
+//                     ? "Email sent for password reset"
+//                     : "Click here to change password"}
+//               </p>
+//             </div>
+
+//             <div>
+//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+//                 Target Sales
+//               </p>
+//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+//                 {formatCurrency((data as any)?.target_sales, (data as any)?.homeCurrency)}
+//               </p>
+//             </div>
+//           </div>
+//         </div>
+
+//         <Button
+//           onClick={openModal}
+//           startIcon={<RiPencilFill />}
+//           variant="primary"
+//           size="sm"
+//         >
+//           Edit
+//         </Button>
+//       </div>
+
+//       {/* ---- MODAL ---- */}
+//       <Modal isOpen={isOpen} onClose={closeModal} className="max-w-[700px] m-4">
+//         <div className="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-11">
+//           <div className="px-2 pr-14">
+//             <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">
+//               Edit Personal Information
+//             </h4>
+//             <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
+//               Update your details to keep your profile up-to-date.
+//             </p>
+//           </div>
+
+//           <form className="flex flex-col" onSubmit={(e) => e.preventDefault()}>
+//             <div className="custom-scrollbar h-[450px] overflow-y-auto px-2 pb-3">
+//               <div className="mt-7">
+//                 <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
+//                   Personal Information
+//                 </h5>
+
+//                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
+//                   <div className="col-span-2 lg:col-span-1">
+//                     <Label>Brand Name</Label>
+//                     <Input
+//                       type="text"
+//                       value={form.brand_name}
+//                       onChange={handleInput("brand_name")}
+//                     />
+//                   </div>
+
+//                   <div className="col-span-2 lg:col-span-1">
+//                     <Label>Company Name</Label>
+//                     <Input
+//                       type="text"
+//                       value={form.company_name}
+//                       onChange={handleInput("company_name")}
+//                     />
+//                   </div>
+
+//                   {/* Revenue dropdown (controlled) */}
+//                   <div className="col-span-2 lg:col-span-1">
+//                     <Label>Revenue</Label>
+//                     <select
+//                       value={form.annual_sales_range}
+//                       onChange={handleInput("annual_sales_range")}
+//                       className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+//                     >
+//                       <option value="">Select Revenue Range</option>
+//                       <option value="$0 - $50K">$0 - $50K</option>
+//                       <option value="$50K - $100K">$50K - $100K</option>
+//                       <option value="$100K - $500K">$100K - $500K</option>
+//                       <option value="$500K - $1M">$500K - $1M</option>
+//                       <option value="$1M+">$1M and above</option>
+//                     </select>
+//                   </div>
+
+//                   <div className="col-span-2 lg:col-span-1">
+//                     <Label>Email (read-only)</Label>
+//                     <Input type="text" value={form.email} disabled />
+//                   </div>
+
+//                   <div className="col-span-2 lg:col-span-1">
+//                     <Label>Phone</Label>
+//                     <Input
+//                       type="text"
+//                       value={form.phone_number}
+//                       onChange={handleInput("phone_number")}
+//                     />
+//                   </div>
+
+//                   {/* ✅ Home Currency dropdown */}
+//                   <div className="col-span-2 lg:col-span-1">
+//                     <Label>Home Currency</Label>
+//                     <select
+//                       value={form.homeCurrency}
+//                       onChange={handleInput("homeCurrency")}
+//                       className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+//                     >
+//                       <option value="">Select Currency</option>
+//                       {CURRENCY_OPTIONS.map((cur) => (
+//                         <option key={cur} value={cur}>
+//                           {cur}
+//                         </option>
+//                       ))}
+//                     </select>
+//                   </div>
+
+//                   <div className="col-span-2 lg:col-span-1">
+//                     <Label>Target Sales</Label>
+//                     <Input
+//                       type="number"
+//                       inputMode="numeric"
+//                       step="1"
+//                       min="0"
+//                       value={form.target_sales}
+//                       onChange={handleInput("target_sales")}
+//                     />
+//                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+//                       {form.homeCurrency
+//                         ? `Will be saved as ${form.homeCurrency}. Preview: ${formatCurrency(form.target_sales, form.homeCurrency)}`
+//                         : "Select Home Currency to preview formatting."}
+//                     </p>
+//                   </div>
+
+//                 </div>
+//               </div>
+//             </div>
+
+//             <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
+//               <Button
+//                 size="sm"
+//                 variant="outline"
+//                 onClick={closeModal}
+//                 disabled={isSaving}
+//               >
+//                 Close
+//               </Button>
+//               <Button size="sm" onClick={handleSave} disabled={isSaving}>
+//                 {isSaving ? "Saving…" : "Save Changes"}
+//               </Button>
+//             </div>
+//           </form>
+//         </div>
+//       </Modal>
+//     </div>
+//   );
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { useModal } from "../../hooks/useModal";
 import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
@@ -340,13 +738,18 @@ import {
 import PageBreadcrumb from "../common/PageBreadCrumb";
 import { RiPencilFill } from "react-icons/ri";
 
+import type { PlatformId } from "@/lib/utils/platforms";
+import { platformToCurrencyCode } from "@/lib/utils/currency";
+import { useConnectedPlatforms } from "@/lib/utils/useConnectedPlatforms";
+
 type FormState = {
   brand_name: string;
   company_name: string;
   annual_sales_range: string;
-  email: string;        // shown/locked (non-editable here)
+  email: string;
   phone_number: string;
-  homeCurrency: string; // ✅ NEW
+  homeCurrency: string;
+  target_sales: string; // keep as string in the form to handle empty/partial input
 };
 
 const REVENUE_OPTIONS = [
@@ -364,21 +767,65 @@ const CURRENCY_OPTIONS = ["USD", "GBP", "INR", "CAD"];
 export default function UserInfoCard() {
   const { isOpen, openModal, closeModal } = useModal();
 
-  // ✅ fetch user data
+
+  // ✅ route param from /country/{range}/{country}/{month}/{year} (may be undefined on profile pages)
+const params = useParams() as { country?: string };
+
+// ✅ connected marketplaces (from your existing hook)
+const connected = useConnectedPlatforms();
+
+const pagePlatform: PlatformId = useMemo(() => {
+  const c = (params?.country || "").toLowerCase();
+
+  if (c === "uk") return "amazon-uk";
+  if (c === "us") return "amazon-us";
+  if (c === "ca") return "amazon-ca";
+  if (c === "global") return "global";
+
+
+  const amazonConnectedCount = [
+    connected.amazonUk,
+    connected.amazonUs,
+    connected.amazonCa,
+  ].filter(Boolean).length;
+
+  if (amazonConnectedCount === 1) {
+    if (connected.amazonUk) return "amazon-uk";
+    if (connected.amazonUs) return "amazon-us";
+    if (connected.amazonCa) return "amazon-ca";
+  }
+
+  return "global";
+}, [
+  params?.country,
+  connected.amazonUk,
+  connected.amazonUs,
+  connected.amazonCa,
+]);
+
+const pageCurrency = useMemo(
+  () => platformToCurrencyCode(pagePlatform),
+  [pagePlatform]
+);
+
+const effectiveCurrency =
+  pageCurrency || form.homeCurrency || (data as any)?.homeCurrency || "USD";
+
+
+
   const { data, isLoading, isError } = useGetUserDataQuery();
   console.log("User data:", data);
 
-  // ✅ mutation
   const [updateProfile, { isLoading: isSaving }] = useUpdateProfileMutation();
 
-  // Local form state for modal
   const [form, setForm] = useState<FormState>({
     brand_name: "",
     company_name: "",
     annual_sales_range: "",
     email: "",
     phone_number: "",
-    homeCurrency: "", 
+    homeCurrency: "",
+    target_sales: "",
   });
 
   // seed form once data arrives/changes
@@ -391,9 +838,20 @@ export default function UserInfoCard() {
         email: data.email ?? "",
         phone_number: data.phone_number ?? "",
         homeCurrency: (data as any).homeCurrency ?? "",
+        target_sales:
+          (data as any).target_sales != null ? String((data as any).target_sales) : "",
       });
     }
   }, [data]);
+
+  // ✅ OPTIONAL: if homeCurrency not set yet, default it from current country page
+  useEffect(() => {
+    if (pageCurrency && !form.homeCurrency) {
+      setForm((prev) => ({ ...prev, homeCurrency: pageCurrency }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageCurrency]);
+
 
   const show = (v?: string | null) => (v && v.trim().length ? v : "-");
 
@@ -411,8 +869,11 @@ export default function UserInfoCard() {
         company_name: form.company_name,
         annual_sales_range: form.annual_sales_range,
         phone_number: form.phone_number,
-        homeCurrency: form.homeCurrency, // ✅ NEW
+        homeCurrency: form.homeCurrency,
+        // store as numeric (backend Numeric(12,2)); keep UI as whole number
+        target_sales: form.target_sales === "" ? null : Number(form.target_sales),
       };
+
       await updateProfile(payload).unwrap();
       closeModal();
     } catch (err: any) {
@@ -421,8 +882,7 @@ export default function UserInfoCard() {
     }
   };
 
-  const [forgotPassword, { isLoading: isSending, isSuccess }] =
-    useForgotPasswordMutation();
+  const [forgotPassword, { isLoading: isSending, isSuccess }] = useForgotPasswordMutation();
 
   // Handler for reset password
   const handleForgotPassword = async () => {
@@ -433,6 +893,17 @@ export default function UserInfoCard() {
       console.error(err);
       alert(err?.data?.message || "Failed to send reset email.");
     }
+  };
+
+  const formatCurrency = (value: string | number | null | undefined, currency: string) => {
+    const n = typeof value === "string" ? Number(value) : value ?? NaN;
+    if (!currency || !Number.isFinite(n)) return "-";
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
   };
 
   return (
@@ -446,14 +917,8 @@ export default function UserInfoCard() {
             className="lg:mb-4"
           />
 
-          {isLoading && (
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              Loading…
-            </div>
-          )}
-          {isError && (
-            <div className="text-sm text-red-500">Failed to load profile.</div>
-          )}
+          {isLoading && <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>}
+          {isError && <div className="text-sm text-red-500">Failed to load profile.</div>}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-7 2xl:gap-x-32">
             <div>
@@ -475,27 +940,21 @@ export default function UserInfoCard() {
             </div>
 
             <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Revenue
-              </p>
+              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">Revenue</p>
               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
                 {show(data?.annual_sales_range)}
               </p>
             </div>
 
             <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Email
-              </p>
+              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">Email</p>
               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
                 {show(data?.email)}
               </p>
             </div>
 
             <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Phone
-              </p>
+              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">Phone</p>
               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
                 {show(data?.phone_number)}
               </p>
@@ -529,15 +988,19 @@ export default function UserInfoCard() {
                   : "Click here to change password"}
               </p>
             </div>
+
+            <div>
+              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
+                Target Sales
+              </p>
+              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+                {formatCurrency((data as any)?.target_sales, effectiveCurrency)}
+              </p>
+            </div>
           </div>
         </div>
 
-        <Button
-          onClick={openModal}
-          startIcon={<RiPencilFill />}
-          variant="primary"
-          size="sm"
-        >
+        <Button onClick={openModal} startIcon={<RiPencilFill />} variant="primary" size="sm">
           Edit
         </Button>
       </div>
@@ -611,7 +1074,7 @@ export default function UserInfoCard() {
                     />
                   </div>
 
-                  {/* ✅ Home Currency dropdown */}
+                  {/* Home Currency dropdown */}
                   <div className="col-span-2 lg:col-span-1">
                     <Label>Home Currency</Label>
                     <select
@@ -627,17 +1090,33 @@ export default function UserInfoCard() {
                       ))}
                     </select>
                   </div>
+
+                  {/* Target Sales (numeric, whole number) */}
+                  <div className="col-span-2 lg:col-span-1">
+                    <Label>Target Sales</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      step="1"
+                      min="0"
+                      value={form.target_sales}
+                      onChange={handleInput("target_sales")}
+                    />
+                    {/* <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {effectiveCurrency
+                        ? `Shown as ${effectiveCurrency}. Preview: ${formatCurrency(
+                            form.target_sales,
+                            effectiveCurrency
+                          )}`
+                        : "Select currency to preview formatting."}
+                    </p> */}
+                  </div>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={closeModal}
-                disabled={isSaving}
-              >
+              <Button size="sm" variant="outline" onClick={closeModal} disabled={isSaving}>
                 Close
               </Button>
               <Button size="sm" onClick={handleSave} disabled={isSaving}>
