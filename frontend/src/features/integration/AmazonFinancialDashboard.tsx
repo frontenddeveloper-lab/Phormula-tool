@@ -2105,27 +2105,6 @@ function buildMonthRange(count: number) {
     const mIdx = d.getUTCMonth();
     out.push({ y, mIdx, mNum: mIdx + 1 });
   }
-<<<<<<< HEAD
-
-  return out.reverse(); // oldest -> newest
-}
-
-/** Build range from Jan 2024 up to previous month (current month - 1), oldest -> newest */
-function buildLifetimeRange() {
-  const startY = 2024;
-  const startMIdx = 0; // Jan
-
-  const now = new Date();
-  const anchor = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)
-  ); // prev month
-  const endY = anchor.getUTCFullYear();
-  const endMIdx = anchor.getUTCMonth();
-
-  const startValue = startY * 12 + startMIdx;
-  const endValue = endY * 12 + endMIdx;
-
-=======
   return out.reverse();
 }
 
@@ -2142,7 +2121,6 @@ function buildLifetimeRange() {
 
   const startValue = startY * 12 + startMIdx;
   const endValue = endY * 12 + endMIdx;
->>>>>>> main
   if (endValue < startValue) return [];
 
   const out: { y: number; mIdx: number; mNum: number }[] = [];
@@ -2151,10 +2129,6 @@ function buildLifetimeRange() {
     const mIdx = v % 12;
     out.push({ y, mIdx, mNum: mIdx + 1 });
   }
-<<<<<<< HEAD
-
-=======
->>>>>>> main
   return out;
 }
 
@@ -2171,47 +2145,17 @@ const AmazonFinancialDashboard: React.FC<Props> = ({
 }) => {
   const router = useRouter();
 
-<<<<<<< HEAD
-  // infer country
-  const countryNormalized = (country || "").toLowerCase();
-  let countryUsed = countryNormalized || "uk";
-  let marketplaceIdUsed = marketplaceForCountry(countryUsed) || "A1F83G8C2ARO7P";
-
-  /** ---- HARD OVERRIDE (testing) ---- */
-=======
   const countryNormalized = (country || "").toLowerCase();
   let countryUsed = countryNormalized || "uk";
   let marketplaceIdUsed =
     marketplaceForCountry(countryUsed) || "A1F83G8C2ARO7P";
 
->>>>>>> main
   const regionUsed = FORCE.enabled ? FORCE.region : region;
   if (FORCE.enabled) {
     countryUsed = FORCE.country;
     marketplaceIdUsed = FORCE.marketplaceId;
   }
 
-<<<<<<< HEAD
-  // current month/year
-  const today = new Date();
-  const currentMonthIdx0 = today.getMonth(); // 0–11
-  const currentMonth01 = two(currentMonthIdx0 + 1);
-  const currentYear = today.getFullYear();
-
-  // default selection = previous month (not current ongoing month)
-  let defaultYear = currentYear;
-  let defaultMonthIdx0 = currentMonthIdx0 - 1;
-  if (defaultMonthIdx0 < 0) {
-    defaultMonthIdx0 = 11;
-    defaultYear -= 1;
-  }
-
-  const [error, setError] = useState<string>("");
-  const [message, setMessage] = useState<string>("");
-
-  const [selMonth, setSelMonth] = useState(two(defaultMonthIdx0 + 1)); // "01".."12"
-  const [selYear, setSelYear] = useState(String(defaultYear));
-=======
   const earliest = useMemo(() => getEarliestAllowedMonthUTC(), []);
   const latest = useMemo(() => getLatestAllowedMonthUTC(), []);
 
@@ -2221,7 +2165,6 @@ const AmazonFinancialDashboard: React.FC<Props> = ({
 
   const [error, setError] = useState<string>("");
   const [message, setMessage] = useState<string>("");
->>>>>>> main
 
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{
@@ -2264,30 +2207,15 @@ const AmazonFinancialDashboard: React.FC<Props> = ({
     }));
   };
 
-<<<<<<< HEAD
-  const bumpOk = () =>
-    setProgress((p) => ({ ...p, ok: (p.ok || 0) + 1 }));
-
-  const bumpFail = () =>
-    setProgress((p) => ({ ...p, fail: (p.fail || 0) + 1 }));
-
-  const stopProgress = () =>
-    setProgress((p) => ({ ...p, active: false }));
-=======
   const bumpOk = () => setProgress((p) => ({ ...p, ok: (p.ok || 0) + 1 }));
   const bumpFail = () =>
     setProgress((p) => ({ ...p, fail: (p.fail || 0) + 1 }));
 
->>>>>>> main
   const [selectedPeriod, setSelectedPeriod] = useState<
     number | "lifetime" | null
   >(12);
 
-<<<<<<< HEAD
-    const wrap = async (fn: () => Promise<void>) => {
-=======
   const wrap = async (fn: () => Promise<void>) => {
->>>>>>> main
     try {
       setBusy(true);
       setError("");
@@ -2301,44 +2229,6 @@ const AmazonFinancialDashboard: React.FC<Props> = ({
     }
   };
 
-<<<<<<< HEAD
-
-    const handleFetchByMonth = () =>
-    wrap(async () => {
-      const y = parseInt(selYear, 10);
-      const mNum = parseInt(selMonth, 10);
-
-      // total steps: 2 (fees priming + monthly fetch)
-      startProgress(2, "Starting fetch…", `Month: ${y}-${two(mNum)}`);
-
-      setProgressStep(1, "Priming fees…");
-
-// isolate backend call from React state cycle
-await Promise.resolve().then(() =>
-  ensureFeesPrimedOnce({
-    country: countryUsed,
-    regionUsed,
-    marketplaceId: marketplaceIdUsed,
-    year: y,
-    month: mNum,
-  })
-);
-
-
-      setProgressStep(2, "Fetching monthly transactions…", `Month: ${y}-${two(mNum)}`);
-      await fetchMonthlyTransactionsExcel({
-        year: y,
-        month: mNum,
-        marketplace_id: marketplaceIdUsed,
-        country: countryUsed,
-        run_upload_pipeline: true,
-        store_in_db: true,
-      });
-
-      const monthSlug = fullMonthNames[mNum - 1].toLowerCase();
-      updateLatestFetchedPeriod(monthSlug, String(y));
-
-=======
   /** Years allowed in dropdown: earliest.y ... latest.y */
   const allowedYears = useMemo(() => {
     const ys: number[] = [];
@@ -2393,7 +2283,6 @@ await Promise.resolve().then(() =>
       const monthSlug = fullMonthNames[mNum - 1].toLowerCase();
       updateLatestFetchedPeriod(monthSlug, String(y));
 
->>>>>>> main
       setMessage(
         `Fetched ${countryUsed}: ${y}-${two(mNum)} (fees primed, no download)`
       );
@@ -2402,24 +2291,14 @@ await Promise.resolve().then(() =>
       router.push(`/country/MTD/${countryUsed}/${monthSlug}/${y}`);
     });
 
-<<<<<<< HEAD
-
-=======
->>>>>>> main
   const handleFetchRange = () =>
     wrap(async () => {
       const isLifetime = selectedPeriod === "lifetime";
 
-<<<<<<< HEAD
-      const months = isLifetime
-        ? buildLifetimeRange()
-        : buildMonthRange((selectedPeriod as number) || 0); // ends at current-1 month
-=======
       // Note: buildLifetimeRange already clamps to allowed window
       const months = isLifetime
         ? buildLifetimeRange()
         : buildMonthRange((selectedPeriod as number) || 0);
->>>>>>> main
 
       if (!months.length) {
         setMessage("No months available to fetch.");
@@ -2431,60 +2310,15 @@ await Promise.resolve().then(() =>
         return;
       }
 
-<<<<<<< HEAD
-            
-
-
-      const first = months[0];
-
-      setProgressStep(1, "Priming fees (once)…", `First month: ${first.y}-${two(first.mNum)}`);
-      await ensureFeesPrimedOnce({
-        country: countryUsed,
-        regionUsed,
-        marketplaceId: marketplaceIdUsed,
-        year: first.y,
-        month: first.mNum,
-      });
-
-      startProgress(1 + months.length, "Preparing range fetch…", 
-        isLifetime ? "Lifetime" : `${selectedPeriod} months`
-=======
       startProgress(
         months.length * 2,
         "Preparing range fetch…",
         isLifetime ? "Lifetime (allowed window)" : `${selectedPeriod} months`
->>>>>>> main
       );
 
       let ok = 0;
       let fail = 0;
 
-<<<<<<< HEAD
-      let step = 1; // already used by priming
-      for (const { y, mNum } of months) {
-        step += 1;
-        setProgressStep(
-          step,
-          "Fetching monthly transactions…",
-          `Done: ${ok + fail}/${months.length} | Current: ${y}-${two(mNum)} | OK: ${ok} | Failed: ${fail}`
-        );
-
-        try {
-          await fetchMonthlyTransactionsExcel({
-            year: y,
-            month: mNum,
-            marketplace_id: marketplaceIdUsed,
-            country: countryUsed,
-            run_upload_pipeline: true,
-            store_in_db: true,
-          });
-          ok++;
-          bumpOk();
-        } catch (e) {
-          console.error("monthly_transactions excel failed for", y, mNum, e);
-          fail++;
-          bumpFail();
-=======
       let step = 0;
       for (const { y, mNum, mIdx } of months) {
         step += 1;
@@ -2503,7 +2337,6 @@ await Promise.resolve().then(() =>
           });
         } catch (e) {
           console.error("fees priming failed for", y, mNum, e);
->>>>>>> main
         }
 
         step += 1;
@@ -2541,19 +2374,10 @@ await Promise.resolve().then(() =>
 
       const last = months[months.length - 1];
       const latestMonthSlug = fullMonthNames[last.mIdx].toLowerCase();
-<<<<<<< HEAD
-      updateLatestFetchedPeriod(latestMonthSlug, String(last.y));
-
-      setMessage(
-        `Fetch complete for ${countryUsed}: ${
-          isLifetime ? "lifetime" : `requested ${selectedPeriod}`
-        }, ok ${ok}, failed ${fail} (fees primed once, no downloads)`
-=======
 
       setMessage(
         `Fetch complete for ${countryUsed}: ${isLifetime ? "lifetime (allowed window)" : `${selectedPeriod} months`
         }, ok ${ok}, failed ${fail}.`
->>>>>>> main
       );
 
       if (onClose) onClose();
@@ -2589,18 +2413,7 @@ await Promise.resolve().then(() =>
         </p>
 
         {/* Period Buttons */}
-<<<<<<< HEAD
-        <div
-          className="
-            mt-2
-            grid grid-cols-5 gap-2
-            sm:grid-cols-5 sm:gap-3
-            max-w-xl mx-auto
-          "
-        >
-=======
         <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-5 sm:gap-3 max-w-xl mx-auto">
->>>>>>> main
           {[1, 3, 6, 12, "lifetime"].map((m) => {
             const isActive = selectedPeriod === m;
 
@@ -2624,25 +2437,12 @@ await Promise.resolve().then(() =>
                   type="button"
                   onClick={() => setSelectedPeriod(m as any)}
                   className={[
-<<<<<<< HEAD
-                    `
-                      w-full
-                      rounded-lg border
-                      p-2 sm:p-3
-                      text-center transition
-                    `,
-=======
                     "w-full rounded-lg border p-2 sm:p-3 text-center transition",
->>>>>>> main
                     isActive
                       ? "border-green-500 bg-green-500 text-yellow-200"
                       : "border-slate-200 bg-slate-50 hover:bg-white text-charcoal-500",
                   ].join(" ")}
                 >
-<<<<<<< HEAD
-                  {/* value row: fixed visual slot so ∞ doesn't look narrower */}
-=======
->>>>>>> main
                   <div className="w-full text-base sm:text-lg font-semibold flex items-center justify-center tabular-nums">
                     <span className="inline-flex w-[1.6em] justify-center">
                       {m === "lifetime" ? (
@@ -2668,30 +2468,14 @@ await Promise.resolve().then(() =>
 
         {/* Note Section */}
         <div
-<<<<<<< HEAD
-          className="
-            mt-4
-            max-w-xl mx-auto
-            rounded-lg
-            bg-[#D9D9D9E5]
-            p-2 text-[12px]
-            sm:p-3 sm:text-sm
-            border border-[#D9D9D9]
-          "
-=======
           className="mt-4 max-w-xl mx-auto rounded-lg bg-[#D9D9D9E5] p-2 text-[12px] sm:p-3 sm:text-sm border border-[#D9D9D9]"
->>>>>>> main
           style={{ borderLeft: "6px solid #5EA68E" }}
         >
           Note:&nbsp; Amazon SP-API finances transactions supports roughly a
           2-year rolling window. Older months are disabled automatically.
         </div>
 
-<<<<<<< HEAD
-                {/* Progress UI */}
-=======
         {/* Progress UI */}
->>>>>>> main
         {busy && progress.active && progress.total > 0 && (
           <div className="mt-4 max-w-xl mx-auto">
             <div className="rounded-lg border border-slate-200 bg-white p-3">
@@ -2700,15 +2484,11 @@ await Promise.resolve().then(() =>
                   {progress.label}
                 </div>
                 <div className="text-xs text-slate-500 tabular-nums">
-<<<<<<< HEAD
-                  {Math.min(100, Math.round((progress.current / progress.total) * 100))}%
-=======
                   {Math.min(
                     100,
                     Math.round((progress.current / progress.total) * 100)
                   )}
                   %
->>>>>>> main
                 </div>
               </div>
 
@@ -2744,10 +2524,6 @@ await Promise.resolve().then(() =>
           </div>
         )}
 
-<<<<<<< HEAD
-
-=======
->>>>>>> main
         {/* 1 month controls */}
         {selectedPeriod === 1 && (
           <div className="mt-6">
@@ -2760,28 +2536,6 @@ await Promise.resolve().then(() =>
                   onChange={(e) => setSelMonth(e.target.value)}
                   className="rounded-lg border-2 border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-[#5EA68E] focus:ring-4 focus:ring-[#5EA68E]/20"
                 >
-<<<<<<< HEAD
-                  {[
-                    ["01", "Jan"],
-                    ["02", "Feb"],
-                    ["03", "Mar"],
-                    ["04", "Apr"],
-                    ["05", "May"],
-                    ["06", "Jun"],
-                    ["07", "Jul"],
-                    ["08", "Aug"],
-                    ["09", "Sep"],
-                    ["10", "Oct"],
-                    ["11", "Nov"],
-                    ["12", "Dec"],
-                  ].map(([val, label]) => {
-                    const isCurrentMonthAndYear =
-                      val === currentMonth01 && selYear === String(currentYear);
-                    const shouldDisable = isCurrentMonthAndYear && selMonth !== val;
-
-                    return (
-                      <option key={val} value={val} disabled={shouldDisable}>
-=======
                   {Array.from({ length: 12 }, (_, i) => {
                     const m1 = i + 1;
                     const label = fullMonthNames[i].slice(0, 3);
@@ -2789,7 +2543,6 @@ await Promise.resolve().then(() =>
                     const disabled = !Number.isFinite(y) || !isSelectableUTC(y, m1);
                     return (
                       <option key={m1} value={two(m1)} disabled={disabled}>
->>>>>>> main
                         {label}
                       </option>
                     );
@@ -2806,14 +2559,6 @@ await Promise.resolve().then(() =>
                     const newYearStr = e.target.value;
                     setSelYear(newYearStr);
 
-<<<<<<< HEAD
-                    if (
-                      newYear === String(currentYear) &&
-                      selMonth === currentMonth01
-                    ) {
-                      const prevIdx = (currentMonthIdx0 - 1 + 12) % 12;
-                      setSelMonth(two(prevIdx + 1));
-=======
                     const newYear = parseInt(newYearStr, 10);
                     const currentMonthNum = parseInt(selMonth, 10);
 
@@ -2824,7 +2569,6 @@ await Promise.resolve().then(() =>
                         setSelYear(String(clamped.y));
                         setSelMonth(two(clamped.m1));
                       }
->>>>>>> main
                     }
                   }}
                   className="rounded-lg border-2 border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:border-[#5EA68E] focus:ring-4 focus:ring-[#5EA68E]/20"
@@ -2861,25 +2605,6 @@ await Promise.resolve().then(() =>
         )}
 
         {/* >1 month controls (includes Lifetime) */}
-<<<<<<< HEAD
-        {selectedPeriod &&
-          (selectedPeriod === "lifetime" || selectedPeriod > 1) && (
-            <div className="w-full flex justify-center gap-3 mt-4">
-              <Button onClick={onClose} variant="outline" size="sm">
-                Cancel
-              </Button>
-
-              <Button
-                onClick={handleFetchRange}
-                variant="primary"
-                size="sm"
-                disabled={busy}
-              >
-                {busy ? "Fetching..." : `Continue`}
-              </Button>
-            </div>
-          )}
-=======
         {selectedPeriod && (selectedPeriod === "lifetime" || selectedPeriod > 1) && (
           <div className="w-full flex justify-center gap-3 mt-4">
             <Button onClick={onClose} variant="outline" size="sm">
@@ -2891,7 +2616,6 @@ await Promise.resolve().then(() =>
             </Button>
           </div>
         )}
->>>>>>> main
       </div>
 
       {/* Messages */}
