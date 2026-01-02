@@ -1868,9 +1868,10 @@ async function apiJson(path: string, options: RequestInit = {}) {
 }
 
 /** ---------------- localStorage run-once guards ---------------- */
-function lsKeyFees(country: string, year: number, month: number) {
-  return `feesSynced:${country}:${year}:${month}`;
+function lsKeyFees(country: string) {
+  return `feesSynced:${country}`;
 }
+
 function lsKeyFeeUpload(country: string) {
   return `feeUploadReady:${country}`;
 }
@@ -1934,8 +1935,10 @@ async function ensureFeesPrimedOnce(params: {
     markDone(uploadKey);
   }
 
-  const feesKey = lsKeyFees(country, year, month);
+  const feesKey = lsKeyFees(country);
   if (!wasDone(feesKey)) {
+    // backend requires a month/year, so we send the current selection
+    // but we only do this ONCE per country
     const monthParam = `${year}-${two(month)}`;
     await apiJson(`/fetch_fees`, {
       method: "POST",
@@ -1947,8 +1950,10 @@ async function ensureFeesPrimedOnce(params: {
         country,
       }),
     });
+
     markDone(feesKey);
   }
+
 }
 
 /** -------- Better error parsing for monthly_transactions -------- */
@@ -2546,8 +2551,7 @@ await Promise.resolve().then(() =>
 =======
 
       setMessage(
-        `Fetch complete for ${countryUsed}: ${
-          isLifetime ? "lifetime (allowed window)" : `${selectedPeriod} months`
+        `Fetch complete for ${countryUsed}: ${isLifetime ? "lifetime (allowed window)" : `${selectedPeriod} months`
         }, ok ${ok}, failed ${fail}.`
 >>>>>>> main
       );

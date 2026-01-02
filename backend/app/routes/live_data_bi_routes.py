@@ -134,7 +134,11 @@ def live_mtd_vs_previous():
             in ("true", "1", "yes")
         )
 
-        ranges = get_mtd_and_prev_ranges(as_of=as_of, start_day=start_day, end_day=end_day)
+        ranges = get_mtd_and_prev_ranges(
+            as_of=as_of,
+            start_day=start_day,
+            end_day=end_day,
+        )
         prev_start = ranges["previous"]["start"]
         prev_end = ranges["previous"]["end"]
         curr_start = ranges["current"]["start"]
@@ -144,7 +148,7 @@ def live_mtd_vs_previous():
         prev_full_start = date(
             ranges["meta"]["previous_year"],
             ranges["meta"]["previous_month"],
-            1
+            1,
         )
         last_day_prev = monthrange(prev_full_start.year, prev_full_start.month)[1]
         prev_full_end = date(prev_full_start.year, prev_full_start.month, last_day_prev)
@@ -163,11 +167,11 @@ def live_mtd_vs_previous():
         )
 
         # ---------------------------
-        # ALIGN SKUs (PREVIOUS + CURRENT)  🔥 IMPORTANT FIX
+        # ALIGN SKUs (PREVIOUS + CURRENT)
         # ---------------------------
         prev_data_aligned, curr_data = align_prev_curr_by_sku(
             prev_data_aligned,
-            curr_data
+            curr_data,
         )
 
         # ---------------------------
@@ -194,7 +198,7 @@ def live_mtd_vs_previous():
         growth_data = calculate_growth(
             prev_data_aligned,
             curr_data,
-            key=key_column
+            key=key_column,
         )
 
         prev_keys = {r.get(key_column) for r in prev_data_aligned if r.get(key_column)}
@@ -206,7 +210,7 @@ def live_mtd_vs_previous():
         historical_6m_keys = fetch_historical_skus_last_6_months(
             user_id=user_id,
             country=country,
-            ref_date=curr_start
+            ref_date=curr_start,
         )
 
         reviving_keys = curr_keys - prev_keys
@@ -217,7 +221,6 @@ def live_mtd_vs_previous():
             r for r in growth_data
             if r.get(key_column) in new_reviving_keys
         ]
-
 
         # ---------------------------
         # TOP 80 / OTHER
@@ -230,7 +233,9 @@ def live_mtd_vs_previous():
         ]
 
         existing_sorted = sorted(
-            existing, key=lambda x: x["Sales Mix (Current)"], reverse=True
+            existing,
+            key=lambda x: x["Sales Mix (Current)"],
+            reverse=True,
         )
 
         total_sales_mix = sum(
@@ -269,18 +274,31 @@ def live_mtd_vs_previous():
         prev_new = [r for r in prev_data_aligned if r.get(key_column) in new_keys]
         curr_new = [r for r in curr_data if r.get(key_column) in new_keys]
 
-        top_80_total_row = build_segment_total_row(prev_top, curr_top, key=key_column, label="Total")
-        other_total_row = build_segment_total_row(prev_other, curr_other, key=key_column, label="Total") if other_skus else None
-        new_reviving_total_row = build_segment_total_row(prev_new, curr_new, key=key_column, label="Total") if new_reviving else None
+        top_80_total_row = build_segment_total_row(
+            prev_top, curr_top, key=key_column, label="Total"
+        )
+        other_total_row = (
+            build_segment_total_row(prev_other, curr_other, key=key_column, label="Total")
+            if other_skus else None
+        )
+        new_reviving_total_row = (
+            build_segment_total_row(prev_new, curr_new, key=key_column, label="Total")
+            if new_reviving else None
+        )
 
         # ---------------------------
-        # INVENTORY SIGNALS (NEW)
+        # INVENTORY SIGNALS
         # ---------------------------
         try:
             inventory_signals_all = build_inventory_signals(user_id, country)
-            selected_skus = {r.get(key_column) for r in (top_80_skus + new_reviving) if r.get(key_column)}
+            selected_skus = {
+                r.get(key_column)
+                for r in (top_80_skus + new_reviving)
+                if r.get(key_column)
+            }
             inventory_signals = {
-                sku: sig for sku, sig in inventory_signals_all.items()
+                sku: sig
+                for sku, sig in inventory_signals_all.items()
                 if sku in selected_skus
             }
         except Exception as e:
@@ -290,26 +308,33 @@ def live_mtd_vs_previous():
         # ---------------------------
         # LABELS
         # ---------------------------
-        prev_label = f"{month_abbr[prev_start.month].capitalize()}'{str(prev_start.year)[-2:]} {prev_start.day}–{prev_end.day}"
-        curr_label = f"{month_abbr[curr_start.month].capitalize()}'{str(curr_start.year)[-2:]} {curr_start.day}–{curr_end.day}"
-        prev_label_full = f"{month_abbr[prev_full_start.month].capitalize()}'{str(prev_full_start.year)[-2:]} 1–{prev_full_end.day}"
+        prev_label = (
+            f"{month_abbr[prev_start.month].capitalize()}'"
+            f"{str(prev_start.year)[-2:]} {prev_start.day}–{prev_end.day}"
+        )
+        curr_label = (
+            f"{month_abbr[curr_start.month].capitalize()}'"
+            f"{str(curr_start.year)[-2:]} {curr_start.day}–{curr_end.day}"
+        )
+        prev_label_full = (
+            f"{month_abbr[prev_full_start.month].capitalize()}'"
+            f"{str(prev_full_start.year)[-2:]} 1–{prev_full_end.day}"
+        )
 
         # ---------------------------
-        # AI SUMMARY
+        # AI SUMMARY (ONCE)
         # ---------------------------
         prev_totals = aggregate_totals(prev_data_aligned)
         curr_totals = aggregate_totals(curr_data)
 
         sku_context = build_sku_context(growth_data, max_items=5)
         estimated_storage_cost_next_month = fetch_estimated_storage_cost_next_month(user_id)
+
         currency_map = {
             "uk": {"symbol": "£", "code": "GBP"},
             "us": {"symbol": "$", "code": "USD"},
         }
-
         currency = currency_map.get(country, {"symbol": "£", "code": "GBP"})
-            
-
 
         overall = build_ai_summary(
             prev_totals,
@@ -324,59 +349,10 @@ def live_mtd_vs_previous():
             curr_fee_totals=curr_fee_totals,
             estimated_storage_cost_next_month=estimated_storage_cost_next_month,
             currency=currency,
-
         )
 
         overall_summary = overall.get("summary_bullets", [])
         overall_actions = overall.get("action_bullets", [])
-        # ============================
-        # SEND EMAIL WITH AI SUMMARY
-        # ============================
-
-        user_email = payload.get("email") or request.args.get("email")
-        if not user_email:
-            user_email = get_user_email_by_id(user_id)
-
-        if user_email:
-            cache_key = (user_id, country)
-
-            # ✅ dev reload/double hit protection
-            if cache_key in _SENT_EMAIL_CACHE:
-                print("[INFO] Email already sent in this process, skipping.")
-            else:
-                # ✅ DB throttle: only once per 24h per user+country
-                if has_recent_bi_email(user_id, country, hours=24):
-                    print(f"[INFO] BI email already sent in last 24h for user_id={user_id}, country={country}; skipping.")
-                    _SENT_EMAIL_CACHE.add(cache_key)  # optional: prevents repeated DB hits in same process
-                else:
-                    email_token_payload = {
-                        "user_id": user_id,
-                        "email": user_email,
-                        "scope": "live_mtd_bi",
-                        "exp": datetime.utcnow() + timedelta(hours=24),
-                    }
-                    email_token = jwt.encode(email_token_payload, SECRET_KEY, algorithm="HS256")
-
-                    try:
-                        send_live_bi_email(
-                            to_email=user_email,
-                            overall_summary=overall_summary,
-                            overall_actions=overall_actions,
-                            sku_actions=None,
-                            country=country,
-                            prev_label=prev_label,
-                            curr_label=curr_label,
-                            deep_link_token=email_token,
-                        )
-
-                        mark_bi_email_sent(user_id, country)
-                        _SENT_EMAIL_CACHE.add(cache_key)
-
-                    except Exception as e:
-                        print(f"[WARN] Error sending live BI email: {e}")
-                        # ✅ DO NOT mark as sent on send failure
-        else:
-            print("[WARN] No user email found in token, query params, or DB; skipping BI email.")
 
         # ---------------------------
         # AI INSIGHTS (SKU LEVEL)
@@ -386,7 +362,13 @@ def live_mtd_vs_previous():
             skus_for_ai = top_80_skus + new_reviving + other_skus
             with ThreadPoolExecutor(max_workers=10) as executor:
                 for future in as_completed([
-                    executor.submit(generate_live_insight, item, country, prev_label, curr_label)
+                    executor.submit(
+                        generate_live_insight,
+                        item,
+                        country,
+                        prev_label,
+                        curr_label,
+                    )
                     for item in skus_for_ai
                 ]):
                     key, res = future.result()
@@ -411,19 +393,16 @@ def live_mtd_vs_previous():
         }
 
         # ---------------------------
-        # RESPONSE (FULL CONTRACT)
+        # FINAL RESPONSE PAYLOAD
         # ---------------------------
         response_payload = {
             "message": "Live MTD vs previous-month-same-period comparison",
-
             "periods": {
                 "previous": {"label": prev_label},
                 "previous_full": {"label": prev_label_full},
                 "current_mtd": {"label": curr_label},
             },
-
             "aligned_totals": aligned_totals_payload,
-
             "categorized_growth": {
                 "top_80_skus": top_80_skus,
                 "top_80_total": top_80_total_row,
@@ -432,25 +411,62 @@ def live_mtd_vs_previous():
                 "other_skus": other_skus,
                 "other_total": other_total_row,
             },
-
             "daily_series": {
                 "previous": prev_daily_full,
                 "current_mtd": curr_daily,
             },
-
             "daily_series_aligned": {
                 "previous": prev_daily_aligned,
                 "current_mtd": curr_daily,
             },
-
             "ai_insights": insights,
             "overall_summary": overall_summary,
             "overall_actions": overall_actions,
         }
+
+        # ---------------------------
+        # SEND EMAIL (USING FINAL RESPONSE PAYLOAD)
+        # ---------------------------
+        user_email = payload.get("email") or request.args.get("email")
+        if not user_email:
+            user_email = get_user_email_by_id(user_id)
+
+        if user_email:
+            cache_key = (user_id, country)
+            if cache_key not in _SENT_EMAIL_CACHE:
+                if not has_recent_bi_email(user_id, country, hours=24):
+                    try:
+                        email_token_payload = {
+                            "user_id": user_id,
+                            "email": user_email,
+                            "scope": "live_mtd_bi",
+                            "exp": datetime.utcnow() + timedelta(hours=24),
+                        }
+                        email_token = jwt.encode(
+                            email_token_payload,
+                            SECRET_KEY,
+                            algorithm="HS256",
+                        )
+
+                        send_live_bi_email(
+                            to_email=user_email,
+                            overall_summary=response_payload["overall_summary"],
+                            overall_actions=response_payload["overall_actions"],
+                            sku_actions=None,
+                            country=country,
+                            prev_label=prev_label,
+                            curr_label=curr_label,
+                            deep_link_token=email_token,
+                        )
+
+                        mark_bi_email_sent(user_id, country)
+                        _SENT_EMAIL_CACHE.add(cache_key)
+
+                    except Exception as e:
+                        print("[WARN] Error sending live BI email:", e)
 
         return jsonify(round_numeric_values(response_payload, ndigits=2)), 200
 
     except Exception as e:
         print("Unexpected error in /live_mtd_bi:", e)
         return jsonify({"error": "Server error", "details": str(e)}), 500
-
