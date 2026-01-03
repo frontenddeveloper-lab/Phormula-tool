@@ -4,6 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import AmazonFinancialDashboard from "./AmazonFinancialDashboard";
 import Button from "@/components/ui/button/Button";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
+import { useGetUserDataQuery } from "@/lib/api/profileApi";
+import { buildCountryMarketplaceMap } from "@/lib/utils/countryMarketplace";
+
 
 
 const API_BASE =
@@ -45,6 +48,8 @@ async function api(path: string, options: RequestInit = {}) {
   return data;
 }
 
+
+
 const MARKETPLACE_BY_REGION: Record<string, string> = {
   "us-east-1": "ATVPDKIKX0DER",
   "eu-west-1": "A1F83G8C2ARO7P",
@@ -83,10 +88,22 @@ export default function AmazonConnectLegacy({ onClose, onConnected }: Props) {
   const pollingRef = useRef<number | null>(null);
   const loginStateRef = useRef<string | null>(null);
 
-  const marketplaceId = useMemo(
-    () => MARKETPLACE_BY_REGION[region] || MARKETPLACE_BY_REGION["us-east-1"],
-    [region]
+  const { data: user } = useGetUserDataQuery();
+
+const countryMarketplaceMap = useMemo(() => {
+  return buildCountryMarketplaceMap(
+    user?.countries,
+    user?.marketplaces
   );
+}, [user]);
+
+  const country =
+  REGION_LABELS[region]?.toLowerCase(); // "uk" | "us"
+
+const marketplaceId = useMemo(() => {
+  if (!country) return undefined;
+  return countryMarketplaceMap[country];
+}, [country, countryMarketplaceMap]);
 
   const stopPolling = () => {
     if (pollingRef.current) {

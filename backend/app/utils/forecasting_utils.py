@@ -276,10 +276,6 @@ def calculate_remaining_months_v2(
 
 # ============================== PIPELINE UTILS ==============================
 def debug_month_integrity(global_df, months_to_fetch):
-    print("\n[PF DEBUG] ===== Month Integrity =====")
-
-    # 1) Raw rows per month table (based on the table names you fetched)
-    print("[PF DEBUG] Expected months:", months_to_fetch)
 
     # Normalize type column (defensive)
     if 'type' in global_df.columns:
@@ -300,8 +296,6 @@ def debug_month_integrity(global_df, months_to_fetch):
                  .unstack(fill_value=0)
     )
 
-    print("\n[PF DEBUG] Rows by month x type (after naive to_datetime, coercing errors):")
-    print(by_type.sort_index())
 
     # 3) Which rows failed parsing?
     failed_parse = global_df[parsed_dt.isna()]
@@ -311,8 +305,6 @@ def debug_month_integrity(global_df, months_to_fetch):
                         .groupby('_m')['sku']
                         .size()
         )
-        print("\n[PF DEBUG] Rows with FAILED date parsing (rough bucketing by YYYY-MM):")
-        print(fp_by_month.sort_index())
     else:
         print("\n[PF DEBUG] No rows failed date parsing.")
 
@@ -328,8 +320,6 @@ def debug_month_integrity(global_df, months_to_fetch):
     ].copy()
 
     if demand_df.empty:
-        print("\n[PF DEBUG] ⚠️ No Order/Shipment rows survived cleaning + parsing.")
-        print("[PF DEBUG] ===============================\n")
         return
 
     demand_df['_m'] = cleaned_dt[demand_df.index].dt.to_period('M')
@@ -346,8 +336,7 @@ def debug_month_integrity(global_df, months_to_fetch):
                  .reindex(demand_range, fill_value=0)
     )
 
-    print("\n[PF DEBUG] Orders + Shipments AFTER regex-clean + parsing (per month):")
-    print(demand_count)
+    
 
     # 5) Which expected months have zero demand after parsing?
     exp_periods = []
@@ -372,7 +361,6 @@ def debug_month_integrity(global_df, months_to_fetch):
     else:
         print("\n[PF DEBUG] ✅ All expected months have some orders/shipments after parsing.")
 
-    print("[PF DEBUG] ===============================\n")
 
 
 
@@ -404,14 +392,11 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
         f"{month_name[dt.month]}{dt.year}"
         for dt in pd.date_range(start=start_date, end=end_date, freq="MS")
     ]
-    print(f"[PF] 12M window: {start_date.strftime('%Y-%m-%d')} → {end_date.strftime('%Y-%m-%d')}")
-    print(f"[PF] Monthly tables to try (12): {months_to_fetch}")
 
     # --- Introspect tables once ---
     meta = MetaData()
     meta.reflect(bind=engine)
     normalized_tables = {name.lower(): name for name in meta.tables.keys()}
-    print(f"[PF] Tables available: {list(meta.tables.keys())}")
 
     fetched_data = []
     missing_months = []
@@ -425,14 +410,12 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
             if tkey in normalized_tables:
                 t_actual = normalized_tables[tkey]
                 try:
-                    print(f"[PF] Fetching monthly: {t_actual}")
                     df_m = pd.read_sql(
                         Table(t_actual, meta, autoload_with=engine).select(),
                         conn
                     )
                     df_m['_source_month'] = month
                     fetched_data.append(df_m)
-                    print(f"[PF]  -> rows: {len(df_m)}")
                 except Exception as e:
                     print(f"[PF][WARN] Error fetching {t_actual}: {e}")
             else:
@@ -440,12 +423,10 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
                 missing_months.append(month)
 
     if not fetched_data:
-        print("[PF][ABORT] No data fetched from monthly sources.")
         return jsonify({"error": "No data available for the selected window."}), 400
 
     # --- Combine (raw) ---
     global_df = pd.concat(fetched_data, ignore_index=True)
-    print(f"[PF] Global concat rows: {len(global_df)}")
 
     # Month integrity debug
     debug_month_integrity(global_df, months_to_fetch)
@@ -455,7 +436,6 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
     if dedupe_keys:
         before = len(global_df)
         global_df = global_df.drop_duplicates(subset=dedupe_keys)
-        print(f"[PF] After dedupe: {before} → {len(global_df)}")
 
     # ✅ Orders + Shipments (THIS IS THE KEY CHANGE)
     valid_types = {'Order', 'Shipment'}
@@ -467,7 +447,6 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
         filtered_df = global_df.copy()
 
     if filtered_df.empty:
-        print("[PF][ABORT] No Order/Shipment rows found after filtering.")
         return jsonify({"error": "No demand data available for forecasting."}), 400
 
     if 'date_time' not in filtered_df.columns:
@@ -495,7 +474,6 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
         (new_df.index >= pd.Timestamp(start_date)) &
         (new_df.index <= pd.Timestamp(end_date))
     ]
-    print(f"[PF] Rows after clipping to 12M window: {len(new_df)}")
 
     if new_df.empty:
         return jsonify({"error": "No usable data inside the 12-month window."}), 400
@@ -518,8 +496,6 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
 
     streak = _contiguous_streak_ending_at(last_full_period, new_df.index)
     distinct_months = int(new_df.index.to_period('M').nunique())
-    print(f"[PF] Distinct months in new_df (demand): {distinct_months}")
-    print(f"[PF] Latest contiguous months streak ending {last_full_period}: {streak}")
 
     if streak < 5:
         msg = (
@@ -1117,9 +1093,6 @@ def fetch_and_merge_inventory_monthwise_sellable(
     - If forecast_marketplace_col is provided, also merge marketplace_id
     """
 
-    print("\n" + "=" * 70)
-    print("INVENTORY MERGE (monthwise_inventory -> SELLABLE only)")
-    print("=" * 70)
 
     # --- validate inputs ---
     if forecast_sku_col not in forecast_totals.columns:
@@ -1186,9 +1159,8 @@ def fetch_and_merge_inventory_monthwise_sellable(
 
     # --- fetch inventory ---
     inv_df = pd.read_sql(text(sql), con=engine1, params=params)
-    print(f"[INV] Rows fetched: {len(inv_df)}")
+    
     if not inv_df.empty:
-        print("[INV] Sample:")
         print(inv_df.head(10).to_string(index=False))
 
     # --- prepare inventory frame ---
@@ -1210,10 +1182,7 @@ def fetch_and_merge_inventory_monthwise_sellable(
     out["sku_norm"] = out[forecast_sku_col].map(_norm_sku)
 
     # --- diagnostics ---
-    print(f"[MERGE] Forecast unique sku_norm: {out['sku_norm'].nunique()}")
-    print(f"[MERGE] Inventory unique sku_norm: {inventory_totals['sku_norm'].nunique()}")
     common = set(out["sku_norm"]) & set(inventory_totals["sku_norm"])
-    print(f"[MERGE] Common normalized SKUs: {len(common)}")
     if common:
         print(f"[MERGE] Example keys: {list(sorted(common))[:10]}")
 
@@ -1247,12 +1216,9 @@ def fetch_and_merge_inventory_monthwise_sellable(
           .astype(int)
     )
 
-    print(f"[MERGE] ✓ After merge: {len(out)} rows")
-    print(f"[MERGE] ✓ Non-zero 'Inventory at Month End': {(out['Inventory at Month End'] > 0).sum()}")
     preview_cols = [forecast_sku_col, "Inventory at Month End"]
     if use_marketplace:
         preview_cols.insert(1, forecast_marketplace_col)
-    print(out[preview_cols].head(15).to_string(index=False))
 
     return out
 
@@ -1291,7 +1257,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         try:
             insp = inspect(engine)
             schemas = insp.get_schema_names()
-            print(f"\n=== TABLE LIST for {label} ===")
             for sch in schemas:
                 try:
                     tables = insp.get_table_names(schema=sch)
@@ -1343,12 +1308,10 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     # 🔴 Anchor ARIMA on actual last training month from data (not mv/year)
     last_training_ts = new_df.index.max()
     global_last_training_month = last_training_ts.to_period('M')
-    print(f"[ARIMA] global_last_training_month from data: {global_last_training_month}")
 
     # ✅ last month sold logic = current month - 1 (last full calendar month)
     today = pd.Timestamp.today().normalize()
     sold_anchor_period = today.to_period('M') - 1
-    print(f"[SOLD] sold_anchor_period (today-1): {sold_anchor_period}")
 
     unique_skus = new_df['sku'].unique()
     all_forecasts = pd.DataFrame()
@@ -1358,7 +1321,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         raise ValueError(f"Country profile not found for user {user_id} and country {country}")
     transit_time = int(profile.transit_time)
     stock_unit = int(profile.stock_unit)
-    print(f"Transit time: {transit_time}, Stock unit: {stock_unit}")
 
     # ----------------- ARIMA / HYBRID -----------------
     # Prepare tasks
@@ -1369,7 +1331,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     # 🚀 Use MAX CPU POWER (cpu_count() - 1)
     # ---------------------------------------------------------
     max_workers = max(1, cpu_count() - 1)
-    print(f"[CPU] Using {max_workers} parallel workers for ARIMA & HYBRID")
 
     # ---------------------------------------------------------
     # 🔵 ARIMA PARALLEL EXECUTION
@@ -1397,7 +1358,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     # ---------------------------------------------------------
     months_in_df = new_df.index.to_period('M').nunique()
     hybrid_globally_enabled = hybrid_allowed
-    print(f"[HYBRID Gate] distinct_months={months_in_df}, allowed_by_streak={hybrid_allowed} -> enabled={hybrid_globally_enabled}")
 
     hybrid_results = {}
 
@@ -1541,7 +1501,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
 
     # month_end_date like your screenshot: 2025-10-31
     snapshot_date = (month_end - relativedelta(days=1)).strftime("%Y-%m-%d")
-    print(f"\n[INV] monthwise_inventory snapshot_date = {snapshot_date}")
 
     inventory_forecast = fetch_and_merge_inventory_monthwise_sellable(
         forecast_totals,
@@ -1553,9 +1512,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     # ============================================================
     # SALES SUMMARY (FULL MONTH FROM DB — SAME LOGIC AS SEP & OCT)
     # ============================================================
-    print("\n" + "=" * 60)
-    print("SALES SUMMARY (full-month from DB)")
-    print("=" * 60)
 
     product_names = pd.DataFrame(columns=['sku', 'Product Name'])
     normalized_tables = {t.lower(): t for t in meta.tables.keys()}
@@ -1589,7 +1545,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
                 sales_table = Table(chosen_table, meta, autoload_with=engine)
                 with engine.connect() as conn:
                     sales_data = pd.read_sql(sales_table.select(), conn)
-                print(f"[SALES] Loaded table: {chosen_table}")
                 break
             except Exception as e:
                 print(f"[SALES][WARN] Could not read {chosen_table}: {e}")
@@ -1602,7 +1557,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
             .reset_index()
             .rename(columns={'product_name': 'Product Name'})
         )
-        print(f"[SALES] Product names sourced from table: {chosen_table}")
     else:
         print("[SALES] Product names not found in DB tables; leaving blank.")
 
@@ -1613,24 +1567,18 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
             .reset_index()
             .rename(columns={"quantity": "Last Month Sales(Units)"})
         )
-        print(f"[SALES] Full-month sales calculated from DB table: {chosen_table}")
     else:
-        print("[SALES] No valid sales_data — setting Last Month Sales to 0.")
+        
         sales_summary = pd.DataFrame(columns=["sku", "Last Month Sales(Units)"])
 
-    print("=" * 60 + "\n")
+    
 
     # ============================================================
     # MERGE INVENTORY + SALES + PRODUCT NAMES
     # ============================================================
-    print("\n" + "=" * 60)
-    print("MERGING FORECAST WITH INVENTORY (monthwise_inventory SELLABLE)")
-    print("=" * 60)
 
     inventory_forecast = inventory_forecast.merge(sales_summary, on='sku', how='left').fillna(0)
     inventory_forecast = inventory_forecast.merge(product_names, on='sku', how='left').fillna("")
-
-    print("=" * 60 + "\n")
 
     # ----------------- Classification -----------------
     sku_classification = classify_skus_from_inventory(
@@ -1664,8 +1612,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     sold_m3 = month_label(add_months(sold_anchor_dt, -2))
     sold_labels = [sold_m3, sold_m2, sold_m1]
 
-    print(f"[SOLD] First forecast month: {month_label(first_forecast_dt)}")
-    print(f"[SOLD] Sold columns: {sold_m3}, {sold_m2}, {sold_m1}")
 
     monthly_actuals['Label'] = pd.to_datetime(monthly_actuals['Month']).dt.strftime("%b'%y")
     last3_sold_pivot = (
@@ -1817,7 +1763,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     ] + monthwise_forecast_cols + future_month_columns
 
     final_columns = _unique_cols([c for c in final_columns if c in inventory_forecast.columns])
-    print("Selected columns passed to frontend:", final_columns)
 
     inventory_forecast = inventory_forecast[final_columns]
 
@@ -1827,7 +1772,6 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         UPLOAD_FOLDER, f'inventory_forecast_{user_id}_{country}_{current_month}+2.xlsx'
     )
     inventory_forecast.to_excel(inventory_output_path, index=False)
-    print(f"\n[SAVE] ✓ File saved: {inventory_output_path}")
 
     inventory_forecast_base64 = encode_file_to_base64(inventory_output_path)
     return jsonify({'message': 'Inventory processed successfully', 'file_path': inventory_output_path}), 200
