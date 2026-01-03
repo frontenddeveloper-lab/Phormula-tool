@@ -1,16 +1,12 @@
 # routes/conversion_routes.py
 from __future__ import annotations
-
-import os
 import re
 import logging
 import datetime as dt
 from typing import Iterator, Tuple
-
 import requests
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func
-
 from app import db
 from app.models.user_models import CurrencyConversion
 

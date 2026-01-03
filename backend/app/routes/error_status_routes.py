@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 load_dotenv()
-db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
+db_url = os.getenv('DATABASE_URL')
 
 error_status_bp = Blueprint('error_status_bp', __name__)
 
@@ -188,7 +188,6 @@ def error_status_email_notification():
         return response
         
     except Exception as e:
-        print(f"Error in error_status_email_notification route: {e}")
         response = jsonify({
             'status': 'error',
             'message': 'Internal server error'

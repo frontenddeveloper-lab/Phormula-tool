@@ -91,7 +91,7 @@ def create_app():
     from app.routes.inventory_routes import inventory_bp
     from app.routes.conversion_rate_routes import conversion_bp
     from app.routes.amazon_sales_api_routes import amazon_sales_api_bp
-    from app.routes.amazon_live_api_routes import amazon_live_api_bp
+    # from app.routes.amazon_live_api_routes import amazon_live_api_bp
     from app.routes.live_data_bi_routes import live_data_bi_bp
     
      # Register the new fee_preview_bp
@@ -120,7 +120,7 @@ def create_app():
     app.register_blueprint(inventory_bp)
     app.register_blueprint(conversion_bp)
     app.register_blueprint(amazon_sales_api_bp)
-    app.register_blueprint(amazon_live_api_bp)
+    # app.register_blueprint(amazon_live_api_bp)
     app.register_blueprint(live_data_bi_bp)
     
     

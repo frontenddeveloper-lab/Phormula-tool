@@ -99,7 +99,6 @@ def get_referral_fees(user_id, country, sku_list):
 
 
 def apply_modifications(df, country):
-    print("Applying modifications...")
     try:
         # NaN ko 0 se fill kar rahe ho
         df = df.fillna(0)
@@ -250,7 +249,6 @@ def apply_modifications(df, country):
 
             # ✅ Match category table for referral_fee
             product_group = str(row.get("product_group", "")).strip().lower()
-            # print(f"p17 - Product Group: {product_group}, Total Value: {total_value}")
 
             # Match category
             matched_row = category_df[
@@ -258,7 +256,6 @@ def apply_modifications(df, country):
                 (total_value >= category_df["price_from"]) &
                 (total_value <= category_df["price_to"])
             ]
-            # print("p18")
 
             if 'selling_fees' in df.columns:
                 df['selling_fees'] = df['selling_fees'].abs()
@@ -266,10 +263,8 @@ def apply_modifications(df, country):
 
             if not matched_row.empty:
                 referral_fee = float(matched_row.iloc[0]["referral_fee_percent_est"])
-                # print(f"Matched referral_fee: {referral_fee}%")
             else:
                 referral_fee = 0.0
-                # print(f"No match found for product_group: {product_group}")
 
             df.at[index, "referral_fee"] = referral_fee
          
@@ -292,8 +287,6 @@ def apply_modifications(df, country):
 
             # Calculate difference
             difference = round(selling_fees - answer, 2)
-            # print("p20")
-
             # Error status
             if difference == 0:
                 df.at[index, 'errorstatus'] = 'OK'
@@ -326,19 +319,15 @@ def apply_modifications(df, country):
 
             # No referral fee status
             if referral_fee == 0:
-                # df.at[index, 'errorstatus'] = 'NoReferralFee'
-                # df.at[index, 'fbaerrorstatus'] = 'NoReferralFee'
                 if desc == 'tax' or txn_type == 'other-transaction':
                     pass  # kuch nahi karna
                 else:
                     df.at[index, 'errorstatus'] = 'NoReferralFee'
                     df.at[index, 'fbaerrorstatus'] = 'NoReferralFee'
 
-        # print("Processing complete!")
         return df
 
     except Exception as e:
-        print("Error in apply_modifications:", e)
         import traceback
         traceback.print_exc()
         return df
@@ -348,7 +337,6 @@ def apply_modifications(df, country):
 
 
 def apply_modifications_fatch(df, country):
-    print("Applying modifications...")
     try:
         # NaN ko 0 se fill kar rahe ho
         df = df.fillna(0)
@@ -486,22 +474,17 @@ def apply_modifications_fatch(df, country):
 
             # ✅ Match category table for referral_fee
             product_group = str(row.get("product_group", "")).strip().lower()
-            # print(f"p17 - Product Group: {product_group}, Total Value: {total_value}")
-
             # Match category
             matched_row = category_df[
                 (category_df["category"] == product_group) &
                 (total_value >= category_df["price_from"]) &
                 (total_value <= category_df["price_to"])
             ]
-            # print("p18")
 
             if not matched_row.empty:
                 referral_fee = float(matched_row.iloc[0]["referral_fee_percent_est"])
-                # print(f"Matched referral_fee: {referral_fee}%")
             else:
                 referral_fee = 0.0
-                # print(f"No match found for product_group: {product_group}")
 
             df.at[index, "referral_fee"] = referral_fee
          
@@ -524,7 +507,6 @@ def apply_modifications_fatch(df, country):
 
             # Calculate difference
             difference = round(selling_fees - answer, 2)
-            # print("p20")
 
             # Error status
             if difference == 0:
@@ -552,19 +534,14 @@ def apply_modifications_fatch(df, country):
 
             # No referral fee status
             if referral_fee == 0:
-                # df.at[index, 'errorstatus'] = 'NoReferralFee'
-                # df.at[index, 'fbaerrorstatus'] = 'NoReferralFee'
                 if desc == 'tax' or txn_type == 'other-transaction':
                     pass  # kuch nahi karna
                 else:
                     df.at[index, 'errorstatus'] = 'NoReferralFee'
                     df.at[index, 'fbaerrorstatus'] = 'NoReferralFee'
-
-        # print("Processing complete!")
         return df
 
     except Exception as e:
-        print("Error in apply_modifications:", e)
         import traceback
         traceback.print_exc()
         return df

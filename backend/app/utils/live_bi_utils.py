@@ -21,7 +21,7 @@ from app.utils.formulas_utils import (
 
 
 load_dotenv()
-SECRET_KEY = Config.SECRET_KEY
+
 
 db_url = os.getenv("DATABASE_URL")
 db_url2 = os.getenv("DATABASE_AMAZON_URL")
@@ -32,7 +32,7 @@ engine_live = create_engine(db_url2)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 oa_client = OpenAI(api_key=OPENAI_API_KEY)
 # simple process-level debounce (survives hot reload)
-_SENT_EMAIL_CACHE = set()
+
 
 
 # -----------------------------------------------------------------------------

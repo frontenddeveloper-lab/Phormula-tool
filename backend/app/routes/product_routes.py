@@ -15,10 +15,9 @@ from werkzeug.utils import secure_filename
 from sqlalchemy import MetaData, Table, inspect, select
 import logging
 from app.routes.amazon_sales_api_routes import _normalize_sku_row
-
 from sqlalchemy import text
 import pandas as pd
-from sqlalchemy import text
+
 
 
 # Setup logger
@@ -26,16 +25,10 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
-db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
-db_url1= os.getenv('DATABASE_ADMIN_URL', 'postgresql://postgres:password@localhost:5432/admin_db')
+db_url = os.getenv('DATABASE_URL')
+db_url1= os.getenv('DATABASE_ADMIN_URL')
 admin_engine = create_engine(db_url1)
 
-product_bp = Blueprint('product_bp', __name__)
-
-from flask import Blueprint, request, jsonify
-from sqlalchemy import func
-# from models import CurrencyConversion
-from app import db
 
 product_bp = Blueprint('product_bp', __name__)
 
@@ -75,11 +68,6 @@ def get_conversion_rate():
 
         conversion_rate = float(row.conversion_rate)
 
-        # Step 5: Print in backend
-        print("\n===== CONVERSION RATE (admin_db) =====")
-        print(f"USD → {home_currency.upper()} @ {month.capitalize()} {year} = {conversion_rate}")
-        print("======================================\n")
-
         # Step 6: Send to frontend
         return jsonify({
             "from_currency": "USD",
@@ -90,7 +78,6 @@ def get_conversion_rate():
         }), 200
 
     except Exception as e:
-        print("ERROR in /getConversionRate:", e)
         return jsonify({"error": "Internal server error"}), 500
 
 
@@ -166,10 +153,8 @@ def YearlySKU():
         return jsonify(data), 200
 
     except SQLAlchemyError as e:
-        print(f"Database error: {str(e)}")
         return jsonify({'error': 'Error accessing the database'}), 500
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
         return jsonify({'error': 'An error occurred while fetching table data'}), 500
  
     
@@ -204,7 +189,6 @@ def quarterlyskutable():
     quarter = request.args.get('quarter')
     country_param = request.args.get('country', '')
     currency_param = (request.args.get('homeCurrency') or '').lower()
-    print("currency-------------", currency_param)
 
     country = resolve_country(country_param, currency_param)
     year = request.args.get('year')
@@ -527,7 +511,6 @@ def update_prices():
 
         for product_name, new_price in edited_prices.items():
             if product_name not in existing_products:
-                print(f"❌ Product not found in DB: {product_name}")
                 failed_products.append(product_name)
                 continue
 
@@ -539,14 +522,11 @@ def update_prices():
                 result = user_session.execute(update_stmt)
 
                 if result.rowcount == 0:
-                    print(f"⚠️ No rows updated for product: {product_name}")
                     failed_products.append(product_name)
                 else:
-                    print(f"✅ Updated product: {product_name} → New Price: {new_price}")
                     updated_products.append(product_name)
 
             except Exception as e:
-                print(f"❌ Error updating product {product_name}: {str(e)}")
                 failed_products.append(product_name)
 
         user_session.commit()
@@ -612,11 +592,8 @@ def skuprice():
         return jsonify(result_dicts), 200
 
     except SQLAlchemyError as e:
-        print(f"SQLAlchemy Error: {str(e)}")
         return jsonify({'error': 'Database error', 'message': str(e)}), 500
     except Exception as e:
-        print(f"Unexpected Error: {str(e)}")
-        traceback.print_exc()
         return jsonify({'error': 'An error occurred while fetching SKU data', 'message': str(e)}), 500
 
 
@@ -649,279 +626,8 @@ def get_error_file(country, month, year):
         return send_file(error_file_path, as_attachment=True)
 
     except Exception as e:
-        print(f"Error: {str(e)}")
         return jsonify({'error': 'An error occurred while sending the error file'}), 500
    
-
-# @product_bp.route('/get_table_data/<string:file_name>', methods=['GET'])
-# def get_table_data(file_name):
-#     # --- Auth ---
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token missing'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except:
-#         return jsonify({'error': 'Invalid or expired token'}), 401
-
-#     country = request.args.get('country')
-#     month = request.args.get('month')
-#     year = request.args.get('year')
-
-#     print("\n============================")
-#     print("🔍 DEBUG: Request Received")
-#     print("file_name:", file_name)
-#     print("country:", country)
-#     print("month:", month)
-#     print("year:", year)
-#     print("============================\n")
-
-#     try:
-#         engine = create_engine(db_url)
-#         conn = engine.connect()
-
-#         inspector = inspect(engine)
-#         tables = inspector.get_table_names()
-
-#         print("🔍 DEBUG: Existing tables in DB:", tables)
-
-#         if file_name not in tables:
-#             print("❌ Table does NOT exist in DB:", file_name)
-#             return jsonify({'error': f'Table {file_name} not found'}), 404
-
-#         print("🔍 DEBUG: Reading table:", file_name)
-#         raw_df = pd.read_sql(text(f'SELECT * FROM "{file_name}"'), conn)
-#         raw_table_data = raw_df.to_dict(orient="records")
-
-
-#         print("🔍 DEBUG: Raw rows fetched:", len(raw_df))
-
-#         # df = raw_df.copy()
-#         # df["sku"] = df["sku"] = df["sku"].astype(str).str.strip()
-
-#         # df = df[df["sku"].ne("") & df["sku"].ne("0")]
-
-#         df = raw_df.copy()
-#         df["other"] = pd.to_numeric(df["other"], errors="coerce").fillna(0)
-#         other_total = float(df["other"].sum())
-
-#         # ✅ Keep real NaN as <NA>, don't convert to "nan" string
-#         df["sku"] = df["sku"].astype("string").str.strip()
-
-#         # ✅ Remove invalid SKUs: NaN, blank, "0", "0.0", "nan", "none"
-#         invalid_skus = {"", "0", "0.0", "nan", "none", "<na>"}
-#         df = df[
-#             df["sku"].notna() &
-#             (~df["sku"].str.lower().isin(invalid_skus))
-#         ]
-
-
-
-#         print("🔍 DEBUG: After SKU cleanup:", len(df))
-
-#         # ✅ RAW ROW-LEVEL split (after SKU cleanup)
-#         df["errorstatus"] = df["errorstatus"].astype(str).str.strip().str.lower()
-
-#         raw_ok_df    = df[df["errorstatus"] == "ok"]
-#         raw_under_df = df[df["errorstatus"] == "undercharged"]
-#         raw_over_df  = df[df["errorstatus"] == "overcharged"]
-
-#         # jo ok/under/over me nahi aata, use no ref fee bucket me daal do
-#         raw_ref_df   = df[~df["errorstatus"].isin(["ok", "undercharged", "overcharged"])]
-
-
-#         numeric_cols = [
-#             "product_sales", "promotional_rebates", "other",
-#             "selling_fees", "answer", "difference", "quantity", "total_value", "fba_fees"
-#         ]
-
-#         print("🔍 DEBUG: Converting numeric columns:", numeric_cols)
-
-#         for col in numeric_cols:
-#             if col in df.columns:
-#                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-#             else:
-#                 print(f"⚠ WARNING: Column missing in DB → {col}")
-
-#         df["net_sales_total_value"] = (
-#             df["product_sales"] +
-#             df["promotional_rebates"] +
-#             df["other"]
-#         )
-
-#         print("🔍 DEBUG: Net Sales calculation done.")
-
-#         def status_row(row):
-#             if str(row["errorstatus"]).lower() == "ok":
-#                 return "Accurate"
-#             if str(row["errorstatus"]).lower() == "overcharged":
-#                 return "Overcharged"
-#             if str(row["errorstatus"]).lower() == "undercharged":
-#                 return "Undercharged"
-#             return "noreferallfee"
-
-#         df["status"] = df.apply(status_row, axis=1)
-
-#         print("🔍 DEBUG: Status column generated.")
-
-#         req_cols = [
-#             "sku", "product_name", "product_sales",
-#             "net_sales_total_value", "selling_fees",  "fba_fees",
-#             "answer", "errorstatus", "difference", "status","quantity", "total_value"
-#         ]
-
-#         final_df = df[req_cols]
-
-#         # --- SKU wise aggregation ---
-#         agg_cols = [
-#             "product_sales",
-#             "net_sales_total_value",
-#             "selling_fees",
-#             "fba_fees",
-#             "answer",
-#             "difference",
-#             "quantity",
-#             "total_value"
-#         ]
-
-#         final_df = final_df.groupby(
-#             ["sku", "product_name", "status"], as_index=False
-#         )[agg_cols].sum()
-
-
-#         accurate_df = final_df[final_df["status"] == "Accurate"]
-#         under_df    = final_df[final_df["status"] == "Undercharged"]
-#         over_df     = final_df[final_df["status"] == "Overcharged"]
-#         ref_df      = final_df[final_df["status"] == "noreferallfee"]
-
-#         def create_total_row(df, label):
-#             return pd.DataFrame([{
-#                 "sku": f"Charge - {label}",
-#                 "product_name": "",
-#                 "product_sales": df["product_sales"].sum(),
-#                 "net_sales_total_value": df["net_sales_total_value"].sum(),
-#                 "selling_fees": df["selling_fees"].sum(),
-#                 "fba_fees": df["fba_fees"].sum(),   
-#                 "answer": df["answer"].sum(),
-#                 "quantity": df["quantity"].sum(),
-#                 "total_value": df["total_value"].sum(),
-#                 "errorstatus": "",
-#                 "difference": df["difference"].sum(),
-#                 "status": label
-#             }])
-
-#         acc_total  = create_total_row(accurate_df, "Accurate")
-#         under_total = create_total_row(under_df, "Undercharged")
-#         over_total  = create_total_row(over_df, "Overcharged")
-#         ref_total  = create_total_row(ref_df, "noreferallfee")
-
-#         grand_total = pd.DataFrame([{
-#             "sku": "Grand Total",
-#             "product_name": "",
-#             "product_sales": final_df["product_sales"].sum(),
-#             "net_sales_total_value": final_df["net_sales_total_value"].sum(),
-#             "selling_fees": final_df["selling_fees"].sum(),
-#             "fba_fees": final_df["fba_fees"].sum(), 
-#             "answer": final_df["answer"].sum(),
-#             "quantity": final_df["quantity"].sum(),
-#             "total_value": final_df["total_value"].sum(),
-#             "errorstatus": "",
-#             "difference": final_df["difference"].sum(),
-#             "status": "Total"
-#         }])
-
-#         final_display_df = pd.concat([
-#             acc_total, accurate_df,
-#             under_total, under_df,
-#             over_total, over_df,
-#             ref_total, ref_df,
-#             grand_total
-#         ], ignore_index=True)
-
-#         # now save this one
-#         final_df = final_display_df
-
-#         print("🔍 FINAL DF ROWS:", len(final_df))
-#         print("🔍 FINAL DF COLUMNS:", final_df.columns.tolist())
-
-#         # -------------------------------------------------------
-#         # SAVE TO POSTGRES — FIXED!
-#         # -------------------------------------------------------
-#         if country and month and year:
-#             skutable = f"skuwise_{user_id}_{country}_{month}{year}".lower()
-
-#             print("\n🔍 DEBUG: Saving table to DB:", skutable)
-
-#             final_df.to_sql(
-#                 skutable,
-#                 engine,   # ✅ NOT conn
-#                 if_exists="replace",
-#                 index=False
-#             )
-
-#             print("✅ SUCCESS: Table saved to PostgreSQL:", skutable)
-#         else:
-#             skutable = None
-#             print("⚠ DEBUG: country/month/year missing → NOT saving table.")
-
-        
-
-#         import numpy as np
-#         final_df = final_df.replace({np.nan: 0})
-#         accurate_df = accurate_df.replace({np.nan: 0})
-#         under_df    = under_df.replace({np.nan: 0})
-#         over_df     = over_df.replace({np.nan: 0})
-#         ref_df      = ref_df.replace({np.nan: 0})
-
-
-#         platform_fee_total = 0
-
-#         if country and month and year:
-#             monthly_table = f"skuwisemonthly_{user_id}_{country}_{month}{year}".lower()
-
-#             try:
-#                 # check table exists
-#                 if monthly_table in inspector.get_table_names():
-#                     # sum platform_fee
-#                     res = conn.execute(text(f'''
-#                         SELECT COALESCE(SUM(platform_fee), 0) AS total_platform_fee
-#                         FROM "{monthly_table}"
-#                     ''')).fetchone()
-
-#                     platform_fee_total = float(res[0] or 0)
-#                 else:
-#                     print("⚠ DEBUG: Monthly table not found:", monthly_table)
-
-#             except Exception as e:
-#                 print("⚠ DEBUG: Error reading platform_fee total:", str(e))
-#                 platform_fee_total = 0
-        
-#         conn.close()
-
-
-#         return jsonify({
-#             "success": True,
-#             "message": "SKU wise table generated successfully.",
-#             "table": final_df.to_dict(orient="records"),
-#             "accurate_data": raw_ok_df.to_dict(orient="records"),
-#             "undercharged_data": raw_under_df.to_dict(orient="records"),
-#             "overcharged_data": raw_over_df.to_dict(orient="records"),
-#             "no_ref_fee_data": raw_ref_df.to_dict(orient="records"),
-#             "created_table_name": skutable,
-#             "raw_table": raw_table_data,
-#             "table_name": file_name,   
-
-#             "platform_fee_total": platform_fee_total,
-#             "other_total": other_total 
-#         })
-
-#     except Exception as e:
-#         print("🔥 ERROR:", str(e))
-#         return jsonify({"error": str(e)}), 500
-
 
 @product_bp.route('/get_consolidated_table_name/<string:country_name>', methods=['GET'])
 def get_consolidated_table_name(country_name):
@@ -966,11 +672,8 @@ def get_consolidated_table_name(country_name):
         return jsonify(result_dicts), 200
 
     except SQLAlchemyError as e:
-        print(f"SQLAlchemy Error: {str(e)}")
         return jsonify({'error': 'Database error', 'message': str(e)}), 500
     except Exception as e:
-        print(f"Unexpected Error: {str(e)}")
-        traceback.print_exc()
         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
 
 def resolve_country(country, currency):
@@ -1093,17 +796,6 @@ def get_table_data(file_name):
         range_ = "monthly"
 
     
-
-    print("\n============================")
-    print("🔍 DEBUG: Request Received")
-    print("file_name:", file_name)
-    print("country:", country)
-    print("month:", month)
-    print("year:", year)
-    print("range:", range_)
-    print("quarter:", quarter)
-    print("============================\n")
-
     def _month_str_to_int(m):
         if m is None:
             return None
@@ -1139,8 +831,6 @@ def get_table_data(file_name):
         inspector = inspect(engine)
         tables = inspector.get_table_names()
 
-        print("🔍 DEBUG: Existing tables in DB:", tables)
-
         # ---------------------------------------------
         # ✅ DATA SOURCE SELECTION (monthly vs quarter/year)
         # ---------------------------------------------
@@ -1149,7 +839,6 @@ def get_table_data(file_name):
         if range_ == "monthly":
             # monthly => use passed file_name table only
             if file_name not in tables:
-                print("❌ Monthly table does NOT exist in DB:", file_name)
                 return jsonify({'error': f'Table {file_name} not found'}), 404
             source_table = file_name
 
@@ -1157,17 +846,14 @@ def get_table_data(file_name):
             # quarter/year => use merged table
             merged_table = f"user_{user_id}_{country}_merge_data_of_all_months".lower()
             if merged_table not in tables:
-                print("❌ Merged table does NOT exist in DB:", merged_table)
                 return jsonify({'error': f'Merged table {merged_table} not found'}), 404
             source_table = merged_table
 
         else:
             return jsonify({"error": "Invalid range. Use monthly/quarterly/yearly"}), 400
 
-        print("🔍 DEBUG: Reading source table:", source_table)
         raw_df = pd.read_sql(text(f'SELECT * FROM "{source_table}"'), conn)
         raw_table_data = raw_df.to_dict(orient="records")
-        print("🔍 DEBUG: Raw rows fetched:", len(raw_df))
 
         # ---------------------------------------------
         # ✅ FILTER MONTHS/YEAR IF quarterly/yearly
@@ -1225,13 +911,7 @@ def get_table_data(file_name):
                 # keep it if you want; here we drop
                 df = df.drop(columns=["month_num"], errors="ignore")
 
-            print("🔍 DEBUG: After quarter/year filter:", len(df))
 
-        # ---------------------------------------------
-        # EXISTING LOGIC (same formulas) BELOW
-        # ---------------------------------------------
-        # df["other"] = pd.to_numeric(df.get("other", 0), errors="coerce").fillna(0)
-        # other_total = float(df["other"].sum())
 
         df["other"] = pd.to_numeric(df.get("other", 0), errors="coerce").fillna(0)
         other_total = float(df["other"].sum())
@@ -1254,7 +934,6 @@ def get_table_data(file_name):
         invalid_skus = {"", "0", "0.0", "nan", "none", "<na>"}
         df = df[df["sku"].notna() & (~df["sku"].str.lower().isin(invalid_skus))]
 
-        print("🔍 DEBUG: After SKU cleanup:", len(df))
 
         # ✅ RAW ROW-LEVEL split (after SKU cleanup)
         df["errorstatus"] = df["errorstatus"].astype(str).str.strip().str.lower()
@@ -1270,7 +949,6 @@ def get_table_data(file_name):
             "platform_fee"
         ]
 
-        print("🔍 DEBUG: Converting numeric columns:", numeric_cols)
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
@@ -1376,9 +1054,7 @@ def get_table_data(file_name):
                 skutable = f"skuwiseyear_{user_id}_{country}_{year}".lower()
 
             if skutable:
-                print("\n🔍 DEBUG: Saving table to DB:", skutable)
                 final_df.to_sql(skutable, engine, if_exists="replace", index=False)
-                print("✅ SUCCESS: Table saved to PostgreSQL:", skutable)
 
         # ---------------------------------------------
         # ✅ PLATFORM FEE TOTAL (monthly/quarter/year)
@@ -1428,7 +1104,6 @@ def get_table_data(file_name):
                     platform_fee_total = float(res[0] or 0)
 
         except Exception as e:
-            print("⚠ DEBUG: Error reading platform_fee total:", str(e))
             platform_fee_total = 0.0
 
 
@@ -1461,5 +1136,4 @@ def get_table_data(file_name):
         })
 
     except Exception as e:
-        print("🔥 ERROR:", str(e))
         return jsonify({"error": str(e)}), 500

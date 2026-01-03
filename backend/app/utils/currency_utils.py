@@ -60,8 +60,6 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
                 print(f"⚠️ No data found for {month}/{year} in {source_table}")
                 continue
 
-            # print(df.columns)
-
             # ================= FIX PRODUCT NAME =================
             df["product_name"] = df["product_name"].replace([None, np.nan], "")
             df["product_name"] = df["product_name"].astype(str).str.strip()
@@ -110,38 +108,31 @@ def process_global_monthly_skuwise_data(user_id, country, year, month):
                 lambda row: (row["cm2_profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "cm2_margins"]])
             sku_grouped["acos"] = sku_grouped.apply(
                 lambda row: (row["advertising_total"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "acos"]])
             sku_grouped["rembursment_vs_cm2_margins"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["cm2_profit"]) * 100 if row["cm2_profit"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "rembursment_vs_cm2_margins"]])
             sku_grouped["reimbursement_vs_sales"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "reimbursement_vs_sales"]])
             sku_grouped["profit_percentage"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "profit_percentage"]])
 
             sku_grouped["asp"] = sku_grouped.apply(
                 lambda row: (row["net_sales"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "asp"]])
             sku_grouped["unit_wise_profitability"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "unit_wise_profitability"]])
 
             temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
 
@@ -354,7 +345,6 @@ def process_global_quarterly_skuwise_data(user_id, country, month, year, q, db_u
                 months_for_quarter = months     # e.g. ["april","may","june"]
                 break
         else:
-            print("Invalid month provided.")
             return
 
         # 4 source tables + unka "country" name jo quarterly table me use hoga
@@ -608,8 +598,6 @@ def process_global_yearly_skuwise_data(user_id, country, year):
                 print(f"⚠️ No data found for /{year} in {source_table}")
                 continue
 
-            # print(df.columns)
-
             df["product_name"] = df["product_name"].replace([None, np.nan], "")
             df["product_name"] = df["product_name"].astype(str).str.strip()
 
@@ -665,40 +653,32 @@ def process_global_yearly_skuwise_data(user_id, country, year):
                 lambda row: (row["cm2_profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "cm2_margins"]])
             sku_grouped["acos"] = sku_grouped.apply(
                 lambda row: (row["advertising_total"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "acos"]])
             sku_grouped["rembursment_vs_cm2_margins"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["cm2_profit"]) * 100 if row["cm2_profit"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "rembursment_vs_cm2_margins"]])
             sku_grouped["reimbursement_vs_sales"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "reimbursement_vs_sales"]])
 
             sku_grouped["profit_percentage"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "profit_percentage"]])
 
             sku_grouped["asp"] = sku_grouped.apply(
                 lambda row: (row["net_sales"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "asp"]])
             sku_grouped["unit_wise_profitability"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "unit_wise_profitability"]])
-
             temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
 
             total_sales = abs(temp["net_sales"].sum())

@@ -140,7 +140,6 @@ def fba_email_notification():
         return response
         
     except Exception as e:
-        print(f"Error in fba_email_notification route: {e}")
         response = jsonify({
             'status': 'error',
             'message': 'Internal server error'

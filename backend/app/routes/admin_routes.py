@@ -153,10 +153,6 @@ def superadmin_setup_otp():
             'email': superadmin_email
         }
         
-        # print(f"Generated OTP for setup: {otp}")  # Debug log
-        # print(f"OTP stored with key: {otp_key}")  # Debug log
-        # print(f"Current otp_store: {otp_store}")  # Debug log
-        
         # Send OTP email
         if send_otp_email_superadmin(superadmin_email, otp, "setup"):
             return jsonify({
@@ -167,7 +163,6 @@ def superadmin_setup_otp():
             return jsonify({'message': 'Failed to send OTP email'}), 500
     
     except Exception as e:
-        print(f"Error in superadmin_setup_otp: {e}")
         return jsonify({'message': f'Server error: {str(e)}'}), 500
 
 
@@ -179,7 +174,6 @@ def superadmin_setup():
     """Complete SuperAdmin setup with OTP verification and password creation"""
     try:
         data = request.get_json()
-        # print(f"Received data: {data}")  # Debug log
         
         if not data or not data.get('otp') or not data.get('password'):
             return jsonify({'message': 'OTP and password are required'}), 400
@@ -189,8 +183,6 @@ def superadmin_setup():
             return jsonify({'message': 'SuperAdmin email not configured'}), 500
         
         otp_key = f"setup_{superadmin_email}"
-        # print(f"Looking for OTP with key: {otp_key}")  # Debug log
-        # print(f"Current otp_store: {otp_store}")  # Debug log
         
         # Verify OTP
         if otp_key not in otp_store:
@@ -203,19 +195,12 @@ def superadmin_setup():
         stored_otp_data = otp_store[otp_key]
         current_time = datetime.utcnow()
         
-        # print(f"Stored OTP data: {stored_otp_data}")  # Debug log
-        # print(f"Current time: {current_time}")  # Debug log
-        # print(f"OTP expires at: {stored_otp_data['expires']}")  # Debug log
-        
         if current_time > stored_otp_data['expires']:
             del otp_store[otp_key]
             return jsonify({'message': 'OTP expired. Please request a new OTP.'}), 400
         
         received_otp = str(data['otp']).strip()
         stored_otp = str(stored_otp_data['otp']).strip()
-        
-        # print(f"Received OTP: '{received_otp}'")  # Debug log
-        # print(f"Stored OTP: '{stored_otp}'")  # Debug log
         
         if received_otp != stored_otp:
             return jsonify({
@@ -236,7 +221,6 @@ def superadmin_setup():
             superadmin.password = generate_password_hash(data['password'], method='pbkdf2:sha256')
             superadmin.is_verified = True
             superadmin.is_superadmin = True
-            print(f"Updated existing SuperAdmin: {superadmin_email}")  # Debug log
         else:
             # Create new SuperAdmin
             superadmin = SuperAdmin(
@@ -246,7 +230,6 @@ def superadmin_setup():
                 is_verified=True
             )
             db.session.add(superadmin)
-            # print(f"Created new SuperAdmin: {superadmin_email}")  # Debug log
         
         db.session.commit()
         # Clean up OTP
@@ -255,7 +238,6 @@ def superadmin_setup():
         return jsonify({'message': 'SuperAdmin setup completed successfully'}), 201
         
     except Exception as e:
-        print(f"Error in superadmin_setup: {e}")
         db.session.rollback()
         return jsonify({'message': f'Failed to create SuperAdmin account: {str(e)}'}), 500
 
@@ -295,7 +277,6 @@ def superadmin_login():
         }), 200
     
     except Exception as e:
-        print(f"Error in superadmin_login: {e}")
         return jsonify({'message': f'Login failed: {str(e)}'}), 500
 
 
@@ -342,7 +323,6 @@ def superadmin_reset_otp():
             return jsonify({'message': 'Failed to send OTP email'}), 500
     
     except Exception as e:
-        print(f"Error in superadmin_reset_otp: {e}")
         return jsonify({'message': f'Server error: {str(e)}'}), 500
 
 
@@ -389,7 +369,6 @@ def superadmin_reset_password():
         return jsonify({'message': 'Password reset successfully'}), 200
     
     except Exception as e:
-        print(f"Error in superadmin_reset_password: {e}")
         db.session.rollback()
         return jsonify({'message': f'Failed to reset password: {str(e)}'}), 500
 
@@ -444,7 +423,6 @@ def superadmin_change_password():
         return jsonify({'message': 'Password changed successfully'}), 200
     
     except Exception as e:
-        print(f"Error in superadmin_change_password: {e}")
         db.session.rollback()
         return jsonify({'message': f'Failed to change password: {str(e)}'}), 500
 
@@ -471,7 +449,6 @@ def superadmin_logout():
         return jsonify({'message': 'SuperAdmin logged out successfully'}), 200
     
     except Exception as e:
-        print(f"Error in superadmin_logout: {e}")
         return jsonify({'message': f'Logout failed: {str(e)}'}), 500
 
 
@@ -515,7 +492,6 @@ def create_admin():
         return jsonify({'message': 'Admin created successfully'}), 201
 
     except Exception as e:
-        print(f"Error in create_admin: {e}")
         db.session.rollback()
         return jsonify({'message': f'Failed to create admin: {str(e)}'}), 500
 
@@ -543,7 +519,6 @@ def delete_admin_by_email():
         return jsonify({'message': 'Admin deleted successfully'}), 200
 
     except Exception as e:
-        print(f"Error in delete_admin_by_email: {e}")
         db.session.rollback()
         return jsonify({'message': f'Failed to delete admin: {str(e)}'}), 500
 
@@ -580,7 +555,6 @@ def admin_login():
         }), 200
     
     except Exception as e:
-        print(f"Error in admin_login: {e}")
         return jsonify({'message': f'Login failed: {str(e)}'}), 500
 
 
@@ -621,7 +595,6 @@ def admin_reset_otp():
             return jsonify({'message': 'Failed to send OTP email'}), 500
     
     except Exception as e:
-        print(f"Error in admin_reset_otp: {e}")
         return jsonify({'message': f'Server error: {str(e)}'}), 500
 
 
@@ -668,7 +641,6 @@ def admin_reset_password():
         return jsonify({'message': 'Password reset successfully'}), 200
     
     except Exception as e:
-        print(f"Error in admin_reset_password: {e}")
         db.session.rollback()
         return jsonify({'message': f'Failed to reset password: {str(e)}'}), 500
 
@@ -704,7 +676,6 @@ def admin_change_password():
         except jwt.ExpiredSignatureError:
             return jsonify({'message': 'Token expired'}), 401
         except jwt.InvalidTokenError as e:
-            print(f"JWT decode error: {e}")
             return jsonify({'message': 'Invalid token'}), 401
         
         # Get Admin using the correct database session
@@ -728,9 +699,6 @@ def admin_change_password():
         return jsonify({'message': 'Password changed successfully'}), 200
     
     except Exception as e:
-        print(f"Error in admin_change_password: {e}")
-        import traceback
-        traceback.print_exc()  # This will show the full stack trace
         db.session.rollback()
         return jsonify({'message': f'Failed to change password: {str(e)}'}), 500
 
@@ -751,6 +719,5 @@ def admin_logout():
         return jsonify({'message': 'Admin logged out successfully'}), 200
     
     except Exception as e:
-        print(f"Error in admin_logout: {e}")
         return jsonify({'message': f'Logout failed: {str(e)}'}), 500
 

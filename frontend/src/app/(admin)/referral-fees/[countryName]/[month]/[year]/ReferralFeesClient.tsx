@@ -1609,7 +1609,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
         <>
           {/* ===================== 6 CARDS (UPDATED) ===================== */}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-6 lg:grid-cols-3 gap-3 mt-4">
             <SalesCard
               title="Sales"
               sales={card6.sales}
