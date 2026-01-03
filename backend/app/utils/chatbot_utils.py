@@ -8,8 +8,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from dotenv import load_dotenv
-import time   # <-- ADD THIS LINE
-# import app.routes.chatbot_routes as analyst
+import time  
 import json
 from typing import Optional
 from typing import Optional, List, Dict, Any, Tuple
@@ -22,12 +21,10 @@ import os, re, json
 from pathlib import Path
 from app.utils.formulas_utils import uk_sales, uk_tax, uk_credits, uk_amazon_fee, uk_profit,uk_platform_fee,uk_advertising
 from collections import defaultdict
-
+import inspect
 # ---------- env & setup ----------
 load_dotenv()
-SECRET_KEY = os.getenv("SECRET_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/phormula")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -55,7 +52,7 @@ _DEFAULT_METRIC_ALIASES = {
     "ads spend": "advertising_total",
     "ad spend": "advertising_total",
     "advertisement spend": "advertising_total",
-    "refund leakage": "credits",         # treat as refunds/credits
+    "refund leakage": "credits",       
     "refunds leakage": "credits",
     "refunds": "credits",
     "fees": "selling_fees",
@@ -69,7 +66,7 @@ _DEFAULT_METRIC_ALIASES = {
     "cm1 margin": "cm1_margins",
     "contribution margin": "cm1_margins",
     "gross margin": "cm1_margins",
-    # back-compat: if you don’t track CM2, map to CM1 transparently
+   
     
 }
 
@@ -165,10 +162,7 @@ CANONICAL_METRICS = {
 }
 
 def resolve_metric_from_text(text: str) -> str | None:
-    """
-    Heuristic resolver used ONLY when the planner leaves metric empty.
-    Prefers alias hits and whole-word matches; no hard-coding of phrasing.
-    """
+    
     q = _apply_aliases((text or "").lower())
     # direct hits first
     for m in CANONICAL_METRICS:
@@ -322,7 +316,7 @@ def _planner_defaults(plan: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "operation": (plan.get("operation") or "aggregate").lower(),
         "metric": (plan.get("metric") or "").lower() or None,
-        "time_range": plan.get("time_range") or None,  # {"start":"YYYY-MM-DD","end":"YYYY-MM-DD"}
+        "time_range": plan.get("time_range") or None, 
         "country": plan.get("country") or None,
         "product": plan.get("product") or None,
         "group_by": plan.get("group_by") or None,
@@ -349,7 +343,7 @@ def plan_query(user_query: str) -> Dict[str, Any]:
         "reimbursement_fee", "reimbursement_vs_sales", "reimbursement_vs_cm1_margins",
     }
 
-    print("\n[DEBUG][planner] user_query:", repr(user_query))
+    
     client = oa_client or OpenAI()
 
     raw_json = "{}"
@@ -365,10 +359,10 @@ def plan_query(user_query: str) -> Dict[str, Any]:
             max_tokens=300,
         )
         raw_json = (resp.choices[0].message.content or "{}").strip()
-        print("[DEBUG][planner] raw_json:", raw_json[:500])
+        
         data = json.loads(raw_json)
     except Exception as e:
-        print("[DEBUG][planner][ERROR] exception:", repr(e))
+        
         data = {
             "operation": "clarify",
             "needs_clarification": True,
@@ -394,7 +388,7 @@ def plan_query(user_query: str) -> Dict[str, Any]:
         maybe = resolve_metric_from_text(user_query)
         if maybe:
             plan["metric"] = maybe
-            print(f"[DEBUG][planner] resolved missing metric → {maybe}")
+            
 
     # -------- un-block simple totals --------
     has_time = bool(plan.get("time_range"))
@@ -407,7 +401,7 @@ def plan_query(user_query: str) -> Dict[str, Any]:
         plan["needs_clarification"] = False
         plan["clarification_message"] = None
 
-    print("[DEBUG][planner] normalized plan:", plan)
+   
     return plan
 
 
@@ -438,10 +432,7 @@ def _to_compact_table_preview(rows: List[dict], max_rows: int = 100) -> List[dic
 def _render_prompt_for_llm(*, user_query: str, mode: str,
                            analysis: dict | None,
                            table_records: List[dict] | None) -> tuple[str, str]:
-    """
-    Build (system, user) messages. We keep the system prompt stable and
-    present your computed results as *facts* for the model to write from.
-    """
+    
     system_msg = (
         "You are a precise analytics explainer for Amazon marketplace data. "
         "Only use the facts provided. If something is unknown, say so briefly. "
@@ -472,7 +463,6 @@ def _render_prompt_for_llm(*, user_query: str, mode: str,
         parts.append("\n[Table records sample]")
         preview = _to_compact_table_preview(table_records, max_rows=120)
         parts.append(f"(showing up to {len(preview)} rows)")
-        import json
         parts.append(json.dumps(preview)[:120000])  # hard cap ~120KB
 
     parts.append(f"\n[Mode] {mode}")
@@ -495,16 +485,6 @@ def _render_prompt_for_llm(*, user_query: str, mode: str,
 
     user_msg = "\n".join(parts)
 
-    # ---- DEBUG PRINT ----
-    try:
-        print(
-            f"[DEBUG][llm-prompt] mode={mode} | "
-            f"analysis={'y' if analysis else 'n'} | "
-            f"table_records={len(table_records) if table_records else 0} | "
-            f"user_msg_len={len(user_msg)}"
-        )
-    except Exception:
-        pass
 
     return system_msg, user_msg
 
@@ -567,7 +547,7 @@ def _normalize_plan_for_sku_language(plan: dict, query: str) -> dict:
         if str(f.get("field", "")).lower() == "product":
             f = dict(f)  # copy to avoid mutating original
             f["field"] = "product_name"
-            print(f"[DEBUG] Rewriting filter field 'product' → 'product_name' (val={f.get('value')})")
+            
         new_filters.append(f)
     plan["filters"] = new_filters
 
@@ -587,7 +567,7 @@ def _normalize_plan_for_sku_language(plan: dict, query: str) -> dict:
             plan["filters"].append({"field": "sku", "op": "=", "value": cand})
             plan["product"] = None
             plan["group_by"] = "sku"
-            print(f"[DEBUG] normalized SKU from query → {cand}")
+            
         else:
             print(f"[DEBUG] ignore 'sku' token after keyword → {cand}")
     elif "sku" in ql:
@@ -720,7 +700,7 @@ def generate_openai_answer(*, user_query: str, mode: str,
             max_tokens=600,
         )
         text = (resp.choices[0].message.content or "").strip()
-        print(f"[DEBUG][llm-out] chars={len(text)}")
+        
         return text
     except Exception:
         logger.exception("OpenAI call failed; using fallback renderer.")
@@ -739,12 +719,11 @@ def infer_group_by(query: str, plan: dict) -> dict:
 
     if re.search(r"\bper\s+sku\b", ql) or re.search(r"\bby\s+sku\b", ql):
         plan["group_by"] = "sku"
-        print("[DEBUG] inferred group_by=sku from query")
+        
 
     elif re.search(r"\bper\s+product\b", ql) or re.search(r"\bby\s+product\b", ql):
         plan["group_by"] = "product"
-        print("[DEBUG] inferred group_by=product from query")
-
+        
     return plan
 
 # Detect common ways users say "all products"
@@ -816,8 +795,7 @@ class FormulaEngine:
 
         # --- Merge learned aliases from disk (safe, optional) -----------------
         try:
-            # If this class is in the same module as _load_learned_aliases, just call it.
-            # Otherwise, fall back to reading the JSON path directly.
+            
             learned_map = {}
             try:
                 learned_all = _load_learned_aliases()  # defined earlier in chatbot_utils.py
@@ -838,9 +816,9 @@ class FormulaEngine:
 
             if learned_map:
                 self.aliases.update(learned_map)
-                print(f"[DEBUG][formula] merged {len(learned_map)} learned alias(es) into FormulaEngine")
+                
         except Exception as _e:
-            print("[DEBUG][formula] learned alias merge failed:", _e)
+            logger.exception("Failed to load learned metric aliases")
 #############################################################################################
     def _ctx_trace(self, ctx: dict) -> str:
         """Compact trace string for debugging context propagation."""
@@ -957,13 +935,12 @@ class FormulaEngine:
             }
 
         uniq = ym.drop_duplicates().sort_values(["y", "m"]).values.tolist()
-        print(f"[TRACE][FE][compare] metric={metric_name} rows={len(df)} ctx=({self._ctx_trace(ctx)})")
-        print(f"[TRACE][FE][compare] uniq_months={uniq}")
+        
 
         if len(uniq) >= 1:
             (y1, m1) = uniq[0]
             (y2, m2) = uniq[-1]
-            print(f"[TRACE][FE][compare] earliest=({int(y1)}, {int(m1)}) latest=({int(y2)}, {int(m2)})")
+            
 
         if len(uniq) == 1:
             (y1, m1) = uniq[0]
@@ -989,21 +966,14 @@ class FormulaEngine:
         for key in ("target_product", "target_sku", "product", "sku"):
             if ctx.get(key):
                 base_ctx[key] = ctx[key]
-
-        print(f"[TRACE][FE][compare] evaluating metric='{metric_name}' for {y1}-{m1} and {y2}-{m2}")
-        print(f"[TRACE][FE][compare] forwarded context: product={base_ctx.get('product')} "
-            f"target_product={base_ctx.get('target_product')} target_sku={base_ctx.get('target_sku')}")
+ 
 
         val1 = float(self.registry[metric_name](df_1, base_ctx).get("result") or 0.0)
         val2 = float(self.registry[metric_name](df_2, base_ctx).get("result") or 0.0)
 
-        print(f"[TRACE][FE][compare] results: {y1}-{m1}={val1:.2f}, {y2}-{m2}={val2:.2f}")
-
         change = val2 - val1
         pct = ((change / val1) * 100.0) if val1 else (0.0 if (val1 == 0 and val2 == 0) else float("inf"))
-        print(f"[TRACE][FE][compare] Δ={change:.2f}  %Δ={pct:.2f}%")
-
-        import calendar
+        
         def label(yy, mm): return f"{calendar.month_name[int(mm)]} {int(yy)}"
 
         rows = [
@@ -1025,13 +995,13 @@ class FormulaEngine:
         ql = (raw_query or "").lower()
         for alias, canon in self.aliases.items():
             if alias in ql:
-                print(f"[DEBUG][formula] resolve_name alias→ {canon}")
+                
                 return canon
         for name in self.registry.keys():
             if name in ql or name.replace("_", " ") in ql:
-                print(f"[DEBUG][formula] resolve_name direct→ {name}")
+                
                 return name
-        print("[DEBUG][formula] resolve_name none")
+        
         return None
 
 
@@ -1057,7 +1027,6 @@ class FormulaEngine:
         norm = self._norm_sku_series(df["sku"])
         bad = norm.eq("") | norm.eq("0") | norm.eq("none") | norm.eq("null") | norm.eq("nan")
         # if original had NaN, norm is the string "nan"; covered above
-        print(f"[TRACE][FE][sku] valid={int((~bad).sum())} invalid={int(bad.sum())}")
         return ~bad
 
     
@@ -1085,7 +1054,6 @@ class FormulaEngine:
         if "sku" in w.columns:
             w = w.loc[self._sku_mask(w)].copy()
 
-        print(f"[TRACE][FE][region] {ctx.get('country','?')} scope rows={len(df)}→{len(w)}")
         return w
 
 
@@ -1487,119 +1455,8 @@ class FormulaEngine:
 
 
     # ---------- evaluators ----------
-   
-    
-
-    # def _sales(self, df: pd.DataFrame, ctx: Dict[str, Any]) -> Dict[str, Any]:
-    #     print(
-    #         f"[TRACE][FE] FormulaEngine._sales CALLED rows={len(df)} "
-    #         f"country={ctx.get('country')} want_breakdown={ctx.get('want_breakdown')}"
-    #     )
-    #     import pandas as pd
-
-    #     is_us = self._is_us(ctx, df)
-
-    #     # ---------- UK → centralized + per-product like _profit, NO components ----------
-    #     if not is_us:
-    #         try:
-    #             # Region-scoped frame (applies SKU mask etc.)
-    #             df_region = self._df_for_region(df, ctx)
-    #             if df_region is None:
-    #                 df_region = pd.DataFrame()
-
-    #             # Keep only valid SKUs (same as _profit)
-    #             dfk = df_region.copy()
-    #             dfk["sku"] = dfk.get("sku", "").astype(str).str.strip()
-    #             dfk = dfk[
-    #                 dfk["sku"].notna()
-    #                 & (dfk["sku"] != "")
-    #                 & (dfk["sku"] != "0")
-    #                 & (dfk["sku"].str.lower() != "none")
-    #             ]
-
-    #             # Call centralized UK sales helper (same style as _profit)
-    #             sales_total, sales_by_sku, _ = uk_sales(dfk)
-
-    #             # Ensure we have a DataFrame
-    #             if not isinstance(sales_by_sku, pd.DataFrame):
-    #                 sales_by_sku = pd.DataFrame(columns=["sku", "__metric__"])
-
-    #             # --- per-SKU: only sku + __metric__ (no components) ---
-    #             per_sku = sales_by_sku.copy()
-    #             if "sku" not in per_sku.columns:
-    #                 per_sku["sku"] = ""
-    #             if "__metric__" not in per_sku.columns:
-    #                 # fallback: if central fn didn't set __metric__, try product_sales
-    #                 if "product_sales" in per_sku.columns:
-    #                     per_sku["__metric__"] = pd.to_numeric(per_sku["product_sales"], errors="coerce").fillna(0.0)
-    #                 else:
-    #                     per_sku["__metric__"] = 0.0
-    #             per_sku = per_sku[["sku", "__metric__"]]
-
-    #             # --- per-product: roll up SKU totals -> product_name ---
-    #             sku2prod = self._sku_to_product(dfk)
-    #             if not per_sku.empty and not sku2prod.empty and "product_name" in sku2prod.columns:
-    #                 tmp = per_sku.merge(sku2prod, on="sku", how="left")
-    #                 per_prod = (
-    #                     tmp.groupby("product_name", dropna=True)["__metric__"]
-    #                     .sum()
-    #                     .reset_index()
-    #                 )
-    #             else:
-    #                 per_prod = pd.DataFrame(columns=["product_name", "__metric__"])
-
-    #             # --- final table: ONLY totals + per-product (no components) ---
-    #             if ctx.get("want_breakdown"):
-    #                 # component_cols = [] → _final_table will NOT add any component_* columns
-    #                 table = self._final_table(
-    #                     "sales",
-    #                     float(sales_total or 0.0),
-    #                     per_sku[["sku", "__metric__"]],
-    #                     per_prod[["product_name", "__metric__"]],
-    #                     component_cols=[],
-    #                 )
-    #             else:
-    #                 table = self._total_only_table("sales", float(sales_total or 0.0))
-
-    #             expl = "UK sales via centralized uk_sales, with per-SKU and per-product totals only."
-    #             return {
-    #                 "result": self._sr(sales_total),
-    #                 "explanation": expl,
-    #                 "table_df": table,
-    #             }
-
-    #         except Exception as e:
-    #             print("[ERROR][formula][UK]_sales centralized call failed:", e)
-    #             # strict: no fallback calc
-    #             try:
-    #                 nan_val = float("nan")
-    #                 table = self._total_only_table("sales", nan_val)
-    #                 sr_val = self._sr(nan_val)
-    #             except Exception:
-    #                 table, sr_val = pd.DataFrame(), None
-    #             return {
-    #                 "result": sr_val,
-    #                 "explanation": f"UK sales failed in centralized formula: {e}. No fallback executed by design.",
-    #                 "table_df": table,
-    #             }
-
-    #     # ---------- US → keep existing local path ----------
-    #     total, per_sku, per_prod, comps = self._sales_components(df, ctx)
-    #     table = (
-    #         self._final_table("sales", total, per_sku, per_prod, comps)
-    #         if ctx.get("want_breakdown")
-    #         else self._total_only_table("sales", total)
-    #     )
-    #     expl = "US sales = product_sales + promotional_rebates (SKU rows only)"
-    #     return {"result": self._sr(total), "explanation": expl, "table_df": table}
-    
     def _sales(self, df: pd.DataFrame, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        print(
-            f"[TRACE][FE] FormulaEngine._sales CALLED rows={len(df)} "
-            f"country={ctx.get('country')} want_breakdown={ctx.get('want_breakdown')}"
-        )
-        import pandas as pd
-
+        
         is_us = self._is_us(ctx, df)
 
         # ---------- UK → centralized + per-product + optional month breakdown ----------
@@ -1690,8 +1547,7 @@ class FormulaEngine:
                             "table_df": table,
                         }
 
-                    # If for some reason we had no usable periods, fall through to the
-                    # normal per-SKU / per-product logic below.
+                    
 
                 # -------------------- Existing UK total + product/SKU logic --------------------
         
@@ -1756,7 +1612,7 @@ class FormulaEngine:
                 }
 
             except Exception as e:
-                print("[ERROR][formula][UK]_sales centralized call failed:", e)
+                
                 # strict: no fallback calc
                 try:
                     nan_val = float("nan")
@@ -1786,10 +1642,7 @@ class FormulaEngine:
 
    
     def _tax(self, df: pd.DataFrame, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        print(f"[TRACE][FE] FormulaEngine._tax CALLED rows={len(df)} "
-            f"country={ctx.get('country')} want_breakdown={ctx.get('want_breakdown')}")
-        import inspect, numpy as np, pandas as pd
-
+        
         is_us = self._is_us(ctx, df)
 
         # ---------- UK → centralized-only (matches _sales style) ----------
@@ -1866,7 +1719,7 @@ class FormulaEngine:
                 return {"result": self._sr(total), "explanation": expl, "table_df": table}
 
             except Exception as e:
-                print("[ERROR][formula][UK]_tax centralized call failed:", e)
+                
                 # strict: no fallback calc
                 try:
                     nan_val = float("nan")
@@ -1897,10 +1750,7 @@ class FormulaEngine:
     
 
     def _credits(self, df: pd.DataFrame, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        print(f"[TRACE][FE] FormulaEngine._credits CALLED rows={len(df)} "
-            f"country={ctx.get('country')} want_breakdown={ctx.get('want_breakdown')}")
-        import inspect, numpy as np, pandas as pd
-
+        
         is_us = self._is_us(ctx, df)
 
         # ---------- UK → centralized-only (matches _sales / _tax structure) ----------
@@ -1966,7 +1816,6 @@ class FormulaEngine:
                 return {"result": self._sr(total), "explanation": expl, "table_df": table}
 
             except Exception as e:
-                print("[ERROR][formula][UK]_credits centralized call failed:", e)
                 # strict: no fallback calc
                 try:
                     nan_val = float("nan")
@@ -1995,10 +1844,10 @@ class FormulaEngine:
         Dumps FE-side component totals (after region/SKU filtering) so you can diff against
         the centralized (UK) result or your per-SKU sum (US). No logic changes.
         """
-        import pandas as pd
+        
 
         if df_in is None or df_in.empty:
-            print(f"[DEBUG][profit][{label}] input df empty → nothing to print")
+            
             return
 
         # These builders already respect region/SKU rules internally.
@@ -2020,19 +1869,7 @@ class FormulaEngine:
             - float(cogs_total)
         )
 
-        print(
-            "[DEBUG][profit][{lb}] FE components:\n"
-            "  sales_total      = {s:12,.2f}\n"
-            "  credits_total    = {c:12,.2f}\n"
-            "  tax_total        = {t:12,.2f}\n"
-            "  amazon_fee_total = {a:12,.2f}\n"
-            "  cogs_total       = {g:12,.2f}\n"
-            "  naive_profit     = {p:12,.2f}"
-            .format(lb=label, s=sales_total, c=credits_total, t=tax_total,
-                    a=amazon_total, g=cogs_total, p=naive_profit)
-        )
-
-
+        
    
     def _profit(self, df: pd.DataFrame, ctx: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -2045,10 +1882,7 @@ class FormulaEngine:
             Per-SKU profit computed similarly for breakdowns.
         - US: Local per-SKU build (unchanged).
         """
-        print(f"[TRACE][FE] FormulaEngine._profit CALLED rows={len(df)} "
-            f"country={ctx.get('country')} want_breakdown={ctx.get('want_breakdown')}")
-        import pandas as pd
-
+        
         is_us = self._is_us(ctx, df)
 
         # ---------- UK → centralized components + local Amazon-fee recalc ----------
@@ -2141,15 +1975,7 @@ class FormulaEngine:
 
             total = float(per_sku["__metric__"].sum())
 
-            # Debug prints to verify parity with your pipeline
-            print("[DEBUG][profit][UK-local] components (totals):")
-            print(f"  sales_total        = {float(sales_total):12,.2f}")
-            print(f"  credits_total      = {float(credits_total):12,.2f}")
-            print(f"  taxes_total        = {float(tax_total):12,.2f}")
-            print(f"  amazon_fee_total   = {float(amazon_fee_total):12,.2f}")
-            print(f"  cost_total         = {float(cost_total):12,.2f}")
-            print(f"  profit_total       = {float(total):12,.2f}")
-
+            
             # Build output table(s)
             if not ctx.get("want_breakdown"):
                 table = self._total_only_table("profit", total)
@@ -2278,10 +2104,6 @@ class FormulaEngine:
         return {"result": self._sr(total), "explanation": expl, "table_df": table}
 
 
-    
-
-
-
     # ---------- derived ratios & mixes ----------
     def _reimbursement_fee(self, df: pd.DataFrame, ctx: Dict[str, Any]) -> Dict[str, Any]:
         if df is None or df.empty or "type" not in df.columns or "total" not in df.columns:
@@ -2324,8 +2146,6 @@ class FormulaEngine:
 
 
     def _platform_fee(self, df: pd.DataFrame, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        import pandas as pd
-
         is_us = self._is_us(ctx, df)
 
         # ---------- UK → centralized + same prep as process_skuwise_data ----------
@@ -2350,7 +2170,7 @@ class FormulaEngine:
 
             # Call centralized helper on RAW df
             total, per_sku, comps = uk_platform_fee(w)
-            print(f"[TRACE][FE][UK]_platform total={total:.2f} comps={comps} per_sku_rows={0 if per_sku is None else len(per_sku)}")
+           
 
             # Build table; product roll-up via SKU-filtered mapping
             if ctx.get("want_breakdown"):
@@ -2419,8 +2239,7 @@ class FormulaEngine:
 
 
     def _advertising_total(self, df: pd.DataFrame, ctx: Dict[str, Any]) -> Dict[str, Any]:
-        import pandas as pd
-
+        
         is_us = self._is_us(ctx, df)
 
         # ---------- UK → centralized + same prep as process_skuwise_data ----------
@@ -2445,7 +2264,7 @@ class FormulaEngine:
 
             # Call centralized helper on RAW df (includes non-SKU rows)
             total, per_sku, comps = uk_advertising(w)
-            print(f"[TRACE][FE][UK]_ads total={total:.2f} comps={comps} per_sku_rows={0 if per_sku is None else len(per_sku)}")
+            
 
             # Build table; use SKU-filtered view only for product rollup mapping
             if ctx.get("want_breakdown"):
@@ -2644,8 +2463,7 @@ class FormulaEngine:
         # ----------------------------------------------------------------------
         # 🇬🇧 UK BREAKDOWN (centralised-aligned, same logic as UK _profit)
         # ----------------------------------------------------------------------
-        import pandas as pd
-
+        
         dfk = df2.copy()
         if not dfk.empty:
             dfk["sku"] = dfk.get("sku", "").astype(str).str.strip()
@@ -2885,7 +2703,7 @@ class FormulaEngine:
                 sku_col = sbs.columns[0]
 
             if sku_col is None:
-                print("[DEBUG][asp] no SKU-like column in sales_by_sku → breakdown skipped")
+               
                 table = self._total_only_table("asp", asp_total)
                 return {
                     "result": self._sr(asp_total),
@@ -2958,7 +2776,7 @@ class FormulaEngine:
             }
 
         except Exception as e:
-            print("[DEBUG][asp] breakdown failed, falling back to total-only:", repr(e))
+       
             table = self._total_only_table("asp", asp_total)
             return {
                 "result": self._sr(asp_total),
@@ -3143,7 +2961,7 @@ class FormulaEngine:
 
         # Helper to normalize centralized per-SKU frames (same idea as _profit)
         def _pick(df_, name: str) -> pd.DataFrame:
-            import pandas as pd
+      
 
             if (
                 isinstance(df_, pd.DataFrame)
@@ -3163,7 +2981,7 @@ class FormulaEngine:
         taxes_per_sku = _pick(tax_by_sku, "taxes")
 
         # --- Build per-SKU profit frame (same formula as UK _profit) ----------
-        import pandas as pd
+
 
         per_sku = (
             pd.DataFrame({"sku": dfk["sku"].unique()})
@@ -3223,8 +3041,6 @@ class FormulaEngine:
         - Table shows % by product (preferred) or by SKU if product names unavailable
         - No TOTAL row
         """
-        import pandas as pd, re
-
         # --- targets (fallbacks preserved) ---
         target_product = (ctx.get("target_product") or ctx.get("product") or "").strip()
         target_sku     = (ctx.get("target_sku") or ctx.get("sku") or "").strip()
@@ -3252,10 +3068,6 @@ class FormulaEngine:
         except Exception as _e:
             print("[TRACE][FE][sales_mix] period slice failed:", _e)
 
-        print(
-            f"[TRACE][FE][sales_mix] rows={len(dfp)} country={ctx.get('country')} "
-            f"target_product={target_product!r} target_sku={target_sku!r}"
-        )
 
         # --- build components from the *period slice* ---
         is_us = self._is_us(ctx, dfp)
@@ -3289,7 +3101,7 @@ class FormulaEngine:
                 print("[TRACE][FE][sales_mix] UK per-product from _sales failed:", e)
 
         if (sales_by_product is None or sales_by_product.empty) and (sales_by_sku is None or sales_by_sku.empty):
-            print("[TRACE][FE][sales_mix] no sales rows in selected period → returning early")
+           
             return {
                 "result": 0.0,
                 "explanation": "No sales data in the selected period.",
@@ -3304,7 +3116,7 @@ class FormulaEngine:
             per_prod = sales_by_product.copy()
             denom = float(per_prod["__metric__"].sum())
             if denom == 0:
-                print("[TRACE][FE][sales_mix] denom(product)=0 → returning early")
+                
                 return {
                     "result": 0.0,
                     "explanation": "No sales data in the selected period.",
@@ -3317,14 +3129,13 @@ class FormulaEngine:
             per_prod["key"]    = per_prod["product_name"].astype(str)
             table = per_prod[["metric", "level", "key", "result"]]
 
-            print(f"[TRACE][FE][sales_mix] using product breakdown target_product={target_product!r}")
             if target_product:
                 match = per_prod.loc[
                     per_prod["product_name"].str.lower().str.contains(re.escape(target_product.lower()))
                 ]
                 if not match.empty:
                     sel_value = float(match["result"].iloc[0])
-                    print(f"[TRACE][FE][sales_mix] matched product '{target_product}' → {sel_value:.2f}%")
+       
                 else:
                     print(f"[TRACE][FE][sales_mix] product '{target_product}' not found")
 
@@ -3333,7 +3144,7 @@ class FormulaEngine:
             per_sku = sales_by_sku.copy()
             denom = float(per_sku["__metric__"].sum())
             if denom == 0:
-                print("[TRACE][FE][sales_mix] denom(sku)=0 → returning early")
+                
                 return {
                     "result": 0.0,
                     "explanation": "No sales data in the selected period.",
@@ -3346,16 +3157,16 @@ class FormulaEngine:
             per_sku["key"]    = per_sku["sku"].astype(str)
             table = per_sku[["metric", "level", "key", "result"]]
 
-            print(f"[TRACE][FE][sales_mix] using SKU breakdown target_sku={target_sku!r}")
+
             if target_sku:
                 match = per_sku.loc[per_sku["sku"].astype(str).str.lower() == target_sku.lower()]
                 if not match.empty:
                     sel_value = float(match["result"].iloc[0])
-                    print(f"[TRACE][FE][sales_mix] matched SKU '{target_sku}' → {sel_value:.2f}%")
+                    
                 else:
                     print(f"[TRACE][FE][sales_mix] SKU '{target_sku}' not found")
 
-        print(f"[TRACE][FE][sales_mix] final result={sel_value:.2f}%")
+
         return {
             "result": self._sr(sel_value),
             "explanation": "sales_mix = (sales of item in the selected period / total sales in the selected period) × 100",
@@ -3396,11 +3207,9 @@ class FormulaEngine:
         except Exception as _e:
             print("[TRACE][FE][profit_mix] period slice failed:", _e)
 
-        print(f"[TRACE][FE][profit_mix] rows={len(dfp)} country={ctx.get('country')} "
-            f"target_product={target_product!r} target_sku={target_sku!r}")
-
+       
         if "product_name" not in dfp.columns:
-            print("[TRACE][FE][profit_mix] no product_name column")
+           
             return {
                 "result": 0.0,
                 "explanation": "No product_name column in data.",
@@ -3415,9 +3224,9 @@ class FormulaEngine:
             if p != 0.0:
                 grouped.append({"product_name": product, "profit": p})
 
-        print(f"[TRACE][FE][profit_mix] grouped_products={len(grouped)}")
+       
         if not grouped:
-            print("[TRACE][FE][profit_mix] grouped empty → returning 0")
+           
             return {
                 "result": 0.0,
                 "explanation": "No product-level profit breakdown for the selected period.",
@@ -3426,8 +3235,7 @@ class FormulaEngine:
 
         per_prod = pd.DataFrame(grouped)
         total_profit = float(per_prod["profit"].sum())
-        print(f"[TRACE][FE][profit_mix] total_profit(period)={total_profit}")
-
+        
         if total_profit == 0:
             return {
                 "result": 0.0,
@@ -3443,13 +3251,12 @@ class FormulaEngine:
 
         # --- select value for target (product or sku→product) ---
         selected_value = 0.0
-        print(f"[TRACE][FE][profit_mix] target_product={target_product!r} target_sku={target_sku!r}")
-
+        
         if target_product:
             match = table[table["key"].str.lower().str.contains(target_product)]
             if not match.empty:
                 selected_value = float(match["result"].iloc[0])
-                print(f"[TRACE][FE][profit_mix] matched product '{target_product}' → {selected_value:.2f}%")
+                
             else:
                 print(f"[TRACE][FE][profit_mix] product '{target_product}' not found")
         elif target_sku and "sku" in dfp.columns:
@@ -3460,11 +3267,10 @@ class FormulaEngine:
                 match = table[table["key"].str.lower() == prod_name]
                 if not match.empty:
                     selected_value = float(match["result"].iloc[0])
-                    print(f"[TRACE][FE][profit_mix] matched SKU '{target_sku}' → product '{prod_name}' → {selected_value:.2f}%")
+                    
                 else:
                     print(f"[TRACE][FE][profit_mix] SKU '{target_sku}' mapped product not found in table")
 
-        print(f"[TRACE][FE][profit_mix] final result={selected_value:.2f}%")
         return {
             "result": self._sr(selected_value),
             "explanation": "Profit mix = (profit of product in the selected period / total profit in the selected period) × 100",
@@ -3622,7 +3428,7 @@ class FormulaEngine:
             }
 
         # -------------------- 🇬🇧 UK → same style as UK _profit() --------------------
-        import pandas as pd
+     
 
         df2 = self._df_for_region(df, ctx)
         if df2 is None or df2.empty or "sku" not in df2.columns:
@@ -3826,14 +3632,11 @@ class FormulaEngine:
         else:
             out["__period__"] = pd.NaT
             # 🧩 ADD THIS DEBUG SECTION (Step 5)
-        print(
-            f"[TRACE][FE][period] built __period__: total_rows={len(out)}, "
-            f"null_periods={int(out['__period__'].isna().sum()) if '__period__' in out.columns else 'n/a'}"
-        )
+        
         if "__period__" in out.columns:
             uniq = out["__period__"].dropna().unique()
             preview = ", ".join(map(str, sorted(uniq)[:5]))
-            print(f"[TRACE][FE][period] sample_periods=[{preview}]{'...' if len(uniq)>5 else ''}")    
+               
 
         return out
 
@@ -3854,17 +3657,16 @@ class FormulaEngine:
         Returns a DataFrame with columns: [group, result] (plus nice labels for month).
         """
         # 🧩 Step 9: initial trace
-        print(f"[TRACE][FE][rank] metric={metric_name} group_by={group_by} "
-            f"rows={len(df)} ctx=({self._ctx_trace(ctx)})")
+       
 
         if df is None or df.empty:
-            print("[TRACE][FE][rank] input empty → returning")
+           
             return pd.DataFrame({"_": ["No data available for ranking."]})
 
         group_by = (group_by or "").lower().strip()
         evaluator = self.registry.get(metric_name)
         if evaluator is None:
-            print(f"[TRACE][FE][rank] evaluator for {metric_name!r} not found")
+            
             return pd.DataFrame({"_": [f"Metric '{metric_name}' is not supported."]})
 
         work = df.copy()
@@ -3875,7 +3677,7 @@ class FormulaEngine:
             if val and col in work.columns:
                 val_l = str(val).lower()
                 work = work[work[col].str.lower() == val_l]
-                print(f"[TRACE][FE][rank] filter {col}={val_l!r} → rows={len(work)}")
+                
 
         _apply_filter("product_name", ctx.get("product"))
         _apply_filter("sku", ctx.get("sku"))
@@ -3884,7 +3686,7 @@ class FormulaEngine:
         _apply_filter("sku", ctx.get("target_sku"))
 
         if work.empty:
-            print("[TRACE][FE][rank] work empty after filters → returning")
+           
             return pd.DataFrame({"_": ["No matching data after applying filters."]})
 
         # ------------------ Grouping logic ------------------
@@ -3892,7 +3694,7 @@ class FormulaEngine:
         if group_by == "month":
             work = self._ensure_period_month(work)
             if "__period__" not in work.columns or work["__period__"].isna().all():
-                print("[TRACE][FE][rank] cannot derive __period__ for month grouping")
+                
                 return pd.DataFrame({"_": ["Cannot derive monthly periods from data."]})
             label_col = "__period__"
             keys = sorted(work[label_col].dropna().unique())
@@ -3904,7 +3706,7 @@ class FormulaEngine:
         elif group_by == "product":
             label_col = "product_name"
             if label_col not in work.columns:
-                print("[TRACE][FE][rank] no product_name column")
+                
                 return pd.DataFrame({"_": ["No product_name column to group by."]})
             keys = sorted(set(map(str, work[label_col].dropna().unique())))
             def slicer(k): return work[work[label_col].astype(str).eq(k)]
@@ -3913,7 +3715,7 @@ class FormulaEngine:
         elif group_by == "sku":
             label_col = "sku"
             if label_col not in work.columns:
-                print("[TRACE][FE][rank] no sku column")
+               
                 return pd.DataFrame({"_": ["No sku column to group by."]})
             keys = sorted(set(map(str, work[label_col].dropna().unique())))
             def slicer(k): return work[work[label_col].astype(str).eq(k)]
@@ -3922,18 +3724,17 @@ class FormulaEngine:
         elif group_by == "country":
             label_col = "country"
             if label_col not in work.columns:
-                print("[TRACE][FE][rank] no country column")
+                
                 return pd.DataFrame({"_": ["No country column to group by."]})
             keys = sorted(set(map(str, work[label_col].dropna().unique())))
             def slicer(k): return work[work[label_col].astype(str).eq(k)]
             def label_fn(k): return str(k)
 
         else:
-            print(f"[TRACE][FE][rank] unsupported group_by={group_by!r}")
+            
             return pd.DataFrame({"_": [f"group_by='{group_by}' is not supported for ranking."]})
 
-        print(f"[TRACE][FE][rank] groups_found={len(keys)} label_col={label_col}")
-
+        
         # ------------------ Context for evaluator ------------------
         base_ctx = {
             "country": ctx.get("country"),
@@ -3955,10 +3756,10 @@ class FormulaEngine:
             val = float(payload.get("result") or 0.0) if isinstance(payload, dict) else float(payload or 0.0)
             rows.append({"group": label_fn(k), "result": val})
             if len(rows) <= 5:  # avoid flooding logs
-                print(f"[TRACE][FE][rank] group={label_fn(k)!r} result={val}")
+                pass
 
         if not rows:
-            print("[TRACE][FE][rank] no rows produced")
+           
             return pd.DataFrame({"_": ["No groups found to rank."]})
 
         out = pd.DataFrame(rows)
@@ -3970,7 +3771,7 @@ class FormulaEngine:
         else:
             out = out.sort_values("result", ascending=ascending, kind="mergesort").head(max(1, k)).reset_index(drop=True)
 
-        print(f"[TRACE][FE][rank] out_rows={len(out)} ascending={ascending}")
+        
         return out
 
 
@@ -4474,8 +4275,7 @@ def overview_metrics_for_period(
         END
     """
 
-    # Pull rows for the period; prefer date_time when present, otherwise (year, month)
-    # We OR them to catch mixed rows where some have date_time and some only year/month.
+  
     sql = text(f"""
     SELECT *
     FROM {table}
@@ -4555,18 +4355,7 @@ def _finalize_records(plan: dict, table_records: list[dict]) -> list[dict]:
 
 
 class BusinessAdvisor:
-    """
-    Keyword-free advisor:
-    - Reads monthly series (overall + product) from df_primary
-    - Builds a customized growth playbook based on signals in the data
-    - Optionally uses aux['ads'] (monthly ads_spend) to compute ACoS deltas
-
-    UPDATED (Portfolio-first, Business Insight-aligned):
-    - Default output is OVERALL business summary + exactly 5 SKU-wise actions (JSON-driven).
-    - Does NOT “divide into products” unless upstream routing/aux explicitly targets a product/SKU.
-    - Uses ONLY df_primary-derived metrics (RAG/FormulaEngine), not Business Insight metrics fetching.
-    - Returns list[str] to preserve existing route contract (safe for "\n".join()).
-    """
+   
 
     # ==================== Portfolio advisor prompt (JSON output) ====================
 
@@ -4827,12 +4616,12 @@ Do not add any extra keys. Do not wrap in Markdown.
         - Include an urgency_score per SKU so the model can prioritize which products need urgent attention.
         """
         if d is None or not isinstance(d, pd.DataFrame) or d.empty:
-            print("[DEBUG][sku_tables] empty or invalid df, returning no SKUs")
+           
             return {"all_skus": []}
         
         # 👉 NEW: create a synthetic sku if sku is missing but product exists
         if "sku" not in d.columns and "product" in d.columns:
-            print("[DEBUG][sku_tables] no 'sku' column, using 'product' as sku surrogate")
+
             d = d.copy()
             d["sku"] = d["product"]
 
@@ -4842,7 +4631,7 @@ Do not add any extra keys. Do not wrap in Markdown.
         curr_period = bp[-1].get("period") if len(bp) >= 1 else None
 
         if not prev_period or not curr_period:
-            print(f"[DEBUG][sku_tables] missing prev/curr periods, by_period={bp}")
+            
             return {"all_skus": []}
 
         # Total sales for mix calculations
@@ -4852,14 +4641,14 @@ Do not add any extra keys. Do not wrap in Markdown.
         # Aggregate per sku+product+period
         grp_cols = [c for c in ["period", "sku", "product", "sales", "profit", "quantity"] if c in d.columns]
         if not {"period", "sku"}.issubset(set(grp_cols)) or "sales" not in grp_cols:
-            print(f"[DEBUG][sku_tables] missing required columns in df: have={grp_cols}")
+           
             return {"all_skus": []}
 
         g = d[grp_cols].copy()
         g = g[g["period"].isin([prev_period, curr_period])]
 
         if g.empty:
-            print(f"[DEBUG][sku_tables] no rows for periods prev={prev_period}, curr={curr_period}")
+            
             return {"all_skus": []}
 
         agg = g.groupby(["period", "sku"], dropna=True).agg(
@@ -4981,25 +4770,12 @@ Do not add any extra keys. Do not wrap in Markdown.
         rows_sorted = sorted(rows, key=_key, reverse=True)
 
         # Debug: show what we're sending to the LLM
-        print(f"[DEBUG][sku_tables] periods used: prev={prev_period}, curr={curr_period}")
-        print(f"[DEBUG][sku_tables] total_skus={len(rows_sorted)}")
-        print("[DEBUG][sku_tables] top 5 SKUs by urgency_score:")
+      
         for r in rows_sorted[:5]:
-            print(
-                "  -",
-                r.get("product_name"),
-                "| urgency_score=",
-                round(r.get("urgency_score", 0.0), 2),
-                "| Net Sales Growth (%)=",
-                r.get("Net Sales Growth (%)"),
-                "| Profit Growth (%)=",
-                r.get("Profit Growth (%)"),
-                "| Sales Mix Change (%)=",
-                r.get("Sales Mix Change (%)"),
-            )
+            
 
         # Single flat list, no splitting
-        return {"all_skus": rows_sorted}
+            return {"all_skus": rows_sorted}
 
 
 
@@ -5020,8 +4796,8 @@ Do not add any extra keys. Do not wrap in Markdown.
                 "num_skus": len(all_skus),
                 "sku_sample": all_skus[:5],  # just a small sample for logs
             }
-            print("[DEBUG][advisor] payload preview going to LLM:")
-            print(json.dumps(debug_payload, indent=2, default=str))
+            
+            
         except Exception as e:
             print("[DEBUG][advisor] failed to print advisor_payload preview:", e)
 
@@ -5038,9 +4814,7 @@ Do not add any extra keys. Do not wrap in Markdown.
         )
         raw = (out.choices[0].message.content or "").strip()
 
-        # ---- DEBUG: raw JSON returned from LLM ----
-        print("[DEBUG][advisor] raw LLM JSON response:")
-        print(raw)
+        
 
         try:
             obj = json.loads(raw) if raw else {}
@@ -5273,21 +5047,13 @@ Do not add any extra keys. Do not wrap in Markdown.
             try:
                 cols_l = [str(c).strip().lower() for c in d.columns]
                 qty_like = [c for c in d.columns if str(c).strip().lower() in {"quantity", "ordered_units", "units"}]
-                print("\n[DEBUG][Q0] input columns sample:", list(d.columns)[:30])
-                print("[DEBUG][Q0] quantity-like columns found:", qty_like)
+          
             except Exception:
                 pass
 
             # Lowercase map (canonicalize)
             d = d.rename(columns={c: alias_map.get(str(c).strip().lower(), str(c).strip().lower())
                                 for c in d.columns})
-
-            # ---- DEBUG: after rename, confirm 'quantity' exists ----------------------
-            try:
-                print("\n[DEBUG][Q0b] columns after rename:", list(d.columns)[:30])
-                print("[DEBUG][Q0b] has quantity:", "quantity" in d.columns)
-            except Exception:
-                pass
 
             # ---- 2) Period construction ------------------------------------------
             if "date_time" in d.columns:
@@ -5321,10 +5087,7 @@ Do not add any extra keys. Do not wrap in Markdown.
                 try:
                     raw_q = d["quantity"]
                     # show types + first values to detect strings like "—" etc.
-                    print("\n[DEBUG][Q1] quantity BEFORE _safe_float()")
-                    print("  dtype:", raw_q.dtype)
-                    print("  head raw:", raw_q.head(12).tolist())
-                    print("  sample unique raw:", pd.Series(raw_q.dropna().astype(str)).unique()[:12])
+                    
                 except Exception as e:
                     print("[DEBUG][Q1] failed:", e)
 
@@ -5336,13 +5099,7 @@ Do not add any extra keys. Do not wrap in Markdown.
             if "quantity" in d.columns:
                 try:
                     q = d["quantity"]
-                    print("\n[DEBUG][Q2] quantity AFTER _safe_float()")
-                    print("  dtype:", q.dtype)
-                    print("  non-null:", int(q.notna().sum()))
-                    print("  >0 count:", int((q > 0).sum()))
-                    print("  head:", q.head(12).tolist())
-                    print("  min/max:", (float(q.min()) if q.notna().any() else None),
-                        (float(q.max()) if q.notna().any() else None))
+                    
                 except Exception as e:
                     print("[DEBUG][Q2] failed:", e)
 
@@ -5391,17 +5148,7 @@ Do not add any extra keys. Do not wrap in Markdown.
             if "period" in d.columns and present:
                 try:
                     # ---- DEBUG: quantity by period BEFORE building payload -------------
-                    if "quantity" in d.columns:
-                        try:
-                            print("\n[DEBUG][Q3] quantity by period BEFORE by_period rollup:")
-                            print(
-                                d[["period", "quantity"]]
-                                .groupby("period")["quantity"]
-                                .agg(["count", "sum", "min", "max"])
-                                .sort_index()
-                            )
-                        except Exception as e:
-                            print("[DEBUG][Q3] failed:", e)
+                   
 
                     grp = d.groupby("period", dropna=True)[present].sum().reset_index()
 
@@ -5415,9 +5162,9 @@ Do not add any extra keys. Do not wrap in Markdown.
                     payload["rollups"]["by_period"] = grp.to_dict(orient="records")
 
                     # ---- DEBUG: by_period after build --------------------------------
-                    print("\n[DEBUG][Q4] by_period rollup (period → quantity):")
+                    
                     for r in payload["rollups"]["by_period"]:
-                        print(" ", r.get("period"), "→", r.get("quantity"))
+                        pass
 
                 except Exception as e:
                     print("[DEBUG][advisor] failed building primary by_period rollup:", e)
@@ -5463,8 +5210,7 @@ Do not add any extra keys. Do not wrap in Markdown.
             by_period = (payload.get("rollups") or {}).get("by_period") or []
 
             # DEBUG: see what we actually have at this point
-            print("[DEBUG][advisor] initial by_period from rollups:", by_period)
-
+           
             # ---------- Fallback: rebuild by_period if missing but we DO have 'period' ----------
             if (not by_period) and isinstance(d, pd.DataFrame) and ("period" in d.columns):
                 present_overall = [c for c in ["sales", "profit", "quantity", "asp"] if c in d.columns]
@@ -5477,8 +5223,7 @@ Do not add any extra keys. Do not wrap in Markdown.
                         except Exception:
                             pass
                         by_period = grp.to_dict(orient="records")
-                        print("[DEBUG][advisor] rebuilt by_period fallback from df_primary:")
-                        print(grp)
+                        
                     except Exception as e:
                         print("[DEBUG][advisor] failed to rebuild by_period fallback:", e)
 
@@ -5491,7 +5236,7 @@ Do not add any extra keys. Do not wrap in Markdown.
                 sku_tables = BusinessAdvisor._build_sku_tables(d, by_period, top_n=80)
             else:
                 # Single-period / no-period fallback:
-                print("[DEBUG][advisor] using single-period SKU fallback (no usable prev/curr periods)")
+                
 
                 key_col = None
                 if "sku" in d.columns:
@@ -5500,7 +5245,7 @@ Do not add any extra keys. Do not wrap in Markdown.
                     key_col = "product"
 
                 if (not isinstance(d, pd.DataFrame)) or d.empty or not key_col or "sales" not in d.columns:
-                    print("[DEBUG][advisor] fallback SKU builder: not enough columns, returning empty sku_tables")
+                   
                     sku_tables = {"all_skus": []}
                 else:
                     agg_kwargs = {}
@@ -5582,19 +5327,11 @@ Do not add any extra keys. Do not wrap in Markdown.
                         reverse=True,
                     )
 
-                    print(f"[DEBUG][advisor][fallback] total_skus={len(rows_sorted)}")
-                    print("[DEBUG][advisor][fallback] top 5 SKUs (by net_sales_curr):")
+                  
                     for r in rows_sorted[:5]:
-                        print(
-                            "  -",
-                            r.get("product_name"),
-                            "| net_sales_curr=",
-                            round(r.get("net_sales_curr", 0.0) or 0.0, 2),
-                            "| urgency_score=",
-                            round(r.get("urgency_score", 0.0) or 0.0, 2),
-                        )
+                       
 
-                    sku_tables = {"all_skus": rows_sorted}
+                        sku_tables = {"all_skus": rows_sorted}
 
             advisor_payload = {
                 "meta": {
@@ -5613,7 +5350,7 @@ Do not add any extra keys. Do not wrap in Markdown.
             return BusinessAdvisor._render_portfolio_response(obj)
 
         except Exception as e:
-            print("[DEBUG][advisor] portfolio JSON advisor failed:", e)
+          
             return ["I wasn’t able to generate recommendations right now. Please try again."]
 
 
@@ -5766,7 +5503,7 @@ def wants_advice(query: str, plan: dict | None = None) -> bool:
         )
         j = json.loads(out.choices[0].message.content or "{}")
         res = bool(j.get("advice", False))
-        print(f"[DEBUG][advisor_gate] wants_advice={res}")
+       
         return res
     except Exception as e:
         print("[DEBUG][advisor_gate] failed:", e)

@@ -138,9 +138,9 @@ def debug_money_sums(df, label="(slice)", fields=None, per="none", top=10):
     Prints raw summed money columns for the current slice, optionally by SKU/product.
     per: "none" | "sku" | "product"
     """
-    import pandas as pd
+   
     fields = fields or MONETARY_FIELDS
-    print(f"\n[DEBUG][money] {label} rows={len(df)}")
+ 
 
     # whole-slice totals (raw only)
     for col in fields:
@@ -148,14 +148,14 @@ def debug_money_sums(df, label="(slice)", fields=None, per="none", top=10):
             s = _num_series(df[col])
             raw = float(s.sum())
             nz = int((s != 0).sum())
-            print(f"   {col:28s} raw={raw:>14,.2f}  nz={nz}")
+           
 
     if per not in {"sku","product"}:
         return
 
     key = "sku" if per == "sku" else "product_name"
     if key not in df.columns:
-        print(f"   [DEBUG][money] no '{key}' column; skip per-{per} breakdown")
+        
         return
 
     g = df[[key] + [c for c in fields if c in df.columns]].copy()
@@ -170,14 +170,14 @@ def debug_money_sums(df, label="(slice)", fields=None, per="none", top=10):
     if order_col:
         agg = agg.sort_values(order_col, ascending=False)
 
-    print(f"   [top {top} per {key}]")
+   
     cols_to_show = [key] + [c for c in [
         "product_sales","selling_fees","fba_fees","other_transaction_fees",
         "platform_fees","advertising_cost",
         "promotional_rebates","postage_credits","shipping_credits",
         "product_sales_tax","marketplace_facilitator_tax","other"
     ] if c in agg.columns]
-    print(agg.head(top)[cols_to_show].to_string(index=False))
+    
 ######################################################################################################################################################################
 def _decode_jwt_or_401(auth_header: Optional[str]) -> Tuple[Optional[int], Optional[str]]:
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -1030,8 +1030,7 @@ class FilterParser:
         q = " ".join(str(query or "").split())
         ql = q.lower()
 
-        print("\n[DEBUG] guess_product_phrase() called with:", repr(query))
-
+        
         # ---------- small helper to strip trailing trend/aux words ----------
         def _clean_trailing_trend_words(s: str) -> str:
             if not s:
@@ -1049,10 +1048,10 @@ class FilterParser:
             """Remove leading metric words dynamically using FormulaEngine terms."""
             toks = cand.split()
             while toks and toks[0].lower() in METRIC_TERMS:
-                print(f"[DEBUG] stripping metric prefix:", toks[0])
+                
                 toks.pop(0)
                 if toks and toks[0].lower() in {"of", "for", "in"}:
-                    print(f"[DEBUG] stripping connector after metric:", toks[0])
+                    
                     toks.pop(0)
             return " ".join(toks).strip()
 
@@ -1084,12 +1083,12 @@ class FilterParser:
 
         def _clean_candidate(label: str, frag: str) -> Optional[str]:
             if not frag:
-                print(f"[DEBUG] {label} → empty fragment")
+                
                 return None
             orig = frag
             frag = frag.strip(" .,-:/\\|()[]{}'\"")
             if not frag:
-                print(f"[DEBUG] {label} → empty after strip; was:", repr(orig))
+                
                 return None
 
             JOINERS = {"to","vs","v","versus","and","or","in","on","for",
@@ -1127,7 +1126,7 @@ class FilterParser:
             cand = re.sub(r"[-–—]\s*$", "", cand).strip()
             cand = _strip_metric_prefix(cand)
             cand = _clean_trailing_trend_words(cand)
-            print(f"[DEBUG] {label} → OK:", repr(cand))
+            
             return cand
 
         # ---------- explicit SKU ----------
@@ -1135,7 +1134,7 @@ class FilterParser:
         if m:
             cand = _clean_trailing_trend_words(m.group(1).strip())
             cand = _strip_metric_prefix(cand)
-            print("[DEBUG] MATCH branch=explicit_sku →", repr(cand))
+            
             return cand
 
         # ---------- bare SKU-like token ----------
@@ -1143,14 +1142,14 @@ class FilterParser:
         if m:
             cand = _clean_trailing_trend_words(m.group(1).strip())
             cand = _strip_metric_prefix(cand)
-            print("[DEBUG] MATCH branch=bare_sku →", repr(cand))
+            
             return cand
 
         # ---------- quoted names ----------
         for quoted in re.findall(r'"([^"]+)"', q):
             cand = _clean_candidate('quoted', quoted)
             if cand:
-                print("[DEBUG] MATCH branch=quoted →", repr(cand))
+                
                 return cand
 
         # ---------- days_product ----------
@@ -1158,7 +1157,7 @@ class FilterParser:
         if m:
             cand = _clean_candidate('days_product', m.group(1).strip())
             if cand:
-                print("[DEBUG] MATCH branch=days_product →", repr(cand))
+                
                 return cand
 
         # ---------- verb_sales ----------
@@ -1167,7 +1166,7 @@ class FilterParser:
             lead = re.sub(r"^how many days\s+", "", m.group(1).strip())
             cand = _clean_candidate('verb_sales', lead)
             if cand:
-                print("[DEBUG] MATCH branch=verb_sales →", repr(cand))
+                
                 return cand
 
         # ---------- in_phrase ----------
@@ -1183,7 +1182,7 @@ class FilterParser:
                 cand = _clean_candidate('in_phrase', raw)
                 if cand and (cand.lower() not in self.COUNTRY_WORDS) and (cand.lower() not in self.MONTH_WORDS) \
                         and (not _is_year(cand.lower())) and (not _looks_like_time_phrase(cand)):
-                    print("[DEBUG] MATCH branch=in_phrase →", repr(cand))
+                    
                     return cand
                 else:
                     print("[DEBUG] in_phrase candidate rejected:", repr(cand))
@@ -1200,16 +1199,14 @@ class FilterParser:
                 frag = re.split(r"\s+(?:of|for|in)\s+", m.group(1).strip(" ."))[0]
                 first_tok = re.split(r"\s+", frag.strip(), 1)[0].strip(" .,-:/\\|()[]{}'\"").lower()
                 if first_tok in METRIC_TERMS:
-                    print(f"[DEBUG] of_for_{idx} rejected: starts with metric term:", first_tok)
+                    
                     continue
                 cand = _clean_candidate(f'of_for_{idx}', frag)
                 if cand and not _looks_like_time_phrase(cand):
-                    print(f"[DEBUG] MATCH branch=of_for_{idx} →", repr(cand))
+                    
                     return cand
                 else:
-                    print(f"[DEBUG] of_for_{idx} rejected (time/country/year/metric) cand=", repr(cand))
-
-        print("[DEBUG] No product phrase matched.")
+                    print(f"[DEBUG] of_for_{idx} rejected (time/country/year/metric) cand=", repr(cand))     
         return None
 
 
@@ -1309,10 +1306,10 @@ class QueryBuilder:
             key = f"eq_country_{len(params)}"
             params[key] = str(country)
             where.append(f"LOWER(country) = LOWER(:{key})")
-            print(f"[DEBUG] added country filter for global table: {country}")
+            
 
         # ---------- TIME LOGIC ----------
-        import datetime as dt
+
 
         def _month_clause(month_dicts: List[dict], params: Dict[str, Any]) -> str:
             if not month_dicts:
@@ -1383,18 +1380,18 @@ class QueryBuilder:
                 )
 
             where.append(f"({dt_expr} >= :dt_start AND {dt_expr} < :dt_end)")
-            print(f"[DEBUG] added explicit_day filter: {y}-{mo}-{d}")
+            
 
         # B. Month(s)
         elif time_entities.get("months"):
             m_clause = _month_clause(time_entities["months"], params)
             if m_clause:
                 where.append(m_clause)
-                print(f"[DEBUG] added month filter(s): {time_entities['months']}")
+                
             y_clause = _year_clause(time_entities.get("years", []), params)
             if y_clause:
                 where.append(y_clause)
-                print(f"[DEBUG] added year filter(s): {time_entities['years']}")
+                
 
         # C. Explicit date_range
         elif "date_range" in time_entities:
@@ -1442,14 +1439,14 @@ class QueryBuilder:
                 )
 
             where.append(f"({dt_expr} >= :dt_start AND {dt_expr} < :dt_end)")
-            print(f"[DEBUG] added date_range filter: {start_dt} → {end_dt}")
+            
 
         # D. Year(s) only
         elif time_entities.get("years"):
             y_clause = _year_clause(time_entities.get("years", []), params)
             if y_clause:
                 where.append(y_clause)
-                print(f"[DEBUG] added year filter(s): {time_entities['years']}")
+                
 
         # ---------- END TIME LOGIC ----------
 
@@ -1458,38 +1455,38 @@ class QueryBuilder:
         # ---------- TEXT_LIKE filters ----------
         for col, txt in filters.get("text_like", []):
             if col == "product":
-                print(f"[DEBUG] remapping filter column 'product' → 'product_name'")
+                
                 col = "product_name"
             key = f"tl_{col}_{len(params)}"
             params[key] = f"%{str(txt)}%"
             where.append(f"LOWER({col}) LIKE LOWER(:{key})")
-            print(f"[DEBUG] added TEXT_LIKE filter: {col} LIKE %{txt}%")
+            
 
         # ---------- EQUALS filters ----------
         for col, val in filters.get("equals", []):
             if col == "product":
                 col = "product_name"
-                print(f"[DEBUG] remapping filter column 'product' → 'product_name'")
+                
 
             if is_per_country and col == "country":
-                print(f"[DEBUG] skipping equals filter on country (already handled): {val}")
+                
                 continue
 
             key = f"eq_{col}_{len(params)}"
             if col in TEXT_COLS:
                 params[key] = str(val)
                 where.append(f"LOWER({col}) = LOWER(:{key})")
-                print(f"[DEBUG] added TEXT equals filter: {col} = {val}")
+             
             else:
                 params[key] = val
                 where.append(f"{col} = :{key}")
-                print(f"[DEBUG] added NUMERIC equals filter: {col} = {val}")
+            
 
         # ---------- IN_LIST filters ----------
         for col, vals in filters.get("in_list", []):
             if col == "product":
                 col = "product_name"
-                print(f"[DEBUG] remapping filter column 'product' → 'product_name'")
+                
             if not vals or (is_per_country and col == "country"):
                 continue
             keys = []
@@ -1499,32 +1496,32 @@ class QueryBuilder:
                 keys.append(f":{k}")
             if col in TEXT_COLS:
                 where.append(f"LOWER({col}) IN ({', '.join(keys)})")
-                print(f"[DEBUG] added TEXT IN_LIST filter: {col} IN {vals}")
+      
             else:
                 where.append(f"{col} IN ({', '.join(keys)})")
-                print(f"[DEBUG] added NUMERIC IN_LIST filter: {col} IN {vals}")
+
 
         # ---------- NUMERIC filters ----------
         for col, op, val in filters.get("numeric", []):
             if col == "product":
                 col = "product_name"
-                print(f"[DEBUG] remapping filter column 'product' → 'product_name'")
+              
             key = f"num_{col}_{len(params)}"
             params[key] = float(val)
             where.append(f"CAST({col} AS DOUBLE PRECISION) {op} :{key}")
-            print(f"[DEBUG] added NUMERIC filter: {col} {op} {val}")
+      
 
         # ---------- BETWEEN filters ----------
         for col, lo, hi in filters.get("between", []):
             if col == "product":
                 col = "product_name"
-                print(f"[DEBUG] remapping filter column 'product' → 'product_name'")
+                
             key_lo = f"btw_lo_{col}_{len(params)}"
             key_hi = f"btw_hi_{col}_{len(params)+1}"
             params[key_lo] = float(lo)
             params[key_hi] = float(hi)
             where.append(f"CAST({col} AS DOUBLE PRECISION) BETWEEN :{key_lo} AND :{key_hi}")
-            print(f"[DEBUG] added BETWEEN filter: {col} BETWEEN {lo} AND {hi}")
+          
 
         where_clause = f"WHERE {' AND '.join(where)}" if where else ""
 
@@ -1533,10 +1530,10 @@ class QueryBuilder:
         raw_lower = " ".join(intents.keys())
         if "sorting" in intents or any(w in raw_lower for w in ["recent", "latest", "new"]):
             order_clause = "ORDER BY date_time DESC"
-            print(f"[DEBUG] added ORDER BY date_time DESC (recent/latest)")
+            
         elif "product_sales" in baseline:
             order_clause = "ORDER BY product_sales DESC"
-            print(f"[DEBUG] added ORDER BY product_sales DESC (default)")
+            
 
         limit = max(1, min(int(limit), 100000))
 
@@ -1548,9 +1545,7 @@ class QueryBuilder:
             LIMIT {limit}
         """.strip()
 
-        print("[DEBUG] Final SQL query:\n", sql)
-        print("[DEBUG] Params:", params)
-
+      
         return sql, params, table
 
 
@@ -1561,7 +1556,7 @@ def resolve_family_skus(user_id: int, country: Optional[str], family_token: str,
     Avoids substring pollution like 'ClassicPro' unless you intend it.
     """
     if not engine or not family_token or not str(family_token).strip():
-        print("[DEBUG] resolve_family_skus → skipped (empty engine or token)")
+ 
         return []
 
     token = str(family_token).strip()
@@ -1582,7 +1577,7 @@ def resolve_family_skus(user_id: int, country: Optional[str], family_token: str,
         with engine.connect() as conn:
             rows = conn.execute(sql, {"tok": token_escaped, "lim": int(limit)}).fetchall()
         skus = [(r[0] or "").strip() for r in rows if (r[0] or "").strip()]
-        print(f"[DEBUG] resolve_family_skus → token={token}, matched={len(skus)}")
+
         return skus
     except Exception:
         logging.exception("resolve_family_skus failed")
@@ -1887,8 +1882,7 @@ def resolve_product_by_sku(engine, user_id: int, country: Optional[str], sku: st
         return None
 
 
-# def _explicit_exclusivity_phrase(s: str) -> bool:
-#     return bool(re.search(r"\b(only|just|exactly)\b", (s or "").lower()))
+
 
 def apply_reply_to_pending(user_id: int, reply_text: str, engine) -> Optional[dict]:
     """
@@ -1969,7 +1963,7 @@ def apply_reply_to_pending(user_id: int, reply_text: str, engine) -> Optional[di
                                        if str(f.get("field", "")).lower() != "sku"]
                     plan["filters"].append({"field": "sku", "op": "=", "value": user_choice})
                     plan["product"] = pn  # friendly label for UI
-                    print(f"[DEBUG][pending] product slot: accepted exact SKU {user_choice} → product={pn}")
+   
                     continue
                 else:
                     logging.warning(f"SKU lookup failed for '{user_choice}' (user_id={user_id}, country={eff_country})")
@@ -2007,7 +2001,7 @@ def apply_reply_to_pending(user_id: int, reply_text: str, engine) -> Optional[di
                 # only force exact equality when user says only/just/exactly
                 # plan["force_product_only"] = _explicit_exclusivity_phrase(user_choice)
                 plan["force_product_only"] =(user_choice)
-                print(f"[DEBUG][pending] product slot: matched product '{match}', force_product_only={plan.get('force_product_only')}")
+        
             else:
                 still_missing.append("product")
 
@@ -2028,7 +2022,7 @@ def apply_reply_to_pending(user_id: int, reply_text: str, engine) -> Optional[di
                 plan["filters"].append({"field": "product_name", "op": "=", "value": fam_label})
                 plan["force_product_only"] =(reply_raw) or True
                 # plan["force_product_only"] = _explicit_exclusivity_phrase(reply_raw) or True
-                print(f"[DEBUG][pending] sku_choice: user repeated product '{fam_label}' → force product-only, added product_name='=' filter")
+
                 continue
 
             # A) "all variants" → resolve family SKUs and use IN
@@ -2039,7 +2033,7 @@ def apply_reply_to_pending(user_id: int, reply_text: str, engine) -> Optional[di
                     skus = []
                 if skus:
                     plan["filters"].append({"field": "sku", "op": "in", "value": skus})
-                    print(f"[DEBUG][pending] sku_choice: all variants → {len(skus)} SKUs")
+
                 else:
                     still_missing.append("sku_choice")
                 continue
@@ -2050,7 +2044,7 @@ def apply_reply_to_pending(user_id: int, reply_text: str, engine) -> Optional[di
                 if pn:
                     plan["filters"].append({"field": "sku", "op": "=", "value": reply_raw})
                     plan["product"] = pn
-                    print(f"[DEBUG][pending] sku_choice: exact SKU chosen {reply_raw} (product={pn})")
+
                 else:
                     still_missing.append("sku_choice")
                 continue
@@ -2070,17 +2064,17 @@ def apply_reply_to_pending(user_id: int, reply_text: str, engine) -> Optional[di
                 if len(uniq) == 1:
                     plan["filters"].append({"field": "sku", "op": "=", "value": uniq[0]})
                     plan["product"] = product_match
-                    print(f"[DEBUG][pending] sku_choice: single SKU for '{product_match}' → {uniq[0]}")
+   
                 elif len(uniq) > 1:
                     plan["filters"].append({"field": "sku", "op": "in", "value": uniq})
                     plan["product"] = product_match
-                    print(f"[DEBUG][pending] sku_choice: multiple SKUs for '{product_match}' → {len(uniq)}")
+
                 else:
                     # Fallback: force product-only if we couldn't resolve SKUs
                     plan["filters"].append({"field": "product_name", "op": "=", "value": product_match})
                     plan["force_product_only"] = True
                     plan["product"] = product_match
-                    print(f"[DEBUG][pending] sku_choice: fallback → product_name '=' '{product_match}'")
+
             else:
                 still_missing.append("sku_choice")
 
@@ -2204,14 +2198,14 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
         plan["metric"] = metric_name
         plan["needs_clarification"] = False
         plan["clarification_message"] = None
-        print(f"[DEBUG][metric-override] Forced metric to '{metric_name}' from raw query phrase.")
+   
 
         # If user said "mix of <product>" and planner didn't capture it, extract it.
         if not plan.get("product"):
             m_prod = re.search(r"\b(?:of|for)\s+([A-Za-z0-9\+\-_/ ][^,;]*)", ql)
             if m_prod:
                 plan["product"] = m_prod.group(1).strip()
-                print(f"[DEBUG][metric-override] Captured target_product from query → '{plan['product']}'")
+               
 
     # Default to sales for rank/compare
     if op in {"rank", "compare"} and not metric_name:
@@ -2219,7 +2213,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
         metric_name = "sales"
         plan["needs_clarification"] = False
         plan["clarification_message"] = None
-        print("[DEBUG][metric-fix] Defaulted missing metric to 'sales'")
+   
 
     if not metric_name or metric_name not in fe.registry:
         metric_name = fe.resolve_name(query) or "sales"
@@ -2236,7 +2230,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
             plan["metric"] = candidate
             plan["product"] = target
             plan["force_product_only"] = False
-            print(f"[DEBUG][mix-rescue] Upgraded metric to '{candidate}', target_product='{target}' from product='{prod_raw}'")
+
 
     # --- Grouping inference --------------------------------------------------
     try:
@@ -2268,8 +2262,8 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
     if is_mix_metric:
         # If planner accidentally sent group_by=product or sku, clear it.
         if plan.get("group_by"):
-            print(f"[DEBUG][mix-guard] Clearing planner group_by='{plan.get('group_by')}' for {metric_name}")
-        plan["group_by"] = None
+            plan["group_by"] = None
+        
         # Only allow breakdown if explicitly forced by caller
         want_breakdown = bool(plan.get("force_breakdown") is True)
     else:
@@ -2310,20 +2304,20 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
             clamp_try = clamp_relative_time_to_available(int(user_id), country, query)
             if clamp_try and clamp_try.get("start") and clamp_try.get("end"):
                 plan["time_range"] = clamp_try
-                print(f"[DEBUG][time-fallback] plan.time_range filled via clamp → {plan['time_range']}")
+                
         except Exception as e:
             print(f"[DEBUG][time-fallback] clamp failed: {e}")
 
     # 🔄 Recompute coerced to stay in sync with possibly updated plan.time_range
     coerced = coerced or _coerce_time_range(plan.get("time_range"), user_id=int(user_id), country=country)
-    print(f"[DEBUG][time] NL parsed: {nl_time}, coerced: {coerced}, final plan.time_range: {plan.get('time_range')}")
+    
     if isinstance(plan.get("time_range"), str):
         if isinstance(coerced, dict):
             plan["time_range"] = coerced
-            print(f"[DEBUG][time] plan.time_range normalized → {plan['time_range']}")
+            
         else:
             plan["time_range"] = None
-            print(f"[DEBUG][time] plan.time_range cleared (could not coerce)")
+            
 
     def _is_full_month_span(rr: Optional[dict]) -> bool:
         if not (isinstance(rr, dict) and rr.get("start") and rr.get("end")):
@@ -2397,8 +2391,6 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
     elif re.search(r"\b(yoy|y\/y|year\s*on\s*year)\b", ql_norm):
         has_explicit_compare = True
 
-    # 🚦 Only apply auto-compare when user *explicitly* asked for comparison
-    #    This prevents "last 3 months" from turning into unwanted YoY compare.
     if (
         has_explicit_compare
         and metric_name not in {"sales_mix", "profit_mix"}
@@ -2443,8 +2435,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
         time_entities["explicit_day"] = nl_time["explicit_day"]
 
     # 1.5️⃣ FULL-YEAR OVERRIDE:
-    # If the user basically said "in 2025" (years only) and the NL parser
-    # produced a full-year date_range, use that and ignore the coerced span.
+ 
     elif (
         nl_time.get("years")
         and not nl_time.get("months")
@@ -2494,11 +2485,11 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
         time_entities["years"] = nl_time["years"]
 
     # Debug: see what exact time entities are sent to the SQL builder
-    print(f"[DEBUG][time_entities] {time_entities}")
+
 
     # >>> Auto-extend single-month spans for TREND using clamp_relative_time_to_available
     if (op == "trend") and (not compare_override):
-        print(f"[DEBUG][auto-extend] incoming plan.time_range={plan.get('time_range')}, coerced={coerced}")
+     
 
         anchor = None
         candidate = coerced or plan.get("time_range")
@@ -2509,9 +2500,9 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
                 anchor = candidate
 
         if anchor:
-            print(f"[DEBUG][auto-extend] detected single full-month anchor={anchor}")
+            
             widened = clamp_relative_time_to_available(int(user_id), country, "last 3 months")
-            print(f"[DEBUG][auto-extend] widened span from helper={widened}")
+            
             if widened:
                 coerced = widened
                 plan["time_range"] = widened
@@ -2521,7 +2512,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
                         dt.datetime.fromisoformat(widened["end"]).replace(tzinfo=dt.timezone.utc) + dt.timedelta(days=1),
                     )
                 }
-                print(f"[DEBUG][auto-extend] plan.time_range updated to {plan['time_range']}")
+                
     # <<< End auto-extend
 
     is_mix_metric = metric_name in {"sales_mix", "profit_mix"}
@@ -2550,7 +2541,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
         if plan.get("product") and not has_sku_clause:
             # days-to-reach queries me bhi exact product hi lo
             filter_equal.append(("product_name", plan["product"]))
-        print("[DEBUG] days-to-reach intent → ignoring planner numeric/text filters for SQL stage")
+        
     else:
         # ✅ DEFAULT: product ke liye ALWAYS exact match (no family / variants)
         if plan.get("product") and not has_sku_clause and (not is_mix_metric or op in {"compare", "rank"}):
@@ -2561,7 +2552,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
 
             # Ab sirf exact match wala filter lagao
             filter_equal.append(("product_name", plan["product"]))
-            print(f"[DEBUG] product filter (EQUALS) applied for '{plan['product']}' (exact product only)")
+            
 
         # pass-through any planner-provided filters
         for f in (plan.get("filters") or []):
@@ -2573,11 +2564,11 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
 
             # 🛑 Agar plan.product set hai to planner ke product / product_name filters ko ignore karo
             if plan.get("product") and fld in {"product", "product_name"}:
-                print(f"[DEBUG] ignoring planner product filter ({fld} {opf} {val}) because plan.product='{plan['product']}' is set")
+                
                 continue
 
             if fld not in (REAL_TEXT_COLS | REAL_NUM_COLS):
-                print(f"[DEBUG] skipping planner filter on non-column '{fld}' (op={opf}, val={val})")
+                
                 continue
 
             if fld in REAL_NUM_COLS and opf in {">", ">=", "<", "<=", "=", "eq"}:
@@ -2597,7 +2588,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
     # ---------- PATCH D ----------
     try:
         if has_sku_clause:
-            print("[DEBUG] PATCH D: SKU clause already present → skipping family disambiguation")
+            print(f"[DEBUG] PATCH D: has explicit SKU clause → skip SKU disambiguation")
         else:
             fam = (plan.get("product") or "").strip()
             force_product_only = bool(plan.get("force_product_only"))
@@ -2605,7 +2596,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
             if fam and not is_mix_metric:
                 if force_product_only:
                     # Explicit: sirf is product ko hi lo, family logic bilkul mat chalao
-                    print(f"[DEBUG] PATCH D: force_product_only=True for '{fam}' → skip SKU disambiguation")
+                    print(f"[DEBUG] PATCH D: force_product_only=True for '{fam}' → skipping family-SKU logic")
                 else:
                     # ✅ Family-SKU logic sirf tab jab user khud bole
                     # "all variants" / "full range" / "family total" / etc.
@@ -2617,7 +2608,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
 
                     if not wants_all_intent:
                         # Normal case: "classic" → sirf product_name filter, no family merge/clarify
-                        print(f"[DEBUG] PATCH D: no 'all variants' intent for '{fam}' → keeping product_name filter only")
+                        print(f"[DEBUG] PATCH D: no all-variants intent detected for '{fam}' → skipping family-SKU logic")
                     else:
                         # User ne explicitly bola hai ke saare variants chahiye
                         skus_for_family = resolve_family_skus(int(user_id), country, fam, limit=500)
@@ -2628,13 +2619,13 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
                             filter_like  = [(c, v) for (c, v) in filter_like  if c.lower() != "product_name"]
                             filter_equal = [(c, v) for (c, v) in filter_equal if c.lower() != "product_name"]
                             filter_equal.append(("sku", only))
-                            print(f"[DEBUG] PATCH D: single-SKU match → {only}")
+                            
                         else:
                             # Explicit all-variants intent → IN list, bina clarification ke
                             filter_like  = [(c, v) for (c, v) in filter_like  if c.lower() != "product_name"]
                             filter_equal = [(c, v) for (c, v) in filter_equal if c.lower() != "product_name"]
                             filter_in_list.append(("sku", skus_for_family))
-                            print(f"[DEBUG] PATCH D: Using SKU IN (…) → {len(skus_for_family)} SKUs (explicit all variants)")
+                            
     except Exception as _e:
         print("[DEBUG][WARN] PATCH D failed:", _e)
 
@@ -2661,7 +2652,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
         filter_equal   = [(c, v) for (c, v) in filter_equal   if c.lower() not in ("sku","product_name")]
         filter_like    = [(c, v) for (c, v) in filter_like    if c.lower() not in ("sku","product_name")]
         filter_in_list = [(c, v) for (c, v) in filter_in_list if c.lower() not in ("sku","product_name")]
-        print(f"[DEBUG][mix] stripped SKU/product filters for {metric_name} (denominator=all products)")
+       
 
     # Build SQL
     sql, params, table = self.builder.build(
@@ -2693,12 +2684,12 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
     try:
         product_for_msg = plan.get("product")
         special = SpecialCalculations.try_days_to_reach_target(query, df, product_label=product_for_msg)
-        print(f"[DEBUG] days_to_reach_target returned: {special!r}")
+        
         if special:
             return pd.DataFrame({"_":[special]}), "sql_special"
 
         special_daily = SpecialCalculations.try_days_reaching_sales_daily_threshold(query, df, product_label=product_for_msg)
-        print(f"[DEBUG] days_reaching_daily_threshold returned: {special_daily!r}")
+        
         if special_daily:
             return pd.DataFrame({"_":[special_daily]}), "sql_special"
     except Exception as e:
@@ -2722,7 +2713,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
             ctx["target_sku"] = ctx_target_sku
 
     evaluator = fe.registry.get(metric_name)
-    print(f"[TRACE][FE] evaluator picked → metric='{metric_name}', func='{getattr(evaluator, '__name__', type(evaluator))}'")
+    
     try:
         if metric_name == "sales":
             print(f"[TRACE][FE] evaluator is fe._sales? {evaluator is fe._sales}")
@@ -2740,7 +2731,6 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
 
     try:
         payload = evaluator(df, ctx)
-        print(f"[TRACE][FE] evaluator returned: keys={list(payload.keys()) if isinstance(payload, dict) else type(payload)} result={payload.get('result') if isinstance(payload, dict) else None}")
     except Exception as e:
         import traceback; traceback.print_exc()
         return pd.DataFrame({"_":[f"Compute error: {e}"]}), "sql_special"
@@ -2829,8 +2819,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
                     ctx_per["target_product"] = tp
                 if ctx_target_sku:
                     ctx_per["target_sku"] = ctx_target_sku
-                print(f"[DEBUG][ctx][compare] mix context → target_product={ctx_per.get('target_product')}, target_sku={ctx_per.get('target_sku')}")
-
+                
             payload_p = ev(part, ctx_per)
             out_rows.append({
                 "scope": "overall",
@@ -2972,7 +2961,6 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
             available_months = len(set(pd.to_datetime(tdf["__period__"], errors="coerce").dt.month))
             if available_months < 12:
                 note = f"Note: Only data for {available_months} month{'s' if available_months > 1 else ''} available."
-                print(f"[DEBUG][rank-mix] {note}")
                 ranked["note"] = note
 
             return ranked, "sql_formula"
@@ -3099,11 +3087,7 @@ def exec_plan_via_formula(self, *, plan: dict, query: str, user_id: str, country
                     ctx_per["target_product"] = tp
                 if ctx_target_sku:
                     ctx_per["target_sku"] = ctx_target_sku
-                print(
-                    f"[DEBUG][ctx][trend] mix context → "
-                    f"target_product={ctx_per.get('target_product')}, "
-                    f"target_sku={ctx_per.get('target_sku')}"
-                )
+                
 
             payload_primary = ev_primary(part, ctx_per)
             row[PRIMARY_OUT_NAME] = float(payload_primary.get("result") or 0.0)
@@ -3336,7 +3320,7 @@ def _auto_fill_defaults(plan, query, user_id, country_override, lc):
         )
         plan["country"] = ctry
         filled = True
-        print(f"[DEFAULT] country → {ctry}")
+       
 
     # --- 2️⃣ Time range ---
     try:
@@ -3359,7 +3343,7 @@ def _auto_fill_defaults(plan, query, user_id, country_override, lc):
         if tr:
             plan["time_range"] = tr
             filled = True
-            print(f"[DEFAULT] time_range ({window}) → {tr}")
+            
 
     # --- 3️⃣ top_k ---
     if (
@@ -3368,7 +3352,7 @@ def _auto_fill_defaults(plan, query, user_id, country_override, lc):
     ):
         plan["top_k"] = 5
         filled = True
-        print("[DEFAULT] top_k → 5")
+      
 
     # --- 4️⃣ product auto-pick if only one candidate ---
     try:
@@ -3381,7 +3365,7 @@ def _auto_fill_defaults(plan, query, user_id, country_override, lc):
             if len(cands) == 1 or plan["product"].strip() in names:
                 plan["product"] = names[0] if names else plan["product"]
                 filled = True
-                print(f"[DEFAULT] product resolved → {plan['product']}")
+                
     except Exception as e:
         print("[DEBUG][defaults] product auto-pick failed:", e)
 
@@ -3503,15 +3487,12 @@ class QueryEngine:
 
     def process(self, *, query: str, user_id: str, country_override: Optional[str] = None) -> Tuple[pd.DataFrame, str]:
         t0 = time.perf_counter()
-        print("\n" + "="*80)
-        print("[DEBUG] process() called")
-        print("[DEBUG] query:", repr(query))
-        print("[DEBUG] user_id:", user_id, "country_override:", country_override)
+        
 
         # --- Early small-talk / capability fast-path (NO retrieval) ---------------
         if is_smalltalk(query):
             msg = "Hey! 👋 I can help you analyze Amazon sales, fees, taxes, profit, and trends. What would you like to explore?"
-            print("[DEBUG] Small-talk detected → short-circuit without retrieval.")
+
             return pd.DataFrame({"_": [msg]}), "sql_special"
 
         if is_capability(query):
@@ -3526,67 +3507,67 @@ class QueryEngine:
                 "I won’t scan your database until you ask for specific info. "
                 "Tell me the metric + time range + (optional) country/product."
             )
-            print("[DEBUG] Capability question detected → short-circuit without retrieval.")
+          
             return pd.DataFrame({"_": [msg]}), "sql_special"
 
         # Optional: trivial-input guard to avoid accidental heavy scans -------------
         if len((query or "").split()) < 3:
             hint = "Tell me what to analyze (metric + time + optional country/product)."
-            print("[DEBUG] Trivial input (<3 tokens) → short-circuit hint.")
+  
             return pd.DataFrame({"_": [hint]}), "sql_special"
 
         # --- Parse phase -----------------------------------------------------------
         try:
             intent = self.filters.extract_intent(query)
-            print("[DEBUG] Extracted intent:", intent)
+
 
             time_entities = self.filters.parse_time(query)
-            print("[DEBUG] Time entities:", time_entities)
+
 
             cols = self.filters.parse_columns(query)
-            print("[DEBUG] Selected columns:", cols)
+
 
             filter_entities = self.filters.parse_filters(query)
-            print("[DEBUG] Filters parsed (pre-product):", filter_entities)
+
         except Exception as e:
             print("[DEBUG][ERROR] Parsing phase failed:", repr(e))
             raise
 
         ql = query.lower()
         fee_intent = any(x in ql for x in ["fee","fees","charge","charges"])
-        print("[DEBUG] fee_intent:", fee_intent)
+
 
         # --- Country handling ------------------------------------------------------
         country = country_override
         for k, v in filter_entities.get("equals", []):
             if k == "country":
                 country = v
-        print("[DEBUG] Effective country:", country)
+
 
         # --- Product resolution ----------------------------------------------------
         try:
             has_explicit_product = any(k == "product_name" for k, _ in filter_entities.get("equals", []))
-            print("[DEBUG] has_explicit_product:", has_explicit_product)
+
 
             guessed_phrase = None if has_explicit_product else self.filters.guess_product_phrase(query)
-            print("[DEBUG] guessed_phrase:", repr(guessed_phrase))
+
 
             resolved_exact = None
             if guessed_phrase:
                 t_resolve = time.perf_counter()
                 resolved_exact = self._resolve_product_name(user_id=user_id, country=country, phrase=guessed_phrase)
-                print("[DEBUG] _resolve_product_name took: %.3f ms" % ((time.perf_counter()-t_resolve)*1000.0))
-                print("[DEBUG] resolved_exact:", repr(resolved_exact))
+   
+
 
                 if resolved_exact:
                     filter_entities.setdefault("equals", []).append(("product_name", resolved_exact))
                     has_explicit_product = True
-                    print("[DEBUG] Added equals filter product_name:", repr(resolved_exact))
+
                 else:
                     filter_entities.setdefault("text_like", []).append(("product_name", guessed_phrase))
-                    print("[DEBUG] Added text_like filter product_name contains:", repr(guessed_phrase))
 
-            print("[DEBUG] Filters parsed (post-product):", filter_entities)
+
+
         except Exception as e:
             print("[DEBUG][ERROR] Product resolution failed:", repr(e))
             # continue; we can still try to answer without product narrowing
@@ -3613,7 +3594,7 @@ class QueryEngine:
                     ]
                 # Add strict SKU list
                 filter_entities.setdefault("in_list", []).append(("sku", skus_for_family))
-                print(f"[DEBUG] Using SKU IN (...) for family '{guessed_phrase}': {len(skus_for_family)} SKUs")
+
         except Exception as _e:
             print("[DEBUG][WARN] SKU preference patch failed:", _e)
         # -----------------------------------------------------------------------------
@@ -3622,7 +3603,7 @@ class QueryEngine:
         breakdown_tokens = ["per product", "by product", "per sku", "by sku"]
         asked_for_breakdown = any(tok in ql for tok in breakdown_tokens)
         want_breakdown = bool(asked_for_breakdown or has_explicit_product or guessed_phrase)
-        print("[DEBUG] asked_for_breakdown:", asked_for_breakdown, "want_breakdown:", want_breakdown)
+
 
         # --- Fee-special path (EXISTS query) --------------------------------------
         if fee_intent and (resolved_exact or guessed_phrase):
@@ -3636,11 +3617,9 @@ class QueryEngine:
                     time_entities=time_entities,
                     ql=ql,
                 )
-                print("[DEBUG] _fee_rows_for_product() took: %.3f ms; rows: %s" %
-                    ((time.perf_counter()-t_fee)*1000.0, 0 if df_fee is None else len(df_fee)))
+
                 if df_fee is not None and not df_fee.empty:
-                    print("[DEBUG] Returning fee rows (sql).")
-                    print("[DEBUG] TOTAL elapsed: %.3f ms" % ((time.perf_counter()-t0)*1000.0))
+
                     return df_fee, "sql"
             except Exception as e:
                 print("[DEBUG][ERROR] _fee_rows_for_product failed:", repr(e))
@@ -3653,18 +3632,17 @@ class QueryEngine:
                 or has_explicit_product
                 or bool(guessed_phrase)
             )
-            print("[DEBUG] force_sql:", force_sql)
+
 
             if not force_sql:
-                print("[DEBUG] Trying vector search …")
+
                 t_vec = time.perf_counter()
                 results = self.vector_db.semantic_search(query, user_id, country, top_k=10)
                 dt_vec = (time.perf_counter()-t_vec)*1000.0
-                print("[DEBUG] vector search took: %.3f ms; results:" % dt_vec, 0 if results is None else len(results))
+
                 if results:
                     df = pd.DataFrame([r["data"] for r in results])
-                    print("[DEBUG] Returning vector result rows:", len(df))
-                    print("[DEBUG] TOTAL elapsed: %.3f ms" % ((time.perf_counter()-t0)*1000.0))
+
                     return df, "vector"
         except Exception as e:
             print("[DEBUG][ERROR] Vector flow failed:", repr(e))
@@ -3672,7 +3650,7 @@ class QueryEngine:
 
         # --- Build + run SQL -------------------------------------------------------
         try:
-            print("[DEBUG] Building SQL …")
+
             t_sql = time.perf_counter()
             sql, params, table = self.builder.build(
                 user_id=user_id,
@@ -3684,18 +3662,13 @@ class QueryEngine:
                 limit=100000,
             )
             dt_build = (time.perf_counter()-t_sql)*1000.0
-            print("[DEBUG] SQL build took: %.3f ms" % dt_build)
-            print("[DEBUG] Target table:", table)
-            print("[DEBUG] SQL:\n", sql)
-            print("[DEBUG] Params:", params)
 
-            print("[DEBUG] Executing SQL …")
             t_exec = time.perf_counter()
             with engine.connect() as conn:
                 rs = conn.execute(text(sql), params)
                 df = pd.DataFrame(rs.fetchall(), columns=rs.keys())
             dt_exec = (time.perf_counter()-t_exec)*1000.0
-            print("[DEBUG] SQL exec took: %.3f ms; rows:" % dt_exec, len(df))
+    
         except Exception as e:
             print("[DEBUG][ERROR] SQL phase failed:", repr(e))
             raise
@@ -3703,16 +3676,14 @@ class QueryEngine:
         # --- Special calculations --------------------------------------------------
         try:
             special = SpecialCalculations.try_days_to_reach_target(query, df, product_label=resolved_exact or guessed_phrase)
-            print(f"[DEBUG] days_to_reach_target returned: {special!r}") 
+ 
             if special:
-                print("[DEBUG] Special (days_to_reach_target) matched:", special)
-                print("[DEBUG] TOTAL elapsed: %.3f ms" % ((time.perf_counter()-t0)*1000.0))
+ 
                 return pd.DataFrame({"_": [special]}), "sql_special"
 
             special_daily = SpecialCalculations.try_days_reaching_sales_daily_threshold(query, df, product_label=resolved_exact or guessed_phrase)
             if special_daily:
-                print("[DEBUG] Special (days_reaching_daily_threshold) matched:", special_daily)
-                print("[DEBUG] TOTAL elapsed: %.3f ms" % ((time.perf_counter()-t0)*1000.0))
+
                 return pd.DataFrame({"_": [special_daily]}), "sql_special"
         except Exception as e:
             print("[DEBUG][WARN] Special calculations failed:", repr(e))
@@ -3720,7 +3691,7 @@ class QueryEngine:
         # --- Formula evaluation ----------------------------------------------------
         try:
             formula_name = formulae.resolve_name(query)
-            print("[DEBUG] resolve_name(query) →", repr(formula_name))
+
 
             if formula_name:
                 ctx = {
@@ -3731,19 +3702,18 @@ class QueryEngine:
                     "intents": intent.get("intents", {}),
                     "want_breakdown": want_breakdown,
                 }
-                print("[DEBUG] Evaluating formula:", formula_name, "with ctx.want_breakdown:", want_breakdown)
+
 
                 evaluator = formulae.registry.get(formula_name)
                 if evaluator:
                     t_eval = time.perf_counter()
                     payload = evaluator(df, ctx)
                     dt_eval = (time.perf_counter()-t_eval)*1000.0
-                    print("[DEBUG] Formula evaluation took: %.3f ms" % dt_eval)
+
                     if payload:
                         table_df = payload.get("table_df")
                         if table_df is not None and not table_df.empty:
-                            print("[DEBUG] Returning sql_formula (table rows):", len(table_df))
-                            print("[DEBUG] TOTAL elapsed: %.3f ms" % ((time.perf_counter()-t0)*1000.0))
+
                             return table_df, "sql_formula"
                         elif payload.get("result") is not None:
                             pretty = pd.DataFrame([{
@@ -3751,8 +3721,7 @@ class QueryEngine:
                                 "result": payload["result"],
                                 "explanation": payload.get("explanation", "")
                             }])
-                            print("[DEBUG] Returning sql_formula (single-row result)")
-                            print("[DEBUG] TOTAL elapsed: %.3f ms" % ((time.perf_counter()-t0)*1000.0))
+
                             return pretty, "sql_formula"
                 else:
                     print("[DEBUG][WARN] No evaluator for formula:", formula_name)
@@ -3761,8 +3730,6 @@ class QueryEngine:
             # fall through to default return
 
         # --- Default return --------------------------------------------------------
-        print("[DEBUG] Returning raw SQL rows:", len(df))
-        print("[DEBUG] TOTAL elapsed: %.3f ms" % ((time.perf_counter()-t0)*1000.0))
         return df, "sql"
 
 
@@ -4048,7 +4015,7 @@ def chatbot():
                 "last_user_msg": user_msg,
                 "ts": time.time(),                                  # timestamp for TTL
             }
-            print(f"[DEBUG][followup] stashed context → {store[int(user_id)]}")
+
         except Exception as _e:
             print("[DEBUG][followup] failed to stash context:", _e)
 
@@ -4056,18 +4023,18 @@ def chatbot():
         if "success" not in payload:
             payload = {"success": True, **payload}
         safe_payload = _json_sanitize(payload)
-        print("[DEBUG][BE][OK Response]:", safe_payload)
+
         return Response(json.dumps(safe_payload, allow_nan=False), status=200, mimetype="application/json")
 
     def bad_request(msg: str):
         payload = {"success": False, "message": msg}
-        print("[DEBUG][BE][Bad Request]:", payload)
+
         return Response(json.dumps(payload, allow_nan=False), status=400, mimetype="application/json")
 
     def _recover_empty_result(df, mode, plan, query_text):
         """Try broader interpretations before giving up; returns (df, mode, plan) possibly updated."""
         Q = query_text
-        print("[DEBUG][recover] Empty result → starting recovery attempts")
+
 
         def _exec_retry(p: dict, tag: str):
             try:
@@ -4075,7 +4042,7 @@ def chatbot():
                     plan=p, query=Q, user_id=str(user_id), country_override=country_override
                 )
                 n = 0 if _df is None else len(_df)
-                print(f"[DEBUG][recover] {tag}: rows={n} mode={_mode}")
+
                 return _df, _mode
             except Exception as e:
                 print(f"[DEBUG][recover] {tag} failed:", e)
@@ -4099,7 +4066,7 @@ def chatbot():
                 plan["product"] = None
                 if not plan.get("group_by"):
                     plan["group_by"] = "product"
-                print("[DEBUG][recover] dropped literal 'all products' filter; group_by=product")
+
         except Exception:
             pass
 
@@ -4288,7 +4255,7 @@ def chatbot():
                                        if str(f.get("field","")).lower() not in {"sku","product","product_name"}]
                     if not plan.get("group_by"):
                         plan["group_by"] = "product"
-                    print("[DEBUG] pending: 'all products' → cleared product/SKU filters; group_by=product")
+             
             except Exception as _e:
                 print("[DEBUG][WARN] pending 'all products' normalization failed:", _e)
 
@@ -4398,7 +4365,7 @@ def chatbot():
             if mode == "sql_formula":
                 table_records = df_to_records_safe(df)
                 final_records = _finalize_records(plan, table_records)
-                print(f"[DEBUG] wants_advice(pending)={wants_advice(orig_q, plan)}")
+ 
 
                 if wants_advice(orig_q, plan):
                     # --------- Build proper df_primary for BusinessAdvisor (PENDING branch) ----------
@@ -4506,7 +4473,7 @@ def chatbot():
 
                     except Exception as e:
                         # If anything goes wrong, fall back to plain sql_formula narrative
-                        print("[DEBUG][advisor-pending] failed, falling back to sql_formula narrative:", e)
+          
                         reply = generate_openai_answer(
                             user_query=orig_q,
                             mode="sql_formula",
@@ -4660,8 +4627,6 @@ def chatbot():
 
             new_skus: list[str] = [r[0] for r in rows if first_map.get((r[1] or "").strip()) == target_ym]
 
-            print(f"[DEBUG][new-products] month={year_num}-{month_num:02d} country={eff_country} "
-                  f"candidates={len(rows)} new={len(new_skus)}")
 
             if new_skus:
                 last_day = calendar.monthrange(year_num, month_num)[1]
@@ -4797,7 +4762,7 @@ def chatbot():
 
         if _ctx:
             query_for_plan = f"{query_for_plan} {_ctx}"
-            print("[DEBUG][planner] primed with", _ctx)
+ 
 
     # Normalize the primed query (this becomes our canonical query_norm)
     query_for_plan_norm = normalize_user_query(query_for_plan)
@@ -4813,10 +4778,10 @@ def chatbot():
 
     prefilled = advisor_preplan(query, user_id=user_id, country_override=country_override)
     plan = prefilled or plan_query(query_norm)
-    print("[DEBUG] Plan (raw):", plan)
+
 
     plan = _normalize_plan_for_sku_language(plan, query)
-    print("[DEBUG] Plan (normalized):", plan)
+
     lc_for_defaults = (globals().setdefault("LAST_CONTEXT", {}).get(int(user_id)) or {})
     plan, _filled = _auto_fill_defaults(plan, query, user_id, country_override, lc_for_defaults)
 
@@ -4840,7 +4805,7 @@ def chatbot():
             # If group_by was forced to SKU as a consequence, relax it
             if (plan.get("group_by") or "").lower() == "sku":
                 plan["group_by"] = "product" if (plan.get("operation") in {"rank","breakdown"}) else None
-            print("[DEBUG] SKU sanitize: removed invalid SKU token(s); relaxed group_by.")
+            
     except Exception as _e:
         print("[DEBUG] SKU sanitize failed:", _e)
 
@@ -4876,7 +4841,7 @@ def chatbot():
                 tr = clamp_relative_time_to_available(user_id, eff_country, "last 3 months")
                 if tr:
                     plan["time_range"] = {"start": tr["start"], "end": tr["end"]}
-                    print(f"[DEBUG][followup] clamp filled time_range → {plan['time_range']}")
+                   
         except Exception as e:
             print("[DEBUG][followup] clamp fill failed:", e)
 
@@ -4887,7 +4852,7 @@ def chatbot():
         r = route_intent(query_norm)
         intent = (r.get("intent") or "").lower()
         conf = float(r.get("confidence") or 0.0)
-        print(f"[DEBUG][router] intent={intent} conf={conf:.2f} reason={r.get('reason')}")
+   
     except Exception as e:
         print("[DEBUG][router] intent routing failed:", e)
         intent = intent or "analytics"
@@ -5085,7 +5050,7 @@ def chatbot():
             return ok({"mode": "sku_lookup", "response": reply, "message_id": msg_id})
 
         # 5) If NO candidates → DO NOT return. Fall through to planner/advisor.
-        print("[DEBUG][sku-lookup] router said sku_lookup but no candidates; falling through.")
+
 
     # ---------------------- Plan + slot-filling -------------------------------
     try:
@@ -5111,17 +5076,17 @@ def chatbot():
             _ctx   = _planner_context_suffix(_lc)
             if _ctx:
                 query_for_plan = f"{query_for_plan} {_ctx}"
-                print("[DEBUG][planner] primed with", _ctx)
+  
 
         prefilled = advisor_preplan(query, user_id=user_id, country_override=country_override)
 
         # Planner sees normalized query (with any clamped period text)
         query_for_plan_norm = normalize_user_query(query_for_plan)
         plan = prefilled or plan_query(query_for_plan_norm)
-        print("[DEBUG] Plan (raw):", plan)
+
 
         plan = _normalize_plan_for_sku_language(plan, query)
-        print("[DEBUG] Plan (normalized):", plan)
+
         lc_for_defaults = (globals().setdefault("LAST_CONTEXT", {}).get(int(user_id)) or {})
         plan, _filled = _auto_fill_defaults(plan, query, user_id, country_override, lc_for_defaults)
 
@@ -5163,7 +5128,7 @@ def chatbot():
                     tr = clamp_relative_time_to_available(user_id, eff_country, "last 3 months")
                     if tr:
                         plan["time_range"] = {"start": tr["start"], "end": tr["end"]}
-                        print(f"[DEBUG][followup/main] clamp filled time_range → {plan['time_range']}")
+
             except Exception as e:
                 print("[DEBUG][followup/main] clamp fill failed:", e)
 
@@ -5209,7 +5174,7 @@ def chatbot():
                 elif t2.get("years"):
                     y = int(t2["years"][0])
                     plan["time_range"] = {"start": f"{y}-01-01", "end": f"{y}-12-31"}
-            print("[DEBUG] Plan after NL time fill:", plan)
+
             # --- Clamp any "future" ranges to last available month ----------------------
             try:
                 tr = plan.get("time_range")
@@ -5233,7 +5198,7 @@ def chatbot():
                         "start": start_dt.isoformat(),
                         "end": end_dt.isoformat(),
                     }
-                    print(f"[DEBUG] Plan after FUTURE clamp → {plan['time_range']}")
+
             except Exception as e:
                 print("[DEBUG][WARN] Future clamp failed:", e)
         except Exception as _e:
@@ -5248,7 +5213,7 @@ def chatbot():
                 last_day = calendar.monthrange(latest_y, latest_m)[1]
                 end_span = f"{latest_y:04d}-{latest_m:02d}-{last_day:02d}"
                 plan["time_range"] = {"start": start_span, "end": end_span}
-                print("[DEBUG] Filled default time_range for month grouping:", plan["time_range"])
+
         except Exception as _e:
             print("[DEBUG][WARN] month-group default time fill failed:", _e)
 
@@ -5264,7 +5229,7 @@ def chatbot():
                 )
                 if ctry:
                     plan["country"] = ctry
-                    print("[DEBUG] Plan after country normalization:", plan["country"])
+
         except Exception as _e:
             print("[DEBUG][WARN] country normalization failed:", _e)
 
@@ -5327,7 +5292,7 @@ def chatbot():
                                     if str(f.get("field","")).lower() not in {"sku","product","product_name"}]
                     if not plan.get("group_by"):
                         plan["group_by"] = "product"
-                    print("[DEBUG] main: 'all products' → cleared product/SKU filters; group_by=product")
+
                 else:
                     # Only look up candidates if phrase passes validation
                     if product_phrase and is_valid_product_phrase(product_phrase):
@@ -5359,23 +5324,23 @@ def chatbot():
                         if _is_anaphoric_to_product(query):
                             if lc2.get("last_skus"):
                                 plan["product"] = lc2["last_skus"][-1]
-                                print(f"[DEBUG][planner] Reusing last_skus (hint) → {plan['product']!r}")
+
                             elif lc2.get("product"):
                                 plan["product"] = lc2["product"]
-                                print(f"[DEBUG][planner] Reusing last product (hint) → {plan['product']!r}")
+
                         else:
                             plan.pop("product", None)
-                            print("[DEBUG][planner] Follow-up but no anaphora → not reusing product")
+
                         plan["force_product_only"] = False
                     else:
                         plan.pop("product", None)
                         plan["force_product_only"] = False
-                        print("[DEBUG][planner] Skipping product reuse (new query or portfolio-level)")
+      
 
                 elif len(cands) == 1:
                     plan["product"] = cands[0]["product_name"]
                     plan["force_product_only"] = False  # equality only if user said "only ..."
-                    print(f"[DEBUG] Resolved product (hint) → {plan['product']!r}")
+
 
                 else:
                     picked = False
@@ -5395,7 +5360,7 @@ def chatbot():
                                     plan["product"] = name_map[ctx_prod]
                                     plan["force_product_only"] = False
                                     picked = True
-                                    print(f"[DEBUG] auto-picked product from context (hint) → {plan['product']!r}")
+
                     except Exception as _e:
                         print("[DEBUG] context auto-pick failed:", _e)
 
@@ -5403,7 +5368,7 @@ def chatbot():
                         # IMPORTANT CHANGE:
                         # If user did not clearly ask about a specific product, DO NOT auto-pick.
                         if not explicit_product:
-                            print("[DEBUG] multiple candidates but no explicit product intent → proceeding without product filter")
+             
                             plan.pop("product", None)
                             plan["force_product_only"] = False
                         else:
@@ -5418,10 +5383,9 @@ def chatbot():
                             if chosen:
                                 plan["product"] = chosen
                                 plan["force_product_only"] = False
-                                print(f"[DEBUG] auto-picked product among multiple candidates → {plan['product']!r}")
+
                             else:
-                                # If kuch valid naam nahi mila to product filter hata do
-                                print("[DEBUG] multiple candidates but no usable product name → proceeding without product filter")
+                      
                                 plan.pop("product", None)
                                 plan["force_product_only"] = False
 
@@ -5458,7 +5422,7 @@ def chatbot():
                     plan["product"] = None
 
                 # Skip the slots_missing_for branch entirely by jumping to execution.
-                print("[DEBUG][advisor-skip] bypassing clarification for advisor-style request")
+      
                 # (Fall through to the normal execution path below)
         except Exception as _e:
             print("[DEBUG][advisor-skip] failed:", _e)
@@ -5476,8 +5440,8 @@ def chatbot():
             msg_id = save_chat_to_db(user_id, query, first_prompt) or None
             return ok({"mode": "clarify", "response": first_prompt, "message_id": msg_id})
 
-        # Print final plan
-        print("[DEBUG] Plan (final):", plan)
+
+
 
         # --- Execute ---------------------------------------------------------
         df, mode = engine_q.exec_plan_via_formula(
@@ -5556,7 +5520,7 @@ def chatbot():
         if mode == "sql_formula":
             table_records = df_to_records_safe(df)
             final_records = _finalize_records(plan, table_records)
-            print(f"[DEBUG] wants_advice(pending)={wants_advice(orig_q, plan)}")
+  
 
             if wants_advice(orig_q, plan):
                 # --------- Build proper df_primary for BusinessAdvisor (main branch) ----------
@@ -5718,7 +5682,7 @@ def chatbot():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print("[DEBUG][BE][Error Response]:", str(e))
+
         return Response(
             json.dumps({
                 "success": False,
