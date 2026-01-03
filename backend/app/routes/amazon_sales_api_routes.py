@@ -10,7 +10,7 @@ from dotenv import find_dotenv, load_dotenv
 from flask import Blueprint, Response, jsonify, request
 from app import db
 from typing import Any, Iterable
-from app.routes.amazon_api_routes import run_upload_pipeline_from_df, amazon_client, _apply_region_and_marketplace_from_request
+from app.utils.amazon_utils import run_upload_pipeline_from_df, amazon_client, _apply_region_and_marketplace_from_request
 from app.models.user_models import db, SettlementTransaction
 from sqlalchemy import MetaData
 from config import Config
