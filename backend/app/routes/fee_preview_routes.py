@@ -10,7 +10,7 @@ from dotenv import find_dotenv, load_dotenv
 from flask import Blueprint,  jsonify, request
 from app import db
 from app.models.user_models import CountryProfile, Category
-from app.routes.amazon_api_routes import amazon_client, _apply_region_and_marketplace_from_request
+from app.utils.amazon_utils import amazon_client, _apply_region_and_marketplace_from_request
 from sqlalchemy import and_, or_
 import numpy as np 
 from config import Config

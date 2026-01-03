@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import traceback
 from sqlalchemy import inspect as sa_inspect
-from app.routes.amazon_api_routes import amazon_client
+from app.utils.amazon_utils import amazon_client
 
 load_dotenv()
 db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
