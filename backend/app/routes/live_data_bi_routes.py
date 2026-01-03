@@ -45,9 +45,16 @@ def align_prev_curr_by_sku(prev_data, curr_data):
     prev_df = pd.DataFrame(prev_data)
     curr_df = pd.DataFrame(curr_data)
 
-    # Guard
+    # ---------------------------
+    # HARD GUARD: SKU not ready yet
+    # ---------------------------
+    if "sku" not in prev_df.columns or "sku" not in curr_df.columns:
+        # Data is still warming up (async pipelines)
+        return [], []
+
+    # Guard: both empty after ensuring sku exists
     if prev_df.empty and curr_df.empty:
-        return prev_data, curr_data
+        return [], []
 
     def normalize_sku(x):
         if x is None:
@@ -63,14 +70,17 @@ def align_prev_curr_by_sku(prev_data, curr_data):
 
     # ---- normalize SKU safely ----
     for df in (prev_df, curr_df):
-        if "sku" in df.columns:
-            df["sku"] = df["sku"].apply(normalize_sku)
+        df["sku"] = df["sku"].apply(normalize_sku)
 
     prev_df = prev_df[prev_df["sku"].notna()]
     curr_df = curr_df[curr_df["sku"].notna()]
 
     # ---- UNION of SKUs ----
     all_skus = set(prev_df["sku"]) | set(curr_df["sku"])
+
+    # Guard: no valid SKUs yet
+    if not all_skus:
+        return [], []
 
     base = pd.DataFrame({"sku": list(all_skus)})
 
@@ -97,6 +107,7 @@ def align_prev_curr_by_sku(prev_data, curr_data):
         prev_df.to_dict(orient="records"),
         curr_df.to_dict(orient="records"),
     )
+
 
 
 
@@ -173,6 +184,14 @@ def live_mtd_vs_previous():
             prev_data_aligned,
             curr_data,
         )
+        # ---------------------------
+        # DATA STILL WARMING UP
+        # ---------------------------
+        if not curr_data:
+            return jsonify({
+                "status": "loading",
+                "message": "Data is still syncing. Please wait a few seconds."
+            }), 202
 
         # ---------------------------
         # FULL PREVIOUS MONTH (for charts)
