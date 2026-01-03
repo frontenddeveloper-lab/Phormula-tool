@@ -1,5 +1,4 @@
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------#
-
 from __future__ import annotations
 import base64, io, os, time, calendar, gzip, csv, logging, random, urllib.request, re
 import pandas as pd
@@ -716,86 +715,86 @@ def _aggregate_to_transactions(rows: list[dict], user_id: int | None) -> tuple[l
     return mapped, settlement_ids
 
 
-@amazon_sales_api_bp.route('/upload', methods=['POST'])
-def upload():
-    df_in = None
-    if 'file' in request.files and request.files['file'].filename:
-        f = request.files['file']
-        fname = f.filename.lower()
-        try:
-            if fname.endswith(('.xlsx', '.xls')):
-                df_in = pd.read_excel(f)
-            elif fname.endswith('.csv'):
-                df_in = pd.read_csv(f)
-            elif fname.endswith('.json'):
-                df_in = pd.read_json(f)
-            else:
-                return jsonify({"error": "Unsupported file type. Use .xlsx, .xls, .csv, or .json"}), 400
-        except Exception as e:
-            return jsonify({"error": f"Failed to parse uploaded file: {str(e)}"}), 400
-    else:
-        payload = request.get_json(silent=True) or {}
-        rows = payload.get("rows") or payload.get("data")
-        if isinstance(rows, list):
-            try:
-                df_in = pd.DataFrame(rows)
-            except Exception as e:
-                return jsonify({"error": f"Could not build dataframe from 'rows': {str(e)}"}), 400
+# @amazon_sales_api_bp.route('/upload', methods=['POST'])
+# def upload():
+#     df_in = None
+#     if 'file' in request.files and request.files['file'].filename:
+#         f = request.files['file']
+#         fname = f.filename.lower()
+#         try:
+#             if fname.endswith(('.xlsx', '.xls')):
+#                 df_in = pd.read_excel(f)
+#             elif fname.endswith('.csv'):
+#                 df_in = pd.read_csv(f)
+#             elif fname.endswith('.json'):
+#                 df_in = pd.read_json(f)
+#             else:
+#                 return jsonify({"error": "Unsupported file type. Use .xlsx, .xls, .csv, or .json"}), 400
+#         except Exception as e:
+#             return jsonify({"error": f"Failed to parse uploaded file: {str(e)}"}), 400
+#     else:
+#         payload = request.get_json(silent=True) or {}
+#         rows = payload.get("rows") or payload.get("data")
+#         if isinstance(rows, list):
+#             try:
+#                 df_in = pd.DataFrame(rows)
+#             except Exception as e:
+#                 return jsonify({"error": f"Could not build dataframe from 'rows': {str(e)}"}), 400
 
-    if df_in is None:
-        return jsonify({"error": "Provide a file (xlsx/csv/json) in form-data as 'file' or a JSON body with 'rows' (list of dicts)."}), 400
+#     if df_in is None:
+#         return jsonify({"error": "Provide a file (xlsx/csv/json) in form-data as 'file' or a JSON body with 'rows' (list of dicts)."}), 400
 
-    def _param(name, alt=None, required=False, caster=lambda x: x):
-        if name in request.form:
-            raw = request.form.get(name)
-        elif alt and alt in request.form:
-            raw = request.form.get(alt)
-        else:
-            payload = request.get_json(silent=True) or {}
-            raw = payload.get(name)
-            if raw is None and alt:
-                raw = payload.get(alt)
-        if required and (raw is None or raw == ""):
-            raise KeyError(name)
-        if raw is None:
-            return None
-        try:
-            return caster(raw)
-        except Exception:
-            raise ValueError(name)
+#     def _param(name, alt=None, required=False, caster=lambda x: x):
+#         if name in request.form:
+#             raw = request.form.get(name)
+#         elif alt and alt in request.form:
+#             raw = request.form.get(alt)
+#         else:
+#             payload = request.get_json(silent=True) or {}
+#             raw = payload.get(name)
+#             if raw is None and alt:
+#                 raw = payload.get(alt)
+#         if required and (raw is None or raw == ""):
+#             raise KeyError(name)
+#         if raw is None:
+#             return None
+#         try:
+#             return caster(raw)
+#         except Exception:
+#             raise ValueError(name)
 
-    try:
-        user_id = _param("user_id", required=True)
-        ui_country = _param("ui_country", alt="country", required=True, caster=lambda s: str(s).strip())
-        raw_month = _param("month_num", alt="month")
-        if raw_month is None:
-            month_num = datetime.utcnow().month
-        else:
-            sm = str(raw_month).strip()
-            if sm.isdigit():
-                month_num = int(sm)
-            else:
-                month_num = _month_to_num(sm)
-        ui_year = _param("ui_year", alt="year", caster=int) or datetime.utcnow().year
-        if not (1 <= int(month_num) <= 12):
-            return jsonify({"error": "month_num must be between 1 and 12"}), 400
-    except KeyError as e:
-        return jsonify({"error": f"Missing required field '{e.args[0]}'"}), 400
-    except ValueError as e:
-        return jsonify({"error": f"Invalid value for '{e.args[0]}'"}), 400
+#     try:
+#         user_id = _param("user_id", required=True)
+#         ui_country = _param("ui_country", alt="country", required=True, caster=lambda s: str(s).strip())
+#         raw_month = _param("month_num", alt="month")
+#         if raw_month is None:
+#             month_num = datetime.utcnow().month
+#         else:
+#             sm = str(raw_month).strip()
+#             if sm.isdigit():
+#                 month_num = int(sm)
+#             else:
+#                 month_num = _month_to_num(sm)
+#         ui_year = _param("ui_year", alt="year", caster=int) or datetime.utcnow().year
+#         if not (1 <= int(month_num) <= 12):
+#             return jsonify({"error": "month_num must be between 1 and 12"}), 400
+#     except KeyError as e:
+#         return jsonify({"error": f"Missing required field '{e.args[0]}'"}), 400
+#     except ValueError as e:
+#         return jsonify({"error": f"Invalid value for '{e.args[0]}'"}), 400
 
-    result = run_upload_pipeline_from_df(
-        df_raw=df_in,
-        user_id=user_id,
-        country=ui_country,
-        month_num=int(month_num),
-        year=int(ui_year),
-        db_url=db_url,
-        db_url_aux=db_url1,
-    )
-    if not result.get("success"):
-        return jsonify(result), 400
-    return jsonify(result), 200
+#     result = run_upload_pipeline_from_df(
+#         df_raw=df_in,
+#         user_id=user_id,
+#         country=ui_country,
+#         month_num=int(month_num),
+#         year=int(ui_year),
+#         db_url=db_url,
+#         db_url_aux=db_url1,
+#     )
+#     if not result.get("success"):
+#         return jsonify(result), 400
+#     return jsonify(result), 200
 
 def _month_to_num(mname: str) -> int:
     m = mname.strip().lower()
@@ -2506,280 +2505,280 @@ def _fin_push(
     })
 
 
-# ---------------------------------------------------------------------------
-# Route: GET-only, full-month coverage
-# ---------------------------------------------------------------------------
+# # ---------------------------------------------------------------------------
+# # Route: GET-only, full-month coverage
+# # ---------------------------------------------------------------------------
 
-@amazon_sales_api_bp.route("/amazon_api/settlements_finances", methods=["GET"])
-def settlements_finances_route():
-    # optional auth (for upload)
-    auth_header = request.headers.get("Authorization")
-    user_id = None
-    if auth_header and auth_header.startswith("Bearer "):
-        try:
-            payload = jwt.decode(auth_header.split(" ")[1], SECRET_KEY, algorithms=["HS256"])
-            user_id = payload.get("user_id")
-        except Exception:
-            user_id = None
+# @amazon_sales_api_bp.route("/amazon_api/settlements_finances", methods=["GET"])
+# def settlements_finances_route():
+#     # optional auth (for upload)
+#     auth_header = request.headers.get("Authorization")
+#     user_id = None
+#     if auth_header and auth_header.startswith("Bearer "):
+#         try:
+#             payload = jwt.decode(auth_header.split(" ")[1], SECRET_KEY, algorithms=["HS256"])
+#             user_id = payload.get("user_id")
+#         except Exception:
+#             user_id = None
 
-    _apply_region_and_marketplace_from_request()
+#     _apply_region_and_marketplace_from_request()
 
-    out_format = (request.args.get("format") or "json").lower()
-    store_in_db = (request.args.get("store_in_db", "true").lower() != "false")
-    limit_param = (request.args.get("limit") or "50").strip().lower()
-    json_limit = None if limit_param == "all" else max(0, int(limit_param) if limit_param.isdigit() else 50)
-    debug = (request.args.get("debug", "0").lower() in ("1", "true", "yes"))
+#     out_format = (request.args.get("format") or "json").lower()
+#     store_in_db = (request.args.get("store_in_db", "true").lower() != "false")
+#     limit_param = (request.args.get("limit") or "50").strip().lower()
+#     json_limit = None if limit_param == "all" else max(0, int(limit_param) if limit_param.isdigit() else 50)
+#     debug = (request.args.get("debug", "0").lower() in ("1", "true", "yes"))
 
-    # upload args
-    run_upload = (request.args.get("run_upload_pipeline", "false").lower() == "true")
-    ui_country = (request.args.get("country") or "").lower()
-    ui_year = (request.args.get("year") or "").strip()
+#     # upload args
+#     run_upload = (request.args.get("run_upload_pipeline", "false").lower() == "true")
+#     ui_country = (request.args.get("country") or "").lower()
+#     ui_year = (request.args.get("year") or "").strip()
 
-    # window
-    month_raw = request.args.get("month")
-    start_arg = request.args.get("start")
-    end_arg = request.args.get("end")
-    if month_raw:
-        try:
-            y, m = _parse_month_input(month_raw)
-            month_filter = f"{y}-{str(m).zfill(2)}"
-            start_m, end_m = _month_bounds(month_filter)
-        except Exception:
-            return jsonify({"success": False, "error": "Invalid month parameter"}), 400
-    else:
-        if not (start_arg and end_arg):
-            return jsonify({"success": False, "error": "Provide ?month=... or ?start=...&end=..."}), 400
-        start_m = _parse_dt_any(start_arg)
-        end_m = _parse_dt_any(end_arg)
-        if not start_m or not end_m or end_m <= start_m:
-            return jsonify({"success": False, "error": "Invalid start/end"}), 400
-        month_filter = None  # noqa: F841  (kept for parity/debugging if needed)
+#     # window
+#     month_raw = request.args.get("month")
+#     start_arg = request.args.get("start")
+#     end_arg = request.args.get("end")
+#     if month_raw:
+#         try:
+#             y, m = _parse_month_input(month_raw)
+#             month_filter = f"{y}-{str(m).zfill(2)}"
+#             start_m, end_m = _month_bounds(month_filter)
+#         except Exception:
+#             return jsonify({"success": False, "error": "Invalid month parameter"}), 400
+#     else:
+#         if not (start_arg and end_arg):
+#             return jsonify({"success": False, "error": "Provide ?month=... or ?start=...&end=..."}), 400
+#         start_m = _parse_dt_any(start_arg)
+#         end_m = _parse_dt_any(end_arg)
+#         if not start_m or not end_m or end_m <= start_m:
+#             return jsonify({"success": False, "error": "Invalid start/end"}), 400
+#         month_filter = None  # noqa: F841  (kept for parity/debugging if needed)
 
-    # tuning knobs
-    slice_hours = int(request.args.get("slice_hours", "24"))
-    slice_hours = max(1, min(slice_hours, 48))
-    min_slice_minutes = int(request.args.get("min_slice_minutes", "30"))
-    min_slice_minutes = max(5, min(min_slice_minutes, slice_hours * 60))
+#     # tuning knobs
+#     slice_hours = int(request.args.get("slice_hours", "24"))
+#     slice_hours = max(1, min(slice_hours, 48))
+#     min_slice_minutes = int(request.args.get("min_slice_minutes", "30"))
+#     min_slice_minutes = max(5, min(min_slice_minutes, slice_hours * 60))
 
-    # collect raw events
-    raw_rows, slice_debug = _collect_month_events_events_only(
-        start_m, end_m, user_id,
-        initial_hours=slice_hours,
-        min_slice_minutes=min_slice_minutes,
-        max_per_page=100,
-        debug=debug
-    )
+#     # collect raw events
+#     raw_rows, slice_debug = _collect_month_events_events_only(
+#         start_m, end_m, user_id,
+#         initial_hours=slice_hours,
+#         min_slice_minutes=min_slice_minutes,
+#         max_per_page=100,
+#         debug=debug
+#     )
 
-    # ---- aggregate using the improved function (paste the new version above this route) ----
-    aggregated, _sid_set = _aggregate_to_transactions_full(raw_rows, user_id)
+#     # ---- aggregate using the improved function (paste the new version above this route) ----
+#     aggregated, _sid_set = _aggregate_to_transactions_full(raw_rows, user_id)
 
-    # ---- enrich (optional) ----
-    if request.args.get("enrich_from_settlement_report", "true").lower() != "false":
-        _enrich_from_settlement_report(aggregated, start_m, end_m, logger)
+#     # ---- enrich (optional) ----
+#     if request.args.get("enrich_from_settlement_report", "true").lower() != "false":
+#         _enrich_from_settlement_report(aggregated, start_m, end_m, logger)
 
-    # ---- month filter ----
-    filtered = [b for b in aggregated if b.get("date_time") and start_m <= b["date_time"] < end_m]
+#     # ---- month filter ----
+#     filtered = [b for b in aggregated if b.get("date_time") and start_m <= b["date_time"] < end_m]
 
-    # ---- serializers (strings for Decimals so JSON/CSV don’t choke) ----
-    def T(x: Any) -> str:  # text (allow empty)
-        return "" if x is None else str(x)
+#     # ---- serializers (strings for Decimals so JSON/CSV don’t choke) ----
+#     def T(x: Any) -> str:  # text (allow empty)
+#         return "" if x is None else str(x)
 
-    def M(x: Any) -> int | float:  # money/decimal → numeric
-        return _to_number(x)
+#     def M(x: Any) -> int | float:  # money/decimal → numeric
+#         return _to_number(x)
 
-    def Q(x: Any) -> int:  # quantity → int
-        return int(_to_number(x))
+#     def Q(x: Any) -> int:  # quantity → int
+#         return int(_to_number(x))
 
-    # ---- optional upload pipeline (also use T/M here) ----
-    if run_upload:
-        if not user_id:
-            return jsonify({"success": False, "error": "Auth required"}), 401
-        if month_raw is None:
-            return jsonify({"success": False, "error": "Provide ?month=YYYY-MM (or YYYY-Month) when run_upload_pipeline=true"}), 400
-        if not ui_country or not ui_year:
-            return jsonify({"success": False, "error": "Provide &country=uk&year=2025"}), 400
+#     # ---- optional upload pipeline (also use T/M here) ----
+#     if run_upload:
+#         if not user_id:
+#             return jsonify({"success": False, "error": "Auth required"}), 401
+#         if month_raw is None:
+#             return jsonify({"success": False, "error": "Provide ?month=YYYY-MM (or YYYY-Month) when run_upload_pipeline=true"}), 400
+#         if not ui_country or not ui_year:
+#             return jsonify({"success": False, "error": "Provide &country=uk&year=2025"}), 400
 
-        def row_to_dict(r: dict) -> dict:
-            return {
-                "date/time": r["date_time"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["date_time"] else None,
-                "settlement_id": T(r["settlement_id"]),
-                "type": r["transaction_type"],
-                "order_id": r["order_id"],
-                "sku": r["sku"],
-                "description": r["description"],
-                "quantity": Q(r["quantity"]),
-                "marketplace": T(r["marketplace"]),
-                "fulfilment": r["fulfilment"],
-                "order_city": T(r["order_city"]),
-                "order_state": T(r["order_state"]),
-                "order_postal": T(r["order_postal"]),
-                "tax_collection_model": T(r["tax_collection_model"]),
-                "product_sales": r["product_sales"],
-                "product_sales_tax": r["product_sales_tax"],
-                "postage_credits": M(r["postage_credits"]),
-                "shipping_credits_tax": M(r["shipping_credits_tax"]),
-                "gift_wrap_credits": r["gift_wrap_credits"],
-                "giftwrap_credits_tax": r["giftwrap_credits_tax"],
-                "promotional_rebates": M(r["promotional_rebates"]),
-                "promotional_rebates_tax": M(r["promotional_rebates_tax"]),
-                "marketplace_withheld_tax": M(r["marketplace_withheld_tax"]),
-                "selling_fees": r["selling_fees"],
-                "fba_fees": r["fba_fees"],
-                "other_transaction_fees": M(r["other_transaction_fees"]),
-                "other": M(r["other"]),
-                "total": r["total"],
-                "currency": r["currency"],
-                "advertising_cost": r["advertising_cost"],
-                "net_reimbursement": r["net_reimbursement"],
+#         def row_to_dict(r: dict) -> dict:
+#             return {
+#                 "date/time": r["date_time"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["date_time"] else None,
+#                 "settlement_id": T(r["settlement_id"]),
+#                 "type": r["transaction_type"],
+#                 "order_id": r["order_id"],
+#                 "sku": r["sku"],
+#                 "description": r["description"],
+#                 "quantity": Q(r["quantity"]),
+#                 "marketplace": T(r["marketplace"]),
+#                 "fulfilment": r["fulfilment"],
+#                 "order_city": T(r["order_city"]),
+#                 "order_state": T(r["order_state"]),
+#                 "order_postal": T(r["order_postal"]),
+#                 "tax_collection_model": T(r["tax_collection_model"]),
+#                 "product_sales": r["product_sales"],
+#                 "product_sales_tax": r["product_sales_tax"],
+#                 "postage_credits": M(r["postage_credits"]),
+#                 "shipping_credits_tax": M(r["shipping_credits_tax"]),
+#                 "gift_wrap_credits": r["gift_wrap_credits"],
+#                 "giftwrap_credits_tax": r["giftwrap_credits_tax"],
+#                 "promotional_rebates": M(r["promotional_rebates"]),
+#                 "promotional_rebates_tax": M(r["promotional_rebates_tax"]),
+#                 "marketplace_withheld_tax": M(r["marketplace_withheld_tax"]),
+#                 "selling_fees": r["selling_fees"],
+#                 "fba_fees": r["fba_fees"],
+#                 "other_transaction_fees": M(r["other_transaction_fees"]),
+#                 "other": M(r["other"]),
+#                 "total": r["total"],
+#                 "currency": r["currency"],
+#                 "advertising_cost": r["advertising_cost"],
+#                 "net_reimbursement": r["net_reimbursement"],
 
-                # 👇 override: take numeric from r["platform"] if present
-                "platform_fees": M(r.get("platform", r.get("platform_fees"))),
-            }
+#                 # 👇 override: take numeric from r["platform"] if present
+#                 "platform_fees": M(r.get("platform", r.get("platform_fees"))),
+#             }
 
 
-        df_in = pd.DataFrame([row_to_dict(r) for r in filtered])
-        _, mnum = _parse_month_input(month_raw)
-        month_num = int(mnum)
+#         df_in = pd.DataFrame([row_to_dict(r) for r in filtered])
+#         _, mnum = _parse_month_input(month_raw)
+#         month_num = int(mnum)
 
-        result = run_upload_pipeline_from_df(
-            df_raw=df_in,
-            user_id=user_id,
-            country=ui_country,
-            month_num=month_num,
-            year=str(ui_year),
-            db_url=os.getenv("DATABASE_URL"),
-            db_url_aux=os.getenv("DATABASE_URL1"),
-        )
-        return jsonify(result), (200 if result.get("success") else 400)
+#         result = run_upload_pipeline_from_df(
+#             df_raw=df_in,
+#             user_id=user_id,
+#             country=ui_country,
+#             month_num=month_num,
+#             year=str(ui_year),
+#             db_url=os.getenv("DATABASE_URL"),
+#             db_url_aux=os.getenv("DATABASE_URL1"),
+#         )
+#         return jsonify(result), (200 if result.get("success") else 400)
 
-    # store?
-    inserted = 0
-    if store_in_db and filtered:
-        db.session.bulk_insert_mappings(SettlementTransaction, filtered)
-        db.session.commit()
-        inserted = len(filtered)
+#     # store?
+#     inserted = 0
+#     if store_in_db and filtered:
+#         db.session.bulk_insert_mappings(SettlementTransaction, filtered)
+#         db.session.commit()
+#         inserted = len(filtered)
 
-    # ------------------- CSV -------------------
-    if out_format == "csv":
-        fieldnames = [
-            "date_time", "settlement_id", "transaction_type", "order_id", "sku", "description", "quantity",
-            "marketplace", "fulfilment", "order_city", "order_state", "order_postal", "tax_collection_model",
-            "product_sales", "product_sales_tax", "postage_credits", "shipping_credits_tax",
-            "gift_wrap_credits", "giftwrap_credits_tax", "promotional_rebates", "promotional_rebates_tax",
-            "marketplace_withheld_tax", "selling_fees", "fba_fees", "other_transaction_fees", "other", "total",
-            "currency", "advertising_cost", "platform_fees", "net_reimbursement",
-        ]
+#     # ------------------- CSV -------------------
+#     if out_format == "csv":
+#         fieldnames = [
+#             "date_time", "settlement_id", "transaction_type", "order_id", "sku", "description", "quantity",
+#             "marketplace", "fulfilment", "order_city", "order_state", "order_postal", "tax_collection_model",
+#             "product_sales", "product_sales_tax", "postage_credits", "shipping_credits_tax",
+#             "gift_wrap_credits", "giftwrap_credits_tax", "promotional_rebates", "promotional_rebates_tax",
+#             "marketplace_withheld_tax", "selling_fees", "fba_fees", "other_transaction_fees", "other", "total",
+#             "currency", "advertising_cost", "platform_fees", "net_reimbursement",
+#         ]
 
-        def to_row(r: dict) -> dict:
-            return {
-                "date_time": r["date_time"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["date_time"] else None,
-                "settlement_id": T(r["settlement_id"]),
-                "transaction_type": r["transaction_type"],
-                "order_id": r["order_id"],
-                "sku": r["sku"],
-                "description": r["description"],
-                "quantity": Q(r["quantity"]),
-                "marketplace": T(r["marketplace"]),
-                "fulfilment": r["fulfilment"],
-                "order_city": T(r["order_city"]),
-                "order_state": T(r["order_state"]),
-                "order_postal": T(r["order_postal"]),
-                "tax_collection_model": T(r["tax_collection_model"]),
-                "product_sales": r["product_sales"],
-                "product_sales_tax": r["product_sales_tax"],
-                "postage_credits": M(r["postage_credits"]),
-                "shipping_credits_tax": M(r["shipping_credits_tax"]),
-                "gift_wrap_credits": r["gift_wrap_credits"],
-                "giftwrap_credits_tax": r["giftwrap_credits_tax"],
-                "promotional_rebates": M(r["promotional_rebates"]),
-                "promotional_rebates_tax": M(r["promotional_rebates_tax"]),
-                "marketplace_withheld_tax": M(r["marketplace_withheld_tax"]),
-                "selling_fees": r["selling_fees"],
-                "fba_fees": r["fba_fees"],
-                "other_transaction_fees": M(r["other_transaction_fees"]),
-                "other": M(r["other"]),
-                "total": r["total"],
-                "currency": r["currency"],
-                "advertising_cost": r["advertising_cost"],
-                # 👇
-                "platform_fees": M(r.get("platform", r.get("platform_fees"))),
-                "net_reimbursement": r["net_reimbursement"],
-            }
+#         def to_row(r: dict) -> dict:
+#             return {
+#                 "date_time": r["date_time"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["date_time"] else None,
+#                 "settlement_id": T(r["settlement_id"]),
+#                 "transaction_type": r["transaction_type"],
+#                 "order_id": r["order_id"],
+#                 "sku": r["sku"],
+#                 "description": r["description"],
+#                 "quantity": Q(r["quantity"]),
+#                 "marketplace": T(r["marketplace"]),
+#                 "fulfilment": r["fulfilment"],
+#                 "order_city": T(r["order_city"]),
+#                 "order_state": T(r["order_state"]),
+#                 "order_postal": T(r["order_postal"]),
+#                 "tax_collection_model": T(r["tax_collection_model"]),
+#                 "product_sales": r["product_sales"],
+#                 "product_sales_tax": r["product_sales_tax"],
+#                 "postage_credits": M(r["postage_credits"]),
+#                 "shipping_credits_tax": M(r["shipping_credits_tax"]),
+#                 "gift_wrap_credits": r["gift_wrap_credits"],
+#                 "giftwrap_credits_tax": r["giftwrap_credits_tax"],
+#                 "promotional_rebates": M(r["promotional_rebates"]),
+#                 "promotional_rebates_tax": M(r["promotional_rebates_tax"]),
+#                 "marketplace_withheld_tax": M(r["marketplace_withheld_tax"]),
+#                 "selling_fees": r["selling_fees"],
+#                 "fba_fees": r["fba_fees"],
+#                 "other_transaction_fees": M(r["other_transaction_fees"]),
+#                 "other": M(r["other"]),
+#                 "total": r["total"],
+#                 "currency": r["currency"],
+#                 "advertising_cost": r["advertising_cost"],
+#                 # 👇
+#                 "platform_fees": M(r.get("platform", r.get("platform_fees"))),
+#                 "net_reimbursement": r["net_reimbursement"],
+#             }
 
-        def generate_csv(data: Iterable[dict]):
-            out_io = io.StringIO()
-            w = csv.DictWriter(out_io, fieldnames=fieldnames)
-            w.writeheader()
-            yield out_io.getvalue()
-            out_io.seek(0)
-            out_io.truncate(0)
-            for r in data:
-                w.writerow(to_row(r))
-                yield out_io.getvalue()
-                out_io.seek(0)
-                out_io.truncate(0)
+#         def generate_csv(data: Iterable[dict]):
+#             out_io = io.StringIO()
+#             w = csv.DictWriter(out_io, fieldnames=fieldnames)
+#             w.writeheader()
+#             yield out_io.getvalue()
+#             out_io.seek(0)
+#             out_io.truncate(0)
+#             for r in data:
+#                 w.writerow(to_row(r))
+#                 yield out_io.getvalue()
+#                 out_io.seek(0)
+#                 out_io.truncate(0)
 
-        fname = f"settlement_transactions_finances_{start_m.strftime('%Y-%m')}.csv"
-        return Response(
-            generate_csv(filtered),
-            mimetype="text/csv",
-            headers={"Content-Disposition": f"attachment; filename={fname}"},
-        )
+#         fname = f"settlement_transactions_finances_{start_m.strftime('%Y-%m')}.csv"
+#         return Response(
+#             generate_csv(filtered),
+#             mimetype="text/csv",
+#             headers={"Content-Disposition": f"attachment; filename={fname}"},
+#         )
 
-    # ------------------- JSON -------------------
-    preview = filtered if json_limit is None else filtered[:json_limit]
+#     # ------------------- JSON -------------------
+#     preview = filtered if json_limit is None else filtered[:json_limit]
 
-    def jsonify_row(r: dict) -> dict:
-        return {
-            "date/time": r["date_time"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["date_time"] else None,
-            "settlement id": T(r["settlement_id"]),
-            "type": r["transaction_type"],
-            "order id": r["order_id"],
-            "sku": r["sku"],
-            "description": r["description"],
-            "quantity": Q(r["quantity"]),
-            "marketplace": T(r["marketplace"]),
-            "fulfilment": r["fulfilment"],
-            "order city": T(r["order_city"]),
-            "order state": T(r["order_state"]),
-            "order postal": T(r["order_postal"]),
-            "tax collection model": T(r["tax_collection_model"]),
-            "product sales": r["product_sales"],
-            "product sales tax": r["product_sales_tax"],
-            "postage credits": M(r["postage_credits"]),
-            "shipping credits tax": M(r["shipping_credits_tax"]),
-            "gift wrap credits": r["gift_wrap_credits"],
-            "giftwrap credits tax": r["giftwrap_credits_tax"],
-            "promotional rebates": M(r["promotional_rebates"]),
-            "promotional_rebates tax": M(r["promotional_rebates_tax"]),
-            "marketplace withheld tax": M(r["marketplace_withheld_tax"]),
-            "selling fees": r["selling_fees"],
-            "fba fees": r["fba_fees"],
-            "other transaction fees": M(r["other_transaction_fees"]),
-            "other": M(r["other"]),
-            "total": r["total"],
-            "currency": r["currency"],
-            "advertising_cost": r["advertising_cost"],
-            # 👇
-            "platform_fees": M(r.get("platform", r.get("platform_fees"))),
-            "net_reimbursement": r["net_reimbursement"],
+#     def jsonify_row(r: dict) -> dict:
+#         return {
+#             "date/time": r["date_time"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["date_time"] else None,
+#             "settlement id": T(r["settlement_id"]),
+#             "type": r["transaction_type"],
+#             "order id": r["order_id"],
+#             "sku": r["sku"],
+#             "description": r["description"],
+#             "quantity": Q(r["quantity"]),
+#             "marketplace": T(r["marketplace"]),
+#             "fulfilment": r["fulfilment"],
+#             "order city": T(r["order_city"]),
+#             "order state": T(r["order_state"]),
+#             "order postal": T(r["order_postal"]),
+#             "tax collection model": T(r["tax_collection_model"]),
+#             "product sales": r["product_sales"],
+#             "product sales tax": r["product_sales_tax"],
+#             "postage credits": M(r["postage_credits"]),
+#             "shipping credits tax": M(r["shipping_credits_tax"]),
+#             "gift wrap credits": r["gift_wrap_credits"],
+#             "giftwrap credits tax": r["giftwrap_credits_tax"],
+#             "promotional rebates": M(r["promotional_rebates"]),
+#             "promotional_rebates tax": M(r["promotional_rebates_tax"]),
+#             "marketplace withheld tax": M(r["marketplace_withheld_tax"]),
+#             "selling fees": r["selling_fees"],
+#             "fba fees": r["fba_fees"],
+#             "other transaction fees": M(r["other_transaction_fees"]),
+#             "other": M(r["other"]),
+#             "total": r["total"],
+#             "currency": r["currency"],
+#             "advertising_cost": r["advertising_cost"],
+#             # 👇
+#             "platform_fees": M(r.get("platform", r.get("platform_fees"))),
+#             "net_reimbursement": r["net_reimbursement"],
 
-        }
+#         }
 
-    resp: dict[str, Any] = {
-        "success": True,
-        "range_start": start_m.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "range_end": end_m.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "raw_events_rows": len(raw_rows),
-        "aggregated_rows": len(aggregated),
-        "filtered_rows": len(filtered),
-        "returned_rows": len(preview),
-        "stored": {"inserted": int(inserted)} if store_in_db else {"skipped": True},
-        "items": [jsonify_row(r) for r in preview],
-    }
-    if debug:
-        resp["slice_debug"] = slice_debug[:500]
-    return jsonify(resp), 200
+#     resp: dict[str, Any] = {
+#         "success": True,
+#         "range_start": start_m.strftime("%Y-%m-%dT%H:%M:%SZ"),
+#         "range_end": end_m.strftime("%Y-%m-%dT%H:%M:%SZ"),
+#         "raw_events_rows": len(raw_rows),
+#         "aggregated_rows": len(aggregated),
+#         "filtered_rows": len(filtered),
+#         "returned_rows": len(preview),
+#         "stored": {"inserted": int(inserted)} if store_in_db else {"skipped": True},
+#         "items": [jsonify_row(r) for r in preview],
+#     }
+#     if debug:
+#         resp["slice_debug"] = slice_debug[:500]
+#     return jsonify(resp), 200
 
 
 

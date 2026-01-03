@@ -50,25 +50,17 @@ def debug_table_search(user_id, country, all_tables):
     # Updated for actual table pattern: skuwisemonthly_userid_country_monthyear
     pattern = f"skuwisemonthly_{user_id}_{country}_"
     
-    print(f"🔍 DEBUG: Searching for tables with pattern: {pattern}")
-    print(f"🔍 DEBUG: User ID: {user_id}, Country: {country}")
-    print(f"🔍 DEBUG: Total tables in database: {len(all_tables)}")
-    
     # Show all tables that start with 'skuwisemonthly'
     sku_tables = [t for t in all_tables if t.startswith('skuwisemonthly')]
-    print(f"🔍 DEBUG: All skuwisemonthly tables: {sku_tables}")
     
     # Show tables that match user_id
     user_tables = [t for t in all_tables if f"_{user_id}_" in t]
-    print(f"🔍 DEBUG: Tables with user_id {user_id}: {user_tables}")
     
     # Show tables that match country  
     country_tables = [t for t in all_tables if f"_{country}_" in t.lower()]
-    print(f"🔍 DEBUG: Tables with country {country}: {country_tables}")
     
     # Show tables that match the full pattern
     pattern_tables = [t for t in all_tables if t.startswith(pattern)]
-    print(f"🔍 DEBUG: Tables matching full pattern {pattern}: {pattern_tables}")
     
     return {
         'pattern': pattern,
@@ -228,8 +220,6 @@ def improvement_tab_suggestion():
         prev_month = previous_date.strftime("%B")
         prev_year = previous_date.strftime("%Y")
 
-        print(f"📊 Analyzing table: {latest_table}")
-
         query = f"""
             SELECT 
                 product_name, sku,
@@ -386,7 +376,6 @@ Use this exact structure and formatting but do not give prefix observation and i
                     
 
                     content = response['choices'][0]['message']['content']
-                    print(f"🔍 Raw AI response for {row['product_name']}:\n{content}")
 
                     section_headers = [
                         "Observations", "Improvements",
@@ -494,8 +483,6 @@ Use this exact structure and formatting but do not give prefix observation and i
         })
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({
             'error': f'Failed to process improvement suggestion: {str(e)}',
             'currency': currency_info if 'currency_info' in locals() else None,
@@ -543,7 +530,6 @@ def analyze_sku_patterns(user_id, country):
             sku_set = set(df["sku"].dropna().astype(str))
             sku_history[key] = sku_set
         except Exception as e:
-            print(f"❌ Failed to read {table}: {e}")
             sku_history[key] = set()
 
     latest_key = sorted_keys[-1]
@@ -735,7 +721,6 @@ def sku_pattern_improvement():
 
                 return pd.Series([obs, imp])
             except Exception as e:
-                print(f"❌ AI error for product {row['product_name']}: {str(e)}")
                 return pd.Series(["AI Summary Error", "AI Suggestion Error"])
 
         df_filtered[['observation', 'improvement']] = df_filtered.apply(analyze_row, axis=1)
@@ -772,8 +757,6 @@ def sku_pattern_improvement():
         })
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({
             'error': f'Failed to analyze SKU patterns: {str(e)}',
             'currency': currency_info if 'currency_info' in locals() else None,
@@ -1034,8 +1017,6 @@ Use this exact structure and formatting but do not give prefix observation and i
 
                     content = response['choices'][0]['message']['content']
 
-                    print(f"🔍 Raw AI response for {row['product_name']}:\n{content}")
-
                     section_headers = [
                         "Observations", "Improvements",
                         "Unit Growth", "ASP", "Sales", "Profit", "Unit Profitability"
@@ -1101,7 +1082,6 @@ Use this exact structure and formatting but do not give prefix observation and i
                     ])
 
                 except Exception as e:
-                    print(f"❌ AI error for product {row['product_name']}: {str(e)}")
                     return pd.Series(["AI Error"] * 15)
 
         df[[
@@ -1135,8 +1115,6 @@ Use this exact structure and formatting but do not give prefix observation and i
         })
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({
             'error': f'Failed to process bottom SKU suggestion: {str(e)}',
             'currency': currency_info if 'currency_info' in locals() else None,

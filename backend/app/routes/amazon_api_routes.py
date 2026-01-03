@@ -1153,19 +1153,6 @@ def run_upload_pipeline_from_df(
     valid_cols = [c.name for c in user_consolidated_data.columns if c.name != "id"]
     df_merge_insert = df_modified.reindex(columns=valid_cols)
 
-    print("✅ DEBUG: inserting into merge table:", consolidated_table_name)
-    print("✅ DEBUG: merge insert columns:", df_merge_insert.columns.tolist())
-    print("✅ DEBUG: merge insert rows:", len(df_merge_insert))
-
-    # df_merge_insert.to_sql(
-    #     consolidated_table_name,
-    #     con=engine,
-    #     if_exists="append",
-    #     index=False,
-    #     method="multi"
-    # )
-
-
     for col in numeric_columns:
         if col in df_modified.columns:
             df_modified[col] = pd.to_numeric(df_modified[col], errors="coerce")
@@ -1180,13 +1167,9 @@ def run_upload_pipeline_from_df(
     df_modified["month"] = month
     df_modified["year"] = year
 
-    print("✅ DEBUG: df_modified columns:", df_modified.columns.tolist())
-    print("✅ DEBUG: df_modified errorstatus present?", "errorstatus" in df_modified.columns)
-
     # ✅ remove old month/year records from merge table (already doing earlier, ok)
     # ✅ now append modified data to consolidated merge table
     df_modified.to_sql(consolidated_table_name, con=engine, if_exists='append', index=False, method='multi')
-    print("✅ DEBUG: inserted into consolidated_table_name:", consolidated_table_name)
 
 
     # -------- your analytics remain as-is ----------

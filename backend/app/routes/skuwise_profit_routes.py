@@ -15,8 +15,8 @@ UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 from dotenv import load_dotenv
 
 load_dotenv()
-db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
-db_url1= os.getenv('DATABASE_ADMIN_URL', 'postgresql://postgres:password@localhost:5432/admin_db')
+db_url = os.getenv('DATABASE_URL')
+db_url1= os.getenv('DATABASE_ADMIN_URL')
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 skuwise_bp = Blueprint('skuwise_bp', __name__)
@@ -99,8 +99,6 @@ def productwise_performance():
         quarter = data.get('quarter')
 
         home_currency = (data.get('home_currency') or 'USD').lower()
-        # ⚠️ Yaha pe country available nahi hai, isliye ye print hata diya
-        # print(f"Currency Debug → Country: {country}")
 
         requested_countries = get_countries_for_currency(home_currency)
 
@@ -138,15 +136,11 @@ def productwise_performance():
 
         # Iterate over requested countries
         for country in requested_countries:
-            print("\n==============================")
-            print(f"Processing Country: {country.upper()}")
-            print("==============================")
 
             country_data = []
 
             for month in months_to_fetch:
                 month_num = month_mapping[month]
-                print(f"\n  → Month: {month.capitalize()} ({month_num})")
 
                 # global / global_gbp / global_inr ... all have *_table suffix
                 if country.lower().startswith("global"):
@@ -178,7 +172,6 @@ def productwise_performance():
 
                     table_found = True
                     table_name = matching_tables[0]
-                    print(f"    ✓ Found table: {table_name}")
 
                     try:
                         columns = [
@@ -206,8 +199,6 @@ def productwise_performance():
                             query, {'product_name': product_name}
                         ).fetchall()
 
-                        print(f"      Rows fetched: {len(rows)}")
-
                         table_sales = sum(float(row[0] or 0) for row in rows)
                         table_quantity = sum(int(row[1] or 0) for row in rows)
                         table_profit = sum(float(row[2] or 0) for row in rows)
@@ -215,12 +206,6 @@ def productwise_performance():
                         table_cost_of_unit_sold = sum(
                             float(row[4] or 0) for row in rows
                         )
-
-                        print(f"      Before conversion → Sales: {table_sales}, Profit: {table_profit}")
-
-                        # 🔹 Currency logic:
-                        # Global: table already converted → NO conversion
-                        # UK / US: apply conversion rate
                         if country.lower() in ('uk', 'us'):
                             source_currency = country_currency_map.get(country.lower())
                             target_currency = home_currency.lower()
@@ -236,12 +221,6 @@ def productwise_performance():
                             else:
                                 conversion_rate = 1.0
 
-                            print(
-                                f"      Currency Debug → Country: {country}, "
-                                f"Source: {source_currency}, Target: {target_currency}, "
-                                f"Month: {month.capitalize()}, Rate: {conversion_rate}"
-                            )
-
                             # Apply conversion only for UK / US
                             table_sales *= conversion_rate
                             table_profit *= conversion_rate
@@ -250,20 +229,13 @@ def productwise_performance():
 
                             conversion_rate_applied = conversion_rate
                         else:
-                            # Global (or any other) → no conversion
-                            print(
-                                f"      No currency conversion applied for {country} "
-                                f"(assuming table already in {home_currency.upper()})"
-                            )
-
+                            conversion_rate_applied = 1.0
+                           
                         total_sales += table_sales
                         total_quantity += table_quantity
                         total_profit += table_profit
                         total_asp += table_asp
                         total_cost_of_unit_sold += table_cost_of_unit_sold
-
-                        print(f"      After conversion → Total Sales: {total_sales}, Total Profit: {total_profit}")
-
                     except Exception as e:
                         conn.rollback()
                         print(f"Error querying table {table_name}: {str(e)}")
@@ -300,7 +272,6 @@ def productwise_performance():
         })
 
     except Exception as e:
-        print(f"Error in productwise_performance: {str(e)}")
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 
@@ -353,7 +324,6 @@ def product_search():
         return jsonify({'products': products}), 200
 
     except Exception as e:
-        print(f"Error searching products: {str(e)}")
         return jsonify({'error': f'Error searching products: {str(e)}'}), 500
     
 
@@ -400,7 +370,6 @@ def product_names():
         return jsonify({'product_names': product_list}), 200
 
     except Exception as e:
-        print("Error fetching product names:", str(e))
         return jsonify({'error': str(e)}), 500
 
 
@@ -662,7 +631,6 @@ Data:
         })
 
     except Exception as e:
-        print("Growth AI Error:", str(e))
         return jsonify({'error': 'Internal server error'}), 500
     
 

@@ -133,7 +133,6 @@ def upload():
     # Retrieve user using SQLAlchemy ORM
     user = User.query.get(user_id)
     if user is None:
-        print(f"[DEBUG] User with ID {user_id} not found in database")  # Debug output
         return jsonify({'error': 'User not found'}), 404
 
     if 'file1' not in request.files or 'file2' not in request.files:
@@ -301,8 +300,6 @@ def upload():
         file2_path = os.path.join(UPLOAD_FOLDER, secure_filename(inventory_file_name))
         file2.save(file2_path)
 
-    print(f"Saved file1_path: {file1_path}")
-    print(f"Saved file2_path: {file2_path}")
 
     if file1.filename.endswith('.csv'):
         with open(file1_path, 'r', encoding='utf-8-sig') as f:
@@ -339,7 +336,6 @@ def upload():
         # Now read excel from the detected header line
         df = pd.read_excel(file1_path, skiprows=header_line)
         df.columns = df.columns.str.strip()
-        print(df.head())  #
     else:
         return jsonify({'error': 'Invalid file format. Only .csv and .xlsx files are allowed'}), 400
     
@@ -374,7 +370,6 @@ def upload():
         df[col] = df[col].apply(clean_numeric_value)
 
     df.rename(columns=COLUMN_MAPPING, inplace=True)
-    print(df.columns.tolist())
     for col in COLUMN_MAPPING.values():
         if col not in df.columns:
             if col in numeric_columns:
@@ -692,12 +687,8 @@ def upload():
             for chunk in [records[i:i+1000] for i in range(0, len(records), 1000)]:
                 connection.execute(user_global_table.insert(), chunk)
         
-        print(f"Successfully inserted {len(df_usd)} records into {global_table_name}")
     except Exception as e:
-        print(f"Error during insertion: {str(e)}")
-        # Print more debugging information
-        print(f"DataFrame info: {df_usd.info()}")
-        print(f"First row sample: {df_usd.iloc[0].to_dict() if len(df_usd) > 0 else 'Empty DataFrame'}")
+        return jsonify({'error': f'Error inserting into global table: {str(e)}'}), 500
 
     # Update required columns to match the actual column names in the database
     REQUIRED_COLUMNS = [
@@ -758,7 +749,6 @@ def upload():
                 # Now read excel from the detected header line
                 df = pd.read_excel(file1_path, skiprows=header_line)
                 df.columns = df.columns.str.strip()
-                print(df.head())
             else:
                 return jsonify({'error': 'Invalid file format. Only .csv and .xlsx files are allowed'}), 400
 
@@ -953,7 +943,6 @@ def upload():
                     AND sku IS NOT NULL
                     AND TRIM(sku) <> ''
                     """
-                    print(f"Executing query on table: {table_name}")  # Debugging
                     error_df = pd.read_sql(query, conn)
                 
                 # Filter error_df to keep only the required columns
@@ -979,20 +968,11 @@ def upload():
                 }
 
                 if month.lower() not in quarter_mapping:
-                    print(f"Error: Invalid month {month}")  # Debugging
                     return jsonify({'error': 'Invalid month provided'}), 400
 
                 quarter = quarter_mapping[month.lower()]
                 quarterly_table = f"quater{quarter[-1]}{country}{year}_table"
-                print(f"Determined quarterly table: {quarterly_table}")  # Debugging
                 
-                # Make sure these function calls use engine properly
-                # qtd_pie_chart = process_quarterly_skuwise_data(user_id, country, month, year, quarter, db_url)
-                # ytd_pie_chart = process_yearly_skuwise_data(user_id, country, year)
-                print("Quarterly table updated successfully")  # Debugging
-                
-                
-                   
 
                 # Generate sales pie chart
                 if country.lower() == 'uk':
@@ -1056,8 +1036,6 @@ def upload():
                 next_month, next_year = get_next_month_year(month, year)
                 next_year = str(next_year)
                 next_table = f"skuwisemonthly_{user_id}_{country}_{next_month}{next_year}"
-                print(f"Checking table: {next_table}")
-                print("run")
 
                 if table_exists(engine, next_table):
                     print("Table exists! Running next month logic...")
@@ -1066,7 +1044,6 @@ def upload():
                         total_cous, total_amazon_fee, cm2_profit, rembursement_fee, platform_fee, total_expense, total_profit, total_fba_fees, advertising_total, taxncredit, reimbursement_vs_sales, cm2_margins, acos, rembursment_vs_cm2_margins, total_sales, unit_sold, total_product_sales = process_skuwise_data(user_id, country, next_month, next_year)
                     elif country.lower() == 'us':
                         platform_fee, rembursement_fee, total_cous, total_amazon_fee,  total_profit, total_expense, total_fba_fees, cm2_profit, cm2_margins, acos, rembursment_vs_cm2_margins, advertising_total, reimbursement_vs_sales, unit_sold, total_sales, otherwplatform,taxncredit = process_skuwise_us_data(user_id, country, next_month, next_year)
-                        print("success run")
 
                 else:
                     print("Table does NOT exist for next month.")
@@ -1162,182 +1139,6 @@ def _marketplace_to_country(store):
 def ConfirmationFeepreview():
     return jsonify({'message': 'ConfirmationFeepreview successful!'}), 200
 
-
-# @upload_bp.route('/multiCountry', methods=['POST'])
-# def multiCountry():
-#     # ---------- Auth ----------
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-
-#     # ---------- File ----------
-#     file = request.files.get('file')
-#     if not file:
-#         return jsonify({'error': 'No file provided'}), 400
-#     if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx')):
-#         return jsonify({'error': 'Invalid file type. Only CSV or XLSX files are allowed.'}), 400
-
-#     # ---------- DB ----------
-#     db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
-#     engine = create_engine(db_url)
-#     inspector = inspect(engine)
-#     metadata = MetaData()  # SQLAlchemy 2.x: no bind here
-#     table_name = f"sku_{user_id}_data_table"
-
-#     # Relaxed schema (only user_id is NOT NULL)
-#     user_specific_table = Table(
-#         table_name, metadata,
-#         Column('id', Integer, primary_key=True),
-#         Column('user_id', Integer, nullable=False),
-#         Column('s_no', Integer, nullable=True),
-#         Column('product_name', String(255), nullable=True),
-#         Column('product_barcode', String(255), nullable=True),
-#         Column('sku_uk', String(255), nullable=True),
-#         Column('sku_us', String(255), nullable=True),
-#         Column('asin', String(255), nullable=True),
-#         Column('price', Float, nullable=True),
-#         Column('currency', String(255), nullable=True),
-#         Column('month', String(20), nullable=True),
-#         Column('year', String(20), nullable=True),
-
-#     )
-
-#     session = None
-#     try:
-#         # ---------- Read into DataFrame ----------
-#         if file.filename.endswith('.csv'):
-#             try:
-#                 df = pd.read_csv(BytesIO(file.read()))
-#             except UnicodeDecodeError:
-#                 file.stream.seek(0)
-#                 df = pd.read_csv(BytesIO(file.read()), encoding='latin-1')
-#         else:
-#             df = pd.read_excel(BytesIO(file.read()))
-
-#         # Fix “Unnamed” header case, then normalize
-#         df = _promote_first_row_to_header_if_needed(df)
-#         df = _normalize_columns(df)
-#         df = df.where(pd.notnull(df), None)
-
-#         # (Re)create fresh table per upload
-#         if inspector.has_table(table_name):
-#             Table(table_name, MetaData(), autoload_with=engine).drop(engine, checkfirst=True)
-#         metadata.create_all(engine)  # SQLAlchemy 2.x: pass engine here
-
-#         Session = sessionmaker(bind=engine)
-#         session = Session()
-
-#         inserts = []
-#         for _, r in df.iterrows():
-#             row = r.to_dict()
-
-#             s_no = _pick(row, ['s_no', 's_no.', 's._no.', 'no', '#'])
-#             try:
-#                 s_no = int(s_no) if s_no not in (None, '') else None
-#             except Exception:
-#                 s_no = None
-
-#             product_name = _pick(row, ['product_name', 'product-name', 'title', 'item_name'])
-#             product_barcode = _pick(row, ['product_barcode', 'barcode', 'ean', 'upc'])
-#             asin = _pick(row, ['asin'])
-
-#             amazon_store = _pick(row, ['amazon_store', 'amazon-store', 'marketplace'])
-#             country = _marketplace_to_country(amazon_store)
-
-#             raw_sku = _pick(row, ['sku', 'seller_sku', 'merchant_sku', 'sku_uk', 'sku_us'])
-#             sku_uk = _pick(row, ['sku_uk'])
-#             sku_us = _pick(row, ['sku_us'])
-#             if not sku_uk and not sku_us and raw_sku:
-#                 if country == 'UK':
-#                     sku_uk = str(raw_sku).strip()
-#                 elif country == 'US':
-#                     sku_us = str(raw_sku).strip()
-
-#             price_value = _pick(row, ['landing_cost', 'your_price', 'sales_price', 'price'])
-#             try:
-#                 price_value = float(price_value) if price_value not in (None, '') else None
-#             except Exception:
-#                 price_value = None
-
-#             currency = _pick(row, ['currency'])
-
-#             month = _pick(row, ['month', 'Month', 'mon', 'mm'])
-#             year  = _pick(row, ['year', 'Year', 'yyyy', 'yy'])
-
-#             # int conversion (safe)
-#             try:
-#                 month = str(month).strip().lower() if month not in (None, '') else None
-#             except Exception:
-#                 month = None
-
-#             try:
-#                 year = str(year) if year not in (None, '') else None
-#             except Exception:
-#                 year = None
-
-
-#             # Skip fully empty lines
-#             if not any([s_no, product_name, product_barcode, asin, sku_uk, sku_us, price_value, currency]):
-#                 continue
-
-#             def _s(x):
-#                 if x is None:
-#                     return None
-#                 x = str(x).strip()
-#                 return x if x else None
-
-#             inserts.append({
-#                 'user_id': user_id,
-#                 's_no': s_no,
-#                 'product_name': _s(product_name),
-#                 'product_barcode': _s(product_barcode),
-#                 'sku_uk': _s(sku_uk),
-#                 'sku_us': _s(sku_us),
-#                 'asin': _s(asin),
-#                 'price': price_value,
-#                 'currency': _s(currency),
-#                 'month': month,
-#                 'year': year,
-#             })
-
-#         if inserts:
-#             session.execute(user_specific_table.insert(), inserts)
-#             session.commit()
-#             msg = 'File uploaded and data saved successfully'
-#         else:
-#             msg = 'File processed, but no valid rows found to insert.'
-
-#         session.close()
-#         engine.dispose()
-#         return jsonify({'message': msg}), 200
-
-#     except Exception as e:
-#         try:
-#             if session is not None:
-#                 session.rollback()
-#                 session.close()
-#         except Exception:
-#             pass
-#         try:
-#             engine.dispose()
-#         except Exception:
-#             pass
-#         print(f"Error processing file: {str(e)}")
-#         return jsonify({'error': f'Error processing file: {str(e)}'}), 500
-
-# BACKEND: full updated route (merged changes)
-# - Supports your uploaded template: single "Date" column (Excel date) -> month="January", year="2024"
-# - Also supports "MM/YYYY" strings if they come in (from CSV or frontend formatting)
-# - Keeps DB columns month/year as strings, month stored as month name (not 01)
 
 from io import BytesIO
 import os
