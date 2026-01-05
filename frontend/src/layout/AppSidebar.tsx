@@ -22,6 +22,8 @@ import {
 import { useConnectedPlatforms } from "@/lib/utils/useConnectedPlatforms";
 import { useShopifyStore } from "@/lib/utils/useShopifyStore";
 import { usePlatform } from "@/components/context/PlatformContext";
+import { useGetUserDataQuery } from "@/lib/api/profileApi";
+import { buildCountryMarketplaceMap } from "@/lib/utils/countryMarketplace";
 
 type NavSubItem = {
   name: string;
@@ -57,7 +59,7 @@ const AppSidebar: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
   const routeParams = useParams();
-  const { setPlatform } = usePlatform();
+  const { data: user } = useGetUserDataQuery();
 
 //   useEffect(() => {
 //   if (typeof window === "undefined") return;
@@ -128,39 +130,58 @@ const rawOptions: RegionOption[] =
 
 const countryFromRoute = routeParams?.countryName as string | undefined;
 
-const regionOptions: RegionOption[] =
-  buildPlatformOptions(connectedPlatforms);
+const regionOptions: RegionOption[] = React.useMemo(() => {
+  const opts = buildPlatformOptions(connectedPlatforms);
+
+  const countryFromRoute = routeParams?.countryName as string | undefined;
+  if (countryFromRoute) {
+    const forcedValue = `amazon-${countryFromRoute}`;
+
+    const exists = opts.some(o => o.value === forcedValue);
+    if (!exists) {
+      opts.unshift({
+        value: forcedValue,
+        label: `Amazon ${countryFromRoute.toUpperCase()}`,
+      });
+    }
+  }
+
+  return opts;
+}, [connectedPlatforms, routeParams?.countryName]);
+
 
   // ===== Selected platform =====
-const [selectedPlatform, setSelectedPlatform] = useState<string>("global");
+
+const [selectedPlatform, setSelectedPlatform] = useState<string>(
+  countryFromRoute ? `amazon-${countryFromRoute}` : "global"
+);
+const countryMarketplaceMap = React.useMemo(() => {
+  return buildCountryMarketplaceMap(
+    user?.countries,
+    user?.marketplaces
+  );
+}, [user]);
 
 useEffect(() => {
-  if (!regionOptions.length) return;
-
+  // 1️⃣ URL has highest priority
   const country = routeParams?.countryName as string | undefined;
-  let desired: PlatformId | null = null;
-
-  if (country === "uk") desired = "amazon_uk";
-  if (country === "us") desired = "amazon_us";
-  if (!country) desired = null;
-
-  // ✅ URL has highest priority (new tab case)
-  if (desired && regionOptions.some(o => o.value === desired)) {
-    setSelectedPlatform(desired);
-    localStorage.setItem("selectedPlatform", desired);
+  if (country) {
+    const platform = `amazon-${country}` as PlatformId;
+    setSelectedPlatform(platform);
+    setPlatformCtx(platform);
+    localStorage.setItem("selectedPlatform", platform);
     return;
   }
 
-  // 🔁 fallback: localStorage
+  // 2️⃣ fallback to localStorage
   const saved = localStorage.getItem("selectedPlatform");
-  if (saved && regionOptions.some(o => o.value === saved)) {
+  if (saved) {
     setSelectedPlatform(saved);
-    return;
+    setPlatformCtx(saved as PlatformId);
   }
+}, [routeParams?.countryName]);
 
-  // 🧹 final fallback
-  setSelectedPlatform(regionOptions[0].value);
-}, [routeParams?.countryName, regionOptions]);
+
 
 
 

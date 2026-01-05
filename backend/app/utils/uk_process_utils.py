@@ -85,8 +85,6 @@ def process_skuwise_data(user_id, country, month, year):
             print(f"No data found in {source_table}")
             return
 
-        print("Main data loaded successfully")
-
         # Check if previous month table exists - PostgreSQL version
         table_exists_query = f"""
             SELECT EXISTS (
@@ -101,8 +99,6 @@ def process_skuwise_data(user_id, country, month, year):
 
         a = b = c = d = e = f = g = h = i = j = k = l = m = n = o = p = q = r = 0
         if table_exists:
-            print(f"Previous month table {prev_table} exists. Fetching previous data...")
-            # Load previous month full data
             query = f"""
                 SELECT sku,
                     net_sales AS previous_net_sales,
@@ -798,7 +794,6 @@ def process_skuwise_data(user_id, country, month, year):
 
         # Ensure sku_grouped has unique columns BEFORE appending total row
         if not sku_grouped.columns.is_unique:
-            print("[WARN] sku_grouped had duplicate columns; de-duplicating by keeping first occurrence.")
             sku_grouped = sku_grouped.loc[:, ~sku_grouped.columns.duplicated()].copy()
 
         # Ensure sum_row quantities are integers (and exist)
@@ -1437,7 +1432,6 @@ def process_skuwise_data(user_id, country, month, year):
                 if existing_entry:
                     session.delete(existing_entry)
                     session.commit()
-                    print(f"Existing upload history entry deleted for {logical_country}.")
 
                 upload_history_entry = UploadHistory(
                     user_id=int(user_id),
@@ -1473,7 +1467,6 @@ def process_skuwise_data(user_id, country, month, year):
 
                 session.add(upload_history_entry)
                 session.commit()
-                print("✅ Upload history entry saved successfully for uk_usd.")
 
             else:
                 print("Upload history for uk_usd skipped (country is not UK).")
@@ -1728,8 +1721,6 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
 
                 sku_grouped.columns = sku_grouped.columns.str.lower()
                 sku_grouped.to_sql(quarter_table, conn_inner, if_exists="replace", index=False)
-                # conn_inner.commit()  # engine.begin() khud handle karega
-                print(f"✅ Quarterly SKU-wise data saved to `{quarter_table}`")
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -1755,8 +1746,6 @@ def process_yearly_skuwise_data(user_id, country, year):
     
     try:
         for source_table, logical_country in config_list:
-            print(f"\n==== Processing global monthly for source_table={source_table}, country={logical_country} ====")
-
             quarter_table = f"skuwiseyearly_{user_id}_{logical_country}_{year}_table"
 
         # Fetch yearly data - using parameterized query for PostgreSQL
@@ -1783,9 +1772,6 @@ def process_yearly_skuwise_data(user_id, country, year):
             if df.empty:
                 print(f"⚠️ No yearly data found for user={user_id}, country={logical_country}, year={year} in {source_table}")
                 continue
-
-
-            # print(df.columns)
         
     
         # Group by SKU for aggregation
@@ -1834,39 +1820,32 @@ def process_yearly_skuwise_data(user_id, country, year):
                 lambda row: (row["cm2_profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "cm2_margins"]])
             sku_grouped["acos"] = sku_grouped.apply(
                 lambda row: (row["advertising_total"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "acos"]])
             sku_grouped["rembursment_vs_cm2_margins"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["cm2_profit"]) * 100 if row["cm2_profit"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "rembursment_vs_cm2_margins"]])
             sku_grouped["reimbursement_vs_sales"] = sku_grouped.apply(
                 lambda row: (row["rembursement_fee"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "reimbursement_vs_sales"]])
 
             sku_grouped["profit_percentage"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["net_sales"]) * 100 if row["net_sales"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "profit_percentage"]])
 
             sku_grouped["asp"] = sku_grouped.apply(
                 lambda row: (row["net_sales"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "asp"]])
             sku_grouped["unit_wise_profitability"] = sku_grouped.apply(
                 lambda row: (row["profit"] / row["quantity"])  if row["quantity"] != 0 else 0,
                 axis=1
             )
-            # print(sku_grouped[["product_name", "unit_wise_profitability"]])
 
             temp = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
 
@@ -1883,9 +1862,6 @@ def process_yearly_skuwise_data(user_id, country, year):
                 lambda row: (row["net_sales"] / total_sales) * 100 if total_sales != 0 else 0,
                 axis=1
             )
-
-
-
             total_row = sku_grouped[sku_grouped["product_name"].str.lower() == "total"]
             other_rows = sku_grouped[sku_grouped["product_name"].str.lower() != "total"]
 
@@ -1953,9 +1929,6 @@ def process_yearly_skuwise_data(user_id, country, year):
                             schema="public", method="multi", chunksize=1000)
             
             conn.commit()
-            
-
-       
 
     except Exception as e:
         print(f"Error processing yearly SKU-wise data: {e}")

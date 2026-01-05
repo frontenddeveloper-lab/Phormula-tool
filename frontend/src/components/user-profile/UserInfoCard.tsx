@@ -1,726 +1,3 @@
-// "use client";
-// import React, { useEffect, useMemo, useState } from "react";
-// import { useModal } from "../../hooks/useModal";
-// import { Modal } from "../ui/modal";
-// import Button from "../ui/button/Button";
-// import Input from "../form/input/InputField";
-// import Label from "../form/Label";
-// import {
-//   useForgotPasswordMutation,
-//   useGetUserDataQuery,
-//   useUpdateProfileMutation,
-// } from "@/lib/api/profileApi";
-// import PageBreadcrumb from "../common/PageBreadCrumb";
-// import { RiPencilFill } from "react-icons/ri";
-
-// type FormState = {
-//   brand_name: string;
-//   company_name: string;
-//   annual_sales_range: string;
-//   email: string;        // shown/locked (non-editable here)
-//   phone_number: string;
-// };
-
-// const REVENUE_OPTIONS = [
-//   "",
-//   "$0 - $50K",
-//   "$50K - $100K",
-//   "$100K - $500K",
-//   "$500K - $1M",
-//   "$1M+",
-// ];
-
-// export default function UserInfoCard() {
-//   const { isOpen, openModal, closeModal } = useModal();
-
-//   // ✅ fetch user data
-//   const { data, isLoading, isError, refetch } = useGetUserDataQuery();
-
-//   // ✅ mutation
-//   const [updateProfile, { isLoading: isSaving }] = useUpdateProfileMutation();
-
-//   // Local form state for modal
-//   const [form, setForm] = useState<FormState>({
-//     brand_name: "",
-//     company_name: "",
-//     annual_sales_range: "",
-//     email: "",
-//     phone_number: "",
-//   });
-
-//   // seed form once data arrives/changes
-//   useEffect(() => {
-//     if (data) {
-//       setForm({
-//         brand_name: data.brand_name ?? "",
-//         company_name: data.company_name ?? "",
-//         annual_sales_range: data.annual_sales_range ?? "",
-//         email: data.email ?? "",
-//         phone_number: data.phone_number ?? "",
-//       });
-//     }
-//   }, [data]);
-
-//   const show = (v?: string | null) => (v && v.trim().length ? v : "-");
-
-//   const handleInput =
-//     (key: keyof FormState) =>
-//     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-//       setForm((prev) => ({ ...prev, [key]: e.target.value }));
-//     };
-
-//   const handleSave = async () => {
-//     try {
-//       // Only send editable fields (email is read-only here)
-//       const payload = {
-//         brand_name: form.brand_name,
-//         company_name: form.company_name,
-//         annual_sales_range: form.annual_sales_range,
-//         phone_number: form.phone_number,
-//       };
-//       await updateProfile(payload).unwrap();
-//       // The mutation invalidates "User" -> auto-refetches
-//       // Optionally force an immediate refetch:
-//       // await refetch();
-//       closeModal();
-//     } catch (err: any) {
-//       // Surface an error however you prefer (toast, inline, etc.)
-//       console.error(err);
-//       alert(err?.data?.message ?? "Failed to update profile.");
-//     }
-//   };
-
-//   const [forgotPassword, { isLoading: isSending, isSuccess }] =
-//   useForgotPasswordMutation();
-
-// // Handler for reset password
-// const handleForgotPassword = async () => {
-//   if (!data?.email) return;
-//   try {
-//     await forgotPassword({ email: data.email }).unwrap();
-//   } catch (err: any) {
-//     console.error(err);
-//     alert(err?.data?.message || "Failed to send reset email.");
-//   }
-// };
-
-
-//   return (
-//     <div className="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6">
-//       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-//         <div>
-//           {/* <h4 className="text-lg font-semibold text-gray-800 dark:text-white/90 lg:mb-6">
-//             Personal Information
-//           </h4> */}
-
-//            <PageBreadcrumb pageTitle="Personal Information" align="left" textSize="2xl" className="lg:mb-4"/>
-
-//           {isLoading && ( 
-//             <div className="text-sm text-gray-500 dark:text-gray-400">
-//               Loading…
-//             </div>
-//           )}
-//           {isError && (
-//             <div className="text-sm text-red-500">Failed to load profile.</div>
-//           )}
-
-//           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-7 2xl:gap-x-32">
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Brand Name
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.brand_name)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Company Name
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.company_name)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Revenue
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.annual_sales_range)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Email
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.email)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Phone
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.phone_number)}
-//               </p>
-//             </div>
-
-//             <div>
-//   <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//     Reset Password
-//   </p>
-//   <p
-//     onClick={handleForgotPassword}
-//     className={`text-sm font-medium cursor-pointer ${
-//       isSuccess
-//         ? "text-green-600 dark:text-green-400"
-//         : "text-blue-600 hover:underline"
-//     }`}
-//   >
-//     {isSending
-//       ? "Sending..."
-//       : isSuccess
-//       ? "Email sent for password reset"
-//       : "Click here to change password"}
-//   </p>
-// </div>
-
-//           </div>
-//         </div>
-
-//         {/* <button
-//           onClick={openModal}
-//           className="flex w-full items-center justify-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200 lg:inline-flex lg:w-auto"
-//         >
-//           <svg
-//             className="fill-current"
-//             width="18"
-//             height="18"
-//             viewBox="0 0 18 18"
-//             xmlns="http://www.w3.org/2000/svg"
-//           >
-//             <path
-//               fillRule="evenodd"
-//               clipRule="evenodd"
-//               d="M15.0911 2.78206C14.2125 1.90338 12.7878 1.90338 11.9092 2.78206L4.57524 10.116C4.26682 10.4244 4.0547 10.8158 3.96468 11.2426L3.31231 14.3352C3.25997 14.5833 3.33653 14.841 3.51583 15.0203C3.69512 15.1996 3.95286 15.2761 4.20096 15.2238L7.29355 14.5714C7.72031 14.4814 8.11172 14.2693 8.42013 13.9609L15.7541 6.62695C16.6327 5.74827 16.6327 4.32365 15.7541 3.44497L15.0911 2.78206ZM12.9698 3.84272C13.2627 3.54982 13.7376 3.54982 14.0305 3.84272L14.6934 4.50563C14.9863 4.79852 14.9863 5.2734 14.6934 5.56629L14.044 6.21573L12.3204 4.49215L12.9698 3.84272ZM11.2597 5.55281L5.6359 11.1766C5.53309 11.2794 5.46238 11.4099 5.43238 11.5522L5.01758 13.5185L6.98394 13.1037C7.1262 13.0737 7.25666 13.003 7.35947 12.9002L12.9833 7.27639L11.2597 5.55281Z"
-//             />
-//           </svg>
-//           Edit
-//         </button> */}
-//         <Button onClick={openModal} startIcon={<RiPencilFill />} variant="primary" size="sm">
-//           Edit
-//         </Button>
-//       </div>
-
-//       {/* ---- MODAL ---- */}
-//       <Modal isOpen={isOpen} onClose={closeModal} className="max-w-[700px] m-4">
-//         <div className="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-11">
-//           <div className="px-2 pr-14">
-//             <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">
-//               Edit Personal Information
-//             </h4>
-//             <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
-//               Update your details to keep your profile up-to-date.
-//             </p>
-//           </div>
-
-//           <form className="flex flex-col" onSubmit={(e) => e.preventDefault()}>
-//             <div className="custom-scrollbar h-[450px] overflow-y-auto px-2 pb-3">
-//               <div className="mt-7">
-//                 <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
-//                   Personal Information
-//                 </h5>
-
-//                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Brand Name</Label>
-//                     <Input
-//                       type="text"
-//                       value={form.brand_name}
-//                       onChange={handleInput("brand_name")}
-//                     />
-//                   </div>
-
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Company Name</Label>
-//                     <Input
-//                       type="text"
-//                       value={form.company_name}
-//                       onChange={handleInput("company_name")}
-//                     />
-//                   </div>
-
-//                   {/* ✅ Revenue dropdown (controlled) */}
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Revenue</Label>
-//                     <select
-//                       value={form.annual_sales_range}
-//                       onChange={handleInput("annual_sales_range")}
-//                       className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-//                     >
-//                       <option value="">Select Revenue Range</option>
-//                       <option value="$0 - $50K">$0 - $50K</option>
-//                       <option value="$50K - $100K">$50K - $100K</option>
-//                       <option value="$100K - $500K">$100K - $500K</option>
-//                       <option value="$500K - $1M">$500K - $1M</option>
-//                       <option value="$1M+">$1M and above</option>
-//                     </select>
-//                   </div>
-
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Email (read-only)</Label>
-//                     <Input type="text" value={form.email} disabled />
-//                   </div>
-
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Phone</Label>
-//                     <Input
-//                       type="text"
-//                       value={form.phone_number}
-//                       onChange={handleInput("phone_number")}
-//                     />
-//                   </div>
-//                 </div>
-//               </div>
-//             </div>
-
-//             <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
-//               <Button size="sm" variant="outline" onClick={closeModal} disabled={isSaving}>
-//                 Close
-//               </Button>
-//               <Button size="sm" onClick={handleSave} disabled={isSaving}>
-//                 {isSaving ? "Saving…" : "Save Changes"}
-//               </Button>
-//             </div>
-//           </form>
-//         </div>
-//       </Modal>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// "use client";
-// import React, { useEffect, useState } from "react";
-// import { useModal } from "../../hooks/useModal";
-// import { Modal } from "../ui/modal";
-// import Button from "../ui/button/Button";
-// import Input from "../form/input/InputField";
-// import Label from "../form/Label";
-// import {
-//   useForgotPasswordMutation,
-//   useGetUserDataQuery,
-//   useUpdateProfileMutation,
-// } from "@/lib/api/profileApi";
-// import PageBreadcrumb from "../common/PageBreadCrumb";
-// import { RiPencilFill } from "react-icons/ri";
-
-// type FormState = {
-//   brand_name: string;
-//   company_name: string;
-//   annual_sales_range: string;
-//   email: string;
-//   phone_number: string;
-//   homeCurrency: string;
-//   target_sales: string; // keep as string in the form to handle empty/partial input
-// };
-
-
-// const REVENUE_OPTIONS = [
-//   "",
-//   "$0 - $50K",
-//   "$50K - $100K",
-//   "$100K - $500K",
-//   "$500K - $1M",
-//   "$1M+",
-// ];
-
-// // ✅ Currency dropdown options
-// const CURRENCY_OPTIONS = ["USD", "GBP", "INR", "CAD"];
-
-// export default function UserInfoCard() {
-//   const { isOpen, openModal, closeModal } = useModal();
-
-//   // ✅ fetch user data
-//   const { data, isLoading, isError } = useGetUserDataQuery();
-//   console.log("User data:", data);
-
-//   // ✅ mutation
-//   const [updateProfile, { isLoading: isSaving }] = useUpdateProfileMutation();
-
-//   const [form, setForm] = useState<FormState>({
-//     brand_name: "",
-//     company_name: "",
-//     annual_sales_range: "",
-//     email: "",
-//     phone_number: "",
-//     homeCurrency: "",
-//     target_sales: "",
-//   });
-
-
-//   useEffect(() => {
-//     if (data) {
-//       setForm({
-//         brand_name: data.brand_name ?? "",
-//         company_name: data.company_name ?? "",
-//         annual_sales_range: data.annual_sales_range ?? "",
-//         email: data.email ?? "",
-//         phone_number: data.phone_number ?? "",
-//         homeCurrency: (data as any).homeCurrency ?? "",
-//         target_sales:
-//           (data as any).target_sales != null ? String((data as any).target_sales) : "",
-//       });
-//     }
-//   }, [data]);
-
-
-//   const show = (v?: string | null) => (v && v.trim().length ? v : "-");
-
-//   const handleInput =
-//     (key: keyof FormState) =>
-//       (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-//         setForm((prev) => ({ ...prev, [key]: e.target.value }));
-//       };
-
-//   const handleSave = async () => {
-//     try {
-//       // Only send editable fields (email is read-only here)
-//       const payload = {
-//         brand_name: form.brand_name,
-//         company_name: form.company_name,
-//         annual_sales_range: form.annual_sales_range,
-//         phone_number: form.phone_number,
-//         homeCurrency: form.homeCurrency,
-//         target_sales: form.target_sales === "" ? null : Number(form.target_sales), // Numeric(12,2)
-//       };
-//       await updateProfile(payload).unwrap();
-
-//       closeModal();
-//     } catch (err: any) {
-//       console.error(err);
-//       alert(err?.data?.message ?? "Failed to update profile.");
-//     }
-//   };
-
-//   const [forgotPassword, { isLoading: isSending, isSuccess }] =
-//     useForgotPasswordMutation();
-
-//   // Handler for reset password
-//   const handleForgotPassword = async () => {
-//     if (!data?.email) return;
-//     try {
-//       await forgotPassword({ email: data.email }).unwrap();
-//     } catch (err: any) {
-//       console.error(err);
-//       alert(err?.data?.message || "Failed to send reset email.");
-//     }
-//   };
-
-//   const formatCurrency = (value: string | number | null | undefined, currency: string) => {
-//     const n = typeof value === "string" ? Number(value) : value ?? NaN;
-//     if (!currency || !Number.isFinite(n)) return "-";
-//     return new Intl.NumberFormat(undefined, {
-//       style: "currency",
-//       currency,
-//       minimumFractionDigits: 2,
-//       maximumFractionDigits: 2,
-//     }).format(n);
-//   };
-
-
-//   return (
-//     <div className="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6">
-//       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-//         <div>
-//           <PageBreadcrumb
-//             pageTitle="Personal Information"
-//             align="left"
-//             textSize="2xl"
-//             className="lg:mb-4"
-//           />
-
-//           {isLoading && (
-//             <div className="text-sm text-gray-500 dark:text-gray-400">
-//               Loading…
-//             </div>
-//           )}
-//           {isError && (
-//             <div className="text-sm text-red-500">Failed to load profile.</div>
-//           )}
-
-//           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-7 2xl:gap-x-32">
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Brand Name
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.brand_name)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Company Name
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.company_name)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Revenue
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.annual_sales_range)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Email
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.email)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Phone
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.phone_number)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Home Currency
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {show(data?.homeCurrency)}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Reset Password
-//               </p>
-//               <p
-//                 onClick={handleForgotPassword}
-//                 className={`text-sm font-medium cursor-pointer ${isSuccess
-//                   ? "text-green-600 dark:text-green-400"
-//                   : "text-blue-600 hover:underline"
-//                   }`}
-//               >
-//                 {isSending
-//                   ? "Sending..."
-//                   : isSuccess
-//                     ? "Email sent for password reset"
-//                     : "Click here to change password"}
-//               </p>
-//             </div>
-
-//             <div>
-//               <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-//                 Target Sales
-//               </p>
-//               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-//                 {formatCurrency((data as any)?.target_sales, (data as any)?.homeCurrency)}
-//               </p>
-//             </div>
-//           </div>
-//         </div>
-
-//         <Button
-//           onClick={openModal}
-//           startIcon={<RiPencilFill />}
-//           variant="primary"
-//           size="sm"
-//         >
-//           Edit
-//         </Button>
-//       </div>
-
-//       {/* ---- MODAL ---- */}
-//       <Modal isOpen={isOpen} onClose={closeModal} className="max-w-[700px] m-4">
-//         <div className="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-11">
-//           <div className="px-2 pr-14">
-//             <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">
-//               Edit Personal Information
-//             </h4>
-//             <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
-//               Update your details to keep your profile up-to-date.
-//             </p>
-//           </div>
-
-//           <form className="flex flex-col" onSubmit={(e) => e.preventDefault()}>
-//             <div className="custom-scrollbar h-[450px] overflow-y-auto px-2 pb-3">
-//               <div className="mt-7">
-//                 <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
-//                   Personal Information
-//                 </h5>
-
-//                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Brand Name</Label>
-//                     <Input
-//                       type="text"
-//                       value={form.brand_name}
-//                       onChange={handleInput("brand_name")}
-//                     />
-//                   </div>
-
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Company Name</Label>
-//                     <Input
-//                       type="text"
-//                       value={form.company_name}
-//                       onChange={handleInput("company_name")}
-//                     />
-//                   </div>
-
-//                   {/* Revenue dropdown (controlled) */}
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Revenue</Label>
-//                     <select
-//                       value={form.annual_sales_range}
-//                       onChange={handleInput("annual_sales_range")}
-//                       className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-//                     >
-//                       <option value="">Select Revenue Range</option>
-//                       <option value="$0 - $50K">$0 - $50K</option>
-//                       <option value="$50K - $100K">$50K - $100K</option>
-//                       <option value="$100K - $500K">$100K - $500K</option>
-//                       <option value="$500K - $1M">$500K - $1M</option>
-//                       <option value="$1M+">$1M and above</option>
-//                     </select>
-//                   </div>
-
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Email (read-only)</Label>
-//                     <Input type="text" value={form.email} disabled />
-//                   </div>
-
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Phone</Label>
-//                     <Input
-//                       type="text"
-//                       value={form.phone_number}
-//                       onChange={handleInput("phone_number")}
-//                     />
-//                   </div>
-
-//                   {/* ✅ Home Currency dropdown */}
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Home Currency</Label>
-//                     <select
-//                       value={form.homeCurrency}
-//                       onChange={handleInput("homeCurrency")}
-//                       className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-//                     >
-//                       <option value="">Select Currency</option>
-//                       {CURRENCY_OPTIONS.map((cur) => (
-//                         <option key={cur} value={cur}>
-//                           {cur}
-//                         </option>
-//                       ))}
-//                     </select>
-//                   </div>
-
-//                   <div className="col-span-2 lg:col-span-1">
-//                     <Label>Target Sales</Label>
-//                     <Input
-//                       type="number"
-//                       inputMode="numeric"
-//                       step="1"
-//                       min="0"
-//                       value={form.target_sales}
-//                       onChange={handleInput("target_sales")}
-//                     />
-//                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-//                       {form.homeCurrency
-//                         ? `Will be saved as ${form.homeCurrency}. Preview: ${formatCurrency(form.target_sales, form.homeCurrency)}`
-//                         : "Select Home Currency to preview formatting."}
-//                     </p>
-//                   </div>
-
-//                 </div>
-//               </div>
-//             </div>
-
-//             <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
-//               <Button
-//                 size="sm"
-//                 variant="outline"
-//                 onClick={closeModal}
-//                 disabled={isSaving}
-//               >
-//                 Close
-//               </Button>
-//               <Button size="sm" onClick={handleSave} disabled={isSaving}>
-//                 {isSaving ? "Saving…" : "Save Changes"}
-//               </Button>
-//             </div>
-//           </form>
-//         </div>
-//       </Modal>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
@@ -735,12 +12,17 @@ import {
   useGetUserDataQuery,
   useUpdateProfileMutation,
 } from "@/lib/api/profileApi";
-import PageBreadcrumb from "../common/PageBreadCrumb";
-import { RiPencilFill } from "react-icons/ri";
-
-import type { PlatformId } from "@/lib/utils/platforms";
+import { FiEdit } from "react-icons/fi";
+import Link from "next/link";
 import { platformToCurrencyCode } from "@/lib/utils/currency";
 import { useConnectedPlatforms } from "@/lib/utils/useConnectedPlatforms";
+import { ALL_PLATFORM_DEFS, type PlatformId } from "@/lib/utils/platforms";
+import ReactCountryFlag from "react-country-flag";
+import { FaPlus } from "react-icons/fa6";
+import DataTable, { type ColumnDef, type Row } from "@/components/ui/table/DataTable"; 
+import PageBreadcrumb from "@/components/common/PageBreadcrumb";
+import { useSelector } from "react-redux";
+
 
 type FormState = {
   brand_name: string;
@@ -749,8 +31,20 @@ type FormState = {
   email: string;
   phone_number: string;
   homeCurrency: string;
-  target_sales: string; // keep as string in the form to handle empty/partial input
+  target_sales: string; 
 };
+
+type Section = "personal" | "company" | "targets";
+
+type CurrencyRateRow = {
+  user_currency: string;       // normalized lower in backend
+  country: string;             // normalized lower in backend
+  selected_currency: string;   // normalized lower in backend
+  conversion_rate: number;
+  month: string;
+  year: number;
+};
+
 
 const REVENUE_OPTIONS = [
   "",
@@ -764,57 +58,238 @@ const REVENUE_OPTIONS = [
 // ✅ Currency dropdown options
 const CURRENCY_OPTIONS = ["USD", "GBP", "INR", "CAD"];
 
+
+function platformIsConnected(
+  platform: PlatformId,
+  connected: {
+    amazonUk: boolean;
+    amazonUs: boolean;
+    amazonCa: boolean;
+    shopify: boolean;
+  }
+) {
+  switch (platform) {
+    case "global":
+      return false; // show Global Snapshot always (change to false if you don't want it)
+    case "amazon-uk":
+      return connected.amazonUk;
+    case "amazon-us":
+      return connected.amazonUs;
+    case "amazon-ca":
+      return connected.amazonCa;
+    case "shopify":
+      return connected.shopify;
+    default:
+      return false;
+  }
+}
+
+const PLATFORM_FLAG_META: Partial<
+  Record<PlatformId, { label: string; countryCode?: string }>
+> = {
+  "amazon-us": { label: "Amazon US", countryCode: "US" },
+  "amazon-uk": { label: "Amazon UK", countryCode: "GB" },
+  "amazon-ca": { label: "Amazon CA", countryCode: "CA" },
+  shopify: { label: "Shopify" }, // no flag
+};
+
+const PLATFORM_TARGET_META: Partial<
+  Record<PlatformId, { marketplace: string; currencySymbol: string }>
+> = {
+  "amazon-us": { marketplace: "Amazon US", currencySymbol: "$" },
+  "amazon-uk": { marketplace: "Amazon UK", currencySymbol: "£" },
+  "amazon-ca": { marketplace: "Amazon CA", currencySymbol: "C$" },
+  shopify: { marketplace: "Shopify", currencySymbol: "" },
+};
+
+
+
+const formatK = (n: number, symbol = "") => `${symbol}${Math.round(n / 1000)}K`;
+
+
+type TargetRow = Row & {
+  sno: React.ReactNode;
+  marketplace: React.ReactNode;
+  targetNative: React.ReactNode; // ✅ native currency
+  conversion: React.ReactNode;   // ✅ native -> home
+  targetHome: React.ReactNode;   // ✅ home currency (replaces "global")
+  __isTotal?: boolean;
+};
+
+
+const money = (amount: number, currency: string) =>
+  new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+
+const platformToCountry = (pid: PlatformId) => {
+  if (pid === "amazon-us") return "us";
+  if (pid === "amazon-uk") return "uk";
+  if (pid === "amazon-ca") return "ca";
+  return "global"; 
+};
+
+function InfoCard({
+  title,
+  children,
+  action,
+}: {
+  title: React.ReactNode;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+          {title}
+        </h3>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export default function UserInfoCard() {
+
+const [currencyRates, setCurrencyRates] = useState<CurrencyRateRow[]>([]);
+const [ratesLoading, setRatesLoading] = useState(false);
   const { isOpen, openModal, closeModal } = useModal();
 
-
   // ✅ route param from /country/{range}/{country}/{month}/{year} (may be undefined on profile pages)
-const params = useParams() as { country?: string };
+  const params = useParams() as { country?: string };
 
-// ✅ connected marketplaces (from your existing hook)
-const connected = useConnectedPlatforms();
+  // ✅ connected marketplaces (from your existing hook)
+  const connected = useConnectedPlatforms();
+  const connectedPlatformsForTargets = useMemo(() => {
+  const ids: PlatformId[] = [];
+  if (connected.amazonUs) ids.push("amazon-us");
+  if (connected.amazonUk) ids.push("amazon-uk");
+  if (connected.amazonCa) ids.push("amazon-ca");
+  if (connected.shopify) ids.push("shopify");
+  return ids;
+}, [connected.amazonUs, connected.amazonUk, connected.amazonCa, connected.shopify]);
 
-const pagePlatform: PlatformId = useMemo(() => {
-  const c = (params?.country || "").toLowerCase();
+  const pagePlatform: PlatformId = useMemo(() => {
+    const c = (params?.country || "").toLowerCase();
 
-  if (c === "uk") return "amazon-uk";
-  if (c === "us") return "amazon-us";
-  if (c === "ca") return "amazon-ca";
-  if (c === "global") return "global";
+    if (c === "uk") return "amazon-uk";
+    if (c === "us") return "amazon-us";
+    if (c === "ca") return "amazon-ca";
+    if (c === "global") return "global";
 
+    const amazonConnectedCount = [
+      connected.amazonUk,
+      connected.amazonUs,
+      connected.amazonCa,
+    ].filter(Boolean).length;
 
-  const amazonConnectedCount = [
+    if (amazonConnectedCount === 1) {
+      if (connected.amazonUk) return "amazon-uk";
+      if (connected.amazonUs) return "amazon-us";
+      if (connected.amazonCa) return "amazon-ca";
+    }
+
+    return "global";
+  }, [
+    params?.country,
     connected.amazonUk,
     connected.amazonUs,
     connected.amazonCa,
-  ].filter(Boolean).length;
+  ]);
 
-  if (amazonConnectedCount === 1) {
-    if (connected.amazonUk) return "amazon-uk";
-    if (connected.amazonUs) return "amazon-us";
-    if (connected.amazonCa) return "amazon-ca";
-  }
-
-  return "global";
-}, [
-  params?.country,
-  connected.amazonUk,
-  connected.amazonUs,
-  connected.amazonCa,
-]);
-
-const pageCurrency = useMemo(
-  () => platformToCurrencyCode(pagePlatform),
-  [pagePlatform]
-);
-
-const effectiveCurrency =
-  pageCurrency || form.homeCurrency || (data as any)?.homeCurrency || "USD";
-
-
+  const pageCurrency = useMemo(
+    () => platformToCurrencyCode(pagePlatform),
+    [pagePlatform]
+  );
 
   const { data, isLoading, isError } = useGetUserDataQuery();
-  console.log("User data:", data);
+
+const token = useSelector((state: any) => state.auth?.token); 
+
+
+useEffect(() => {
+  if (!token) return; // ✅ wait for redux token
+
+  const fetchRates = async () => {
+    try {
+      setRatesLoading(true);
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/currency-rates`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Failed to fetch rates: ${res.status} ${errText}`);
+      }
+
+      const json = await res.json();
+      setCurrencyRates(json);
+    } catch (e) {
+      console.error(e);
+      setCurrencyRates([]);
+    } finally {
+      setRatesLoading(false);
+    }
+  };
+
+  fetchRates();
+}, [token]);
+
+
+const rateMap = useMemo(() => {
+  // key: "usd|gb|uk"
+  const map = new Map<string, number>();
+
+  for (const r of currencyRates) {
+    const key = `${r.user_currency}|${r.selected_currency}|${r.country}`;
+    map.set(key, Number(r.conversion_rate));
+  }
+
+  return map;
+}, [currencyRates]);
+
+
+const getFxDb = (from: string, to: string, country: string) => {
+  const f = (from || "").toLowerCase();
+  const t = (to || "").toLowerCase();
+  const c = (country || "").toLowerCase();
+
+  if (f === t) return 1;
+
+  // direct
+  const direct = rateMap.get(`${f}|${t}|${c}`);
+  if (direct != null) return direct;
+
+  // inverse (if only opposite exists)
+  const inv = rateMap.get(`${t}|${f}|${c}`);
+  if (inv != null && inv !== 0) return 1 / inv;
+
+  // fallback 1 if missing
+  return 1;
+};
+
 
   const [updateProfile, { isLoading: isSaving }] = useUpdateProfileMutation();
 
@@ -828,6 +303,82 @@ const effectiveCurrency =
     target_sales: "",
   });
 
+  // ✅ per-section edit state
+  const [activeSection, setActiveSection] = useState<Section>("personal");
+  const openSection = (s: Section) => {
+    setActiveSection(s);
+    openModal();
+  };
+
+  const homeCurrencyCode = (
+  (data as any)?.homeCurrency ||
+  form.homeCurrency ||
+  pageCurrency ||
+  "USD"
+).toUpperCase();
+
+const baseNativeTarget = Number((data as any)?.target_sales ?? 0);
+
+const monthlyTargetData: TargetRow[] = useMemo(() => {
+  const rows: TargetRow[] = connectedPlatformsForTargets.map((pid, idx) => {
+    const meta =
+      PLATFORM_TARGET_META[pid] ?? { marketplace: String(pid), currencySymbol: "" };
+
+    const nativeCurrency = platformToCurrencyCode(pid) || homeCurrencyCode;
+    const country = platformToCountry(pid);
+
+    // ✅ conversion rate (native -> home)
+    const nativeToHome = getFxDb(nativeCurrency, homeCurrencyCode, country);
+
+    // ✅ home target = native target * rate
+    const homeTarget = baseNativeTarget * nativeToHome;
+
+    return {
+      sno: `${idx + 1}.`,
+      marketplace: meta.marketplace,
+      targetNative: money(baseNativeTarget, nativeCurrency),
+      conversion: nativeCurrency === homeCurrencyCode ? "-" : nativeToHome.toFixed(3),
+      targetHome: money(homeTarget, homeCurrencyCode),
+    };
+  });
+
+  // ✅ Total row = sum of all home targets
+  if (rows.length) {
+    const totalHome = rows.reduce((sum, row: any) => {
+      const num = Number(String(row.targetHome).replace(/[^0-9.-]+/g, ""));
+      return sum + (Number.isFinite(num) ? num : 0);
+    }, 0);
+
+    rows.push({
+      sno: "",
+      marketplace: "Total",
+      targetNative: "",
+      conversion: "",
+      targetHome: money(totalHome, homeCurrencyCode),
+      __isTotal: true,
+    });
+  }
+
+  return rows;
+}, [connectedPlatformsForTargets, baseNativeTarget, homeCurrencyCode, rateMap]);
+
+const monthlyTargetColumns: ColumnDef<TargetRow>[] = useMemo(
+  () => [
+    { key: "sno", header: "S.No.", width: "60px" },
+    { key: "marketplace", header: "Marketplace", width: "180px" },
+    { key: "targetNative", header: "Target (Native Currency)", width: "220px" },
+    { key: "conversion", header: `Conversion Rate ${homeCurrencyCode})`, width: "210px" },
+    // ✅ REPLACES "Target (Global Currency)"
+    { key: "targetHome", header: `Target (${homeCurrencyCode})`, width: "200px" },
+  ],
+  [homeCurrencyCode]
+);
+
+
+  // ✅ compute effective currency AFTER data + form exist
+  const effectiveCurrency =
+    pageCurrency || form.homeCurrency || (data as any)?.homeCurrency || "USD";
+
   // seed form once data arrives/changes
   useEffect(() => {
     if (data) {
@@ -839,7 +390,9 @@ const effectiveCurrency =
         phone_number: data.phone_number ?? "",
         homeCurrency: (data as any).homeCurrency ?? "",
         target_sales:
-          (data as any).target_sales != null ? String((data as any).target_sales) : "",
+          (data as any).target_sales != null
+            ? String((data as any).target_sales)
+            : "",
       });
     }
   }, [data]);
@@ -852,7 +405,6 @@ const effectiveCurrency =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageCurrency]);
 
-
   const show = (v?: string | null) => (v && v.trim().length ? v : "-");
 
   const handleInput =
@@ -861,20 +413,33 @@ const effectiveCurrency =
       setForm((prev) => ({ ...prev, [key]: e.target.value }));
     };
 
+const buildPayloadBySection = () => {
+  if (activeSection === "personal") {
+    return {
+      phone_number: form.phone_number,
+    };
+  }
+
+  if (activeSection === "company") {
+    return {
+      brand_name: form.brand_name,
+      company_name: form.company_name,
+      annual_sales_range: form.annual_sales_range,
+      homeCurrency: form.homeCurrency,
+      // ✅ removed target_sales from Company section
+    };
+  }
+
+  // ✅ targets
+  return {
+    target_sales: form.target_sales === "" ? null : Number(form.target_sales),
+  };
+};
+
   const handleSave = async () => {
     try {
-      // Only send editable fields (email is read-only here)
-      const payload = {
-        brand_name: form.brand_name,
-        company_name: form.company_name,
-        annual_sales_range: form.annual_sales_range,
-        phone_number: form.phone_number,
-        homeCurrency: form.homeCurrency,
-        // store as numeric (backend Numeric(12,2)); keep UI as whole number
-        target_sales: form.target_sales === "" ? null : Number(form.target_sales),
-      };
-
-      await updateProfile(payload).unwrap();
+      const payload = buildPayloadBySection();
+      await updateProfile(payload as any).unwrap();
       closeModal();
     } catch (err: any) {
       console.error(err);
@@ -882,9 +447,9 @@ const effectiveCurrency =
     }
   };
 
-  const [forgotPassword, { isLoading: isSending, isSuccess }] = useForgotPasswordMutation();
+  const [forgotPassword, { isLoading: isSending, isSuccess }] =
+    useForgotPasswordMutation();
 
-  // Handler for reset password
   const handleForgotPassword = async () => {
     if (!data?.email) return;
     try {
@@ -895,7 +460,10 @@ const effectiveCurrency =
     }
   };
 
-  const formatCurrency = (value: string | number | null | undefined, currency: string) => {
+  const formatCurrency = (
+    value: string | number | null | undefined,
+    currency: string
+  ) => {
     const n = typeof value === "string" ? Number(value) : value ?? NaN;
     if (!currency || !Number.isFinite(n)) return "-";
     return new Intl.NumberFormat(undefined, {
@@ -906,103 +474,248 @@ const effectiveCurrency =
     }).format(n);
   };
 
+  const modalTitle =
+    activeSection === "personal"
+      ? "Edit Personal Info"
+      : activeSection === "company"
+      ? "Edit Company Info"
+      : "Edit Monthly Targets";
+
+  const modalSubtitle =
+    activeSection === "personal"
+      ? "Update your contact and password settings."
+      : activeSection === "company"
+      ? "Update your company and business details."
+      : "Update your marketplace targets.";
+
   return (
-    <div className="p-5 border border-gray-200 rounded-2xl dark:border-gray-800 lg:p-6">
+    <div className="">
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <PageBreadcrumb
-            pageTitle="Personal Information"
-            align="left"
-            textSize="2xl"
-            className="lg:mb-4"
-          />
-
-          {isLoading && <div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div>}
-          {isError && <div className="text-sm text-red-500">Failed to load profile.</div>}
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-7 2xl:gap-x-32">
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Brand Name
-              </p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {show(data?.brand_name)}
-              </p>
+        <div className="w-full">
+          {isLoading && (
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Loading…
             </div>
+          )}
+          {isError && (
+            <div className="text-sm text-red-500">Failed to load profile.</div>
+          )}
 
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Company Name
-              </p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {show(data?.company_name)}
-              </p>
-            </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <InfoCard
+              title={
+    <PageBreadcrumb
+      pageTitle="Personal Info"
+      variant="table"
+      align="left"
+      // textSize="base"
+    />
+  }
+              action={
+  <button
+    onClick={() => openSection("targets")}
+    className="
+      inline-flex items-center justify-center
+      h-9 w-9
+      text-gray-700
+      
+    "
+    aria-label="Edit"
+  >
+    <FiEdit className="text-lg" />
+  </button>
+}
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <InfoItem label="Email" value={show(data?.email)} />
+                <InfoItem label="Phone" value={show(data?.phone_number)} />
+                <InfoItem
+                  label="Reset Password"
+                  value={
+                    <span
+                      onClick={handleForgotPassword}
+                      className={`cursor-pointer ${
+                        isSuccess
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-blue-600 hover:underline"
+                      }`}
+                    >
+                      {isSending
+                        ? "Sending..."
+                        : isSuccess
+                        ? "Email sent for password reset"
+                        : "Click here to change password"}
+                    </span>
+                  }
+                />
+              </div>
+            </InfoCard>
 
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">Revenue</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {show(data?.annual_sales_range)}
-              </p>
+            {/* Company Info */}
+            <InfoCard
+               title={
+    <PageBreadcrumb
+      pageTitle="Company Info"
+      variant="table"
+      align="left"
+      // textSize="base"
+    />
+  }
+              action={
+  <button
+    onClick={() => openSection("company")}
+    className="
+      inline-flex items-center justify-center
+      h-9 w-9
+      text-gray-700
+      
+    "
+    aria-label="Edit"
+  >
+    <FiEdit className="text-lg" />
+  </button>
+}
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <InfoItem label="Company Name" value={show(data?.company_name)} />
+                <InfoItem label="Brand Name" value={show(data?.brand_name)} />
+                <InfoItem
+                  label="Home Currency"
+                  value={show((data as any)?.homeCurrency)}
+                />
+                <InfoItem
+                  label="Revenue"
+                  value={show(data?.annual_sales_range)}
+                />
+                {/* <InfoItem
+                  label="Target Sales"
+                  value={formatCurrency((data as any)?.target_sales, effectiveCurrency)}
+                /> */}
             </div>
+            </InfoCard>
 
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">Email</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {show(data?.email)}
-              </p>
-            </div>
+            {/* Integrations (placeholder) */}
+              <div className="lg:col-span-2">
+         <InfoCard 
+          title={
+    <PageBreadcrumb
+      pageTitle="Integrations"
+      variant="table"
+      align="left"
+      // textSize="base"
+    />
+  }>
+  {(() => {
+    const connectedPlatforms = ALL_PLATFORM_DEFS.filter((p) =>
+      platformIsConnected(p.id, connected)
+    );
 
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">Phone</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {show(data?.phone_number)}
-              </p>
-            </div>
+    if (connectedPlatforms.length === 0) {
+      return (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No platforms connected yet.
+        </p>
+      );
+    }
 
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Home Currency
-              </p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {show(data?.homeCurrency)}
-              </p>
-            </div>
+    return (
+      <>
+        {/* Connected platforms */}
+        <div className="space-y-3">
+          {connectedPlatforms.map((p) => {
+            const meta = PLATFORM_FLAG_META[p.id] ?? { label: p.label };
 
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Reset Password
-              </p>
-              <p
-                onClick={handleForgotPassword}
-                className={`text-sm font-medium cursor-pointer ${
-                  isSuccess
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-blue-600 hover:underline"
-                }`}
-              >
-                {isSending
-                  ? "Sending..."
-                  : isSuccess
-                  ? "Email sent for password reset"
-                  : "Click here to change password"}
-              </p>
-            </div>
+            return (
+              <div key={p.id} className="flex items-center gap-3">
+                {meta.countryCode && (
+                  <ReactCountryFlag
+                    svg
+                    countryCode={meta.countryCode as any}
+                    className="text-[22px] leading-none"
+                    aria-label={meta.label}
+                  />
+                )}
 
-            <div>
-              <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                Target Sales
-              </p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {formatCurrency((data as any)?.target_sales, effectiveCurrency)}
-              </p>
-            </div>
-          </div>
+                <span className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                  {meta.label}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
-        <Button onClick={openModal} startIcon={<RiPencilFill />} variant="primary" size="sm">
-          Edit
-        </Button>
+
+
+        {/* + Integrate more marketplaces */}
+<Link
+  href=""
+  className="
+    inline-flex items-center gap-2
+    text-sm font-semibold text-green-500 dark:text-emerald-400
+    mt-4 whitespace-nowrap
+    border-b border-transparent
+    hover:border-green-500 dark:hover:border-emerald-400
+  "
+>
+  <FaPlus size={12} />
+  <span>Integrate more marketplaces</span>
+</Link>
+
+      </>
+    );
+  })()}
+</InfoCard>
+
+  </div>
+
+ {/* Row 3 - full width */}
+  <div className="lg:col-span-2">
+            <InfoCard
+  title={
+    <PageBreadcrumb
+      pageTitle="Monthly Targets"
+      variant="table"
+      align="left"
+      // textSize="base"
+    />
+  }
+action={
+  <button
+    onClick={() => openSection("targets")}
+    className="
+      inline-flex items-center justify-center
+      h-9 w-9
+      text-gray-700
+      
+    "
+    aria-label="Edit"
+  >
+    <FiEdit className="text-lg" />
+  </button>
+}
+
+>
+  <DataTable
+    columns={monthlyTargetColumns}
+    data={monthlyTargetData}
+    paginate={false}
+    scrollY={false}
+    stickyHeader={false}
+    emptyMessage={
+  ratesLoading ? "Loading currency rates..." : "No connected marketplaces."
+}
+
+    className="rounded-xl"
+    rowClassName={(row) =>
+      // @ts-expect-error
+      row.__isTotal ? "font-semibold bg-slate-50" : ""
+    }
+  />
+</InfoCard>
+  </div>
+
+          </div>
+        </div>
       </div>
 
       {/* ---- MODAL ---- */}
@@ -1010,113 +723,157 @@ const effectiveCurrency =
         <div className="no-scrollbar relative w-full max-w-[700px] overflow-y-auto rounded-3xl bg-white p-4 dark:bg-gray-900 lg:p-11">
           <div className="px-2 pr-14">
             <h4 className="mb-2 text-2xl font-semibold text-gray-800 dark:text-white/90">
-              Edit Personal Information
+              {modalTitle}
             </h4>
             <p className="mb-6 text-sm text-gray-500 dark:text-gray-400 lg:mb-7">
-              Update your details to keep your profile up-to-date.
+              {modalSubtitle}
             </p>
           </div>
 
           <form className="flex flex-col" onSubmit={(e) => e.preventDefault()}>
             <div className="custom-scrollbar h-[450px] overflow-y-auto px-2 pb-3">
-              <div className="mt-7">
-                <h5 className="mb-5 text-lg font-medium text-gray-800 dark:text-white/90 lg:mb-6">
-                  Personal Information
-                </h5>
-
+              <div className="mt-2">
                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>Brand Name</Label>
-                    <Input
-                      type="text"
-                      value={form.brand_name}
-                      onChange={handleInput("brand_name")}
-                    />
-                  </div>
+                  {/* PERSONAL */}
+                  {activeSection === "personal" && (
+                    <>
+                      <div className="col-span-2 lg:col-span-1">
+                        <Label>Email (read-only)</Label>
+                        <Input type="text" value={form.email} disabled />
+                      </div>
 
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>Company Name</Label>
-                    <Input
-                      type="text"
-                      value={form.company_name}
-                      onChange={handleInput("company_name")}
-                    />
-                  </div>
+                      <div className="col-span-2 lg:col-span-1">
+                        <Label>Phone</Label>
+                        <Input
+                          type="text"
+                          value={form.phone_number}
+                          onChange={handleInput("phone_number")}
+                        />
+                      </div>
 
-                  {/* Revenue dropdown (controlled) */}
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>Revenue</Label>
-                    <select
-                      value={form.annual_sales_range}
-                      onChange={handleInput("annual_sales_range")}
-                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-                    >
-                      <option value="">Select Revenue Range</option>
-                      <option value="$0 - $50K">$0 - $50K</option>
-                      <option value="$50K - $100K">$50K - $100K</option>
-                      <option value="$100K - $500K">$100K - $500K</option>
-                      <option value="$500K - $1M">$500K - $1M</option>
-                      <option value="$1M+">$1M and above</option>
-                    </select>
-                  </div>
+                      <div className="col-span-2">
+                        <Label>Reset Password</Label>
+                        <p
+                          onClick={handleForgotPassword}
+                          className={`text-sm font-medium cursor-pointer ${
+                            isSuccess
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-blue-600 hover:underline"
+                          }`}
+                        >
+                          {isSending
+                            ? "Sending..."
+                            : isSuccess
+                            ? "Email sent for password reset"
+                            : "Click here to change password"}
+                        </p>
+                      </div>
+                    </>
+                  )}
 
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>Email (read-only)</Label>
-                    <Input type="text" value={form.email} disabled />
-                  </div>
+                  {/* COMPANY */}
+                  {activeSection === "company" && (
+                    <>
+                      <div className="col-span-2 lg:col-span-1">
+                        <Label>Brand Name</Label>
+                        <Input
+                          type="text"
+                          value={form.brand_name}
+                          onChange={handleInput("brand_name")}
+                        />
+                      </div>
 
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>Phone</Label>
-                    <Input
-                      type="text"
-                      value={form.phone_number}
-                      onChange={handleInput("phone_number")}
-                    />
-                  </div>
+                      <div className="col-span-2 lg:col-span-1">
+                        <Label>Company Name</Label>
+                        <Input
+                          type="text"
+                          value={form.company_name}
+                          onChange={handleInput("company_name")}
+                        />
+                      </div>
 
-                  {/* Home Currency dropdown */}
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>Home Currency</Label>
-                    <select
-                      value={form.homeCurrency}
-                      onChange={handleInput("homeCurrency")}
-                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
-                    >
-                      <option value="">Select Currency</option>
-                      {CURRENCY_OPTIONS.map((cur) => (
-                        <option key={cur} value={cur}>
-                          {cur}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div className="col-span-2 lg:col-span-1">
+                        <Label>Revenue</Label>
+                        <select
+                          value={form.annual_sales_range}
+                          onChange={handleInput("annual_sales_range")}
+                          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                        >
+                          <option value="">Select Revenue Range</option>
+                          {REVENUE_OPTIONS.filter(Boolean).map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  {/* Target Sales (numeric, whole number) */}
-                  <div className="col-span-2 lg:col-span-1">
-                    <Label>Target Sales</Label>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      step="1"
-                      min="0"
-                      value={form.target_sales}
-                      onChange={handleInput("target_sales")}
-                    />
-                    {/* <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {effectiveCurrency
-                        ? `Shown as ${effectiveCurrency}. Preview: ${formatCurrency(
-                            form.target_sales,
-                            effectiveCurrency
-                          )}`
-                        : "Select currency to preview formatting."}
-                    </p> */}
-                  </div>
+                      <div className="col-span-2 lg:col-span-1">
+                        <Label>Home Currency</Label>
+                        <select
+                          value={form.homeCurrency}
+                          onChange={handleInput("homeCurrency")}
+                          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                        >
+                          <option value="">Select Currency</option>
+                          {CURRENCY_OPTIONS.map((cur) => (
+                            <option key={cur} value={cur}>
+                              {cur}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                     
+                    </>
+                  )}
+
+                  {activeSection === "targets" && (
+  <>
+    {/* ✅ Edit Monthly Target (same input moved from Company) */}
+    <div className="col-span-2 lg:col-span-1">
+      <Label>Monthly Target ({homeCurrencyCode})</Label>
+      <Input
+        type="number"
+        inputMode="numeric"
+        step="1"
+        min="0"
+        value={form.target_sales}
+        onChange={handleInput("target_sales")}
+      />
+    </div>
+
+    {/* <div className="col-span-2">
+      <div className="mt-3">
+        <DataTable
+          columns={monthlyTargetColumns}
+          data={monthlyTargetData}
+          paginate={false}
+          scrollY={false}
+          stickyHeader={false}
+          emptyMessage="No connected marketplaces."
+          className="rounded-xl"
+          rowClassName={(row) =>
+            // @ts-expect-error
+            row.__isTotal ? "font-semibold bg-slate-50" : ""
+          }
+        />
+      </div>
+    </div> */}
+  </>
+)}
+
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-3 px-2 mt-6 lg:justify-end">
-              <Button size="sm" variant="outline" onClick={closeModal} disabled={isSaving}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={closeModal}
+                disabled={isSaving}
+              >
                 Close
               </Button>
               <Button size="sm" onClick={handleSave} disabled={isSaving}>

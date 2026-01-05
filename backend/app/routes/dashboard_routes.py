@@ -18,7 +18,7 @@ from io import BytesIO
 
 
 load_dotenv()
-db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
+db_url = os.getenv('DATABASE_URL')
 
 
 
@@ -96,149 +96,6 @@ def passcountryfromprofiles():
     return jsonify({'countries': global_countries}), 200
 
 
-
-
-# @dashboard_bp.route('/getDispatchfile', methods=['GET'])
-# def getDispatchfile():
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         if 'user_id' not in payload:
-#             return jsonify({'error': 'Invalid token payload: user_id missing'}), 401
-
-#         user_id = payload['user_id']
-#         country = request.args.get('country')
-#         month = request.args.get('month')
-#         short_month = month[:3].lower() if month else None
-#         year = request.args.get('year')
-
-#         if not country or not month or not year:
-#             return jsonify({'error': 'Missing country, month, or year parameters'}), 400
-
-#         print(f"✅ Dispatch request - Country: {country}, Month: {month}, Year: {year}, User ID: {user_id}")
-#         uploads_folder = os.path.abspath(UPLOAD_FOLDER)
-
-#         def find_latest_file(user_id, ctry):
-#             pattern = re.compile(rf"inventory_forecast_{user_id}_{re.escape(ctry)}_{short_month}.*\.xlsx$")
-#             print(f"🔍 Searching for files with pattern: {pattern.pattern}")
-#             matched_files = [f for f in os.listdir(uploads_folder) if pattern.match(f)]
-#             matched_files.sort(reverse=True)
-#             return os.path.join(uploads_folder, matched_files[0]) if matched_files else None
-
-#         # ---------- GLOBAL: merge UK + US ----------
-#         if country.lower() == 'global':
-#             file_uk = find_latest_file(user_id, 'uk')
-#             file_us = find_latest_file(user_id, 'us')
-
-#             if not file_uk and not file_us:
-#                 return jsonify({'error': 'No UK or US dispatch files found'}), 404
-
-#             frames = []
-#             for f in [file_uk, file_us]:
-#                 if f and os.path.exists(f):
-#                     frames.append(pd.read_excel(f))
-
-#             if not frames:
-#                 return jsonify({'error': 'No readable UK/US dispatch files found'}), 404
-
-#             combined_df = pd.concat(frames, ignore_index=True)
-
-#             # ---- Expected columns (new schema) ----
-#             expected_columns = [
-#                 'Product Name',
-#                 'Inventory at Month End',
-#                 'Projected Sales Total',
-#                 'Dispatch',
-#                 'Current Inventory + Dispatch',
-#                 'Inventory Coverage Ratio Before Dispatch'
-#             ]
-
-#             # Keep only columns we actually have
-#             have = [c for c in expected_columns if c in combined_df.columns]
-#             if 'Product Name' not in have:
-#                 return jsonify({'error': "'Product Name' column missing in dispatch files"}), 400
-
-#             combined_df = combined_df[have].copy()
-
-#             # Remove any "Total" summary rows
-#             combined_df['Product Name'] = combined_df['Product Name'].astype(str)
-#             combined_df = combined_df[combined_df['Product Name'].str.lower() != 'total']
-
-#             # Ensure numeric cols are numeric
-#             for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
-#                 if col in combined_df.columns:
-#                     combined_df[col] = pd.to_numeric(combined_df[col], errors='coerce').fillna(0)
-
-#             # ---- Group and aggregate ----
-#             agg_spec = {}
-#             for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
-#                 if col in combined_df.columns:
-#                     agg_spec[col] = 'sum'
-
-#             grouped = combined_df.groupby('Product Name', as_index=False).agg(agg_spec) if agg_spec else combined_df[['Product Name']].drop_duplicates()
-
-#             # ---- Weighted average coverage ratio (if present) ----
-#             if 'Inventory Coverage Ratio Before Dispatch' in combined_df.columns and 'Inventory at Month End' in combined_df.columns:
-#                 def weighted_avg(df):
-#                     denom = df['Inventory at Month End'].sum()
-#                     if denom <= 0:
-#                         return 0
-#                     # allow ratio to be string "-" in some rows
-#                     ratio_num = pd.to_numeric(df['Inventory Coverage Ratio Before Dispatch'], errors='coerce').fillna(0)
-#                     return (ratio_num * df['Inventory at Month End']).sum() / denom
-
-#                 ratio_df = (
-#                     combined_df
-#                     .groupby('Product Name', as_index=False)
-#                     .apply(weighted_avg)
-#                     .rename(columns={None: 'Inventory Coverage Ratio Before Dispatch'})
-#                 )
-#                 final_df = pd.merge(grouped, ratio_df, on='Product Name', how='left')
-#                 # Keep "-" for zeros to match UI pattern
-#                 final_df['Inventory Coverage Ratio Before Dispatch'] = final_df['Inventory Coverage Ratio Before Dispatch'].apply(
-#                     lambda x: "-" if pd.isna(x) or x == 0 else round(float(x), 2)
-#                 )
-#             else:
-#                 final_df = grouped.copy()
-
-#             # ---- Total row ----
-#             total_row = {'Product Name': 'Total'}
-#             for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
-#                 if col in final_df.columns and pd.api.types.is_numeric_dtype(final_df[col]):
-#                     total_row[col] = final_df[col].sum()
-#             if 'Inventory Coverage Ratio Before Dispatch' in final_df.columns:
-#                 total_row['Inventory Coverage Ratio Before Dispatch'] = ''  # leave blank on totals
-
-#             final_df = pd.concat([final_df, pd.DataFrame([total_row])], ignore_index=True)
-
-#             # ---- Export to Excel in memory ----
-#             output = BytesIO()
-#             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-#                 final_df.to_excel(writer, index=False, sheet_name='Dispatch')
-#             output.seek(0)
-#             return send_file(output, download_name='global_dispatch.xlsx', as_attachment=False)
-
-#         # ---------- NON-GLOBAL: just return the latest file ----------
-#         file_path = find_latest_file(user_id, country.lower())
-#         if not file_path:
-#             return jsonify({'error': 'Forecast file not found. Please generate inventory forecast first!'}), 404
-
-#         print(f"📤 Sending file: {file_path}")
-#         return send_file(file_path, as_attachment=False)
-
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-#     except Exception as e:
-#         import traceback
-#         traceback.print_exc()
-#         return jsonify({'error': str(e)}), 500
-
 @dashboard_bp.route('/getDispatchfile', methods=['GET'])
 def getDispatchfile():
     auth_header = request.headers.get('Authorization')
@@ -259,7 +116,6 @@ def getDispatchfile():
         if not country or not month or not year:
             return jsonify({'error': 'Missing country, month, or year parameters'}), 400
 
-        print(f"✅ Dispatch request - Country: {country}, Month: {month}, Year: {year}, User ID: {user_id}")
 
         # ---------------- MONTH RESOLUTION (FIX) ----------------
       
@@ -277,7 +133,6 @@ def getDispatchfile():
             effective_month = requested_month
 
         short_month = effective_month[:3].lower()
-        print(f"📌 Using dispatch files for month: {effective_month} ({short_month})")
 
         uploads_folder = os.path.abspath(UPLOAD_FOLDER)
 
@@ -285,7 +140,6 @@ def getDispatchfile():
             pattern = re.compile(
                 rf"inventory_forecast_{user_id}_{re.escape(ctry)}_{short_month}.*\.xlsx$"
             )
-            print(f"🔍 Searching for files with pattern: {pattern.pattern}")
             matched_files = [
                 f for f in os.listdir(uploads_folder)
                 if pattern.match(f)
@@ -421,7 +275,6 @@ def getDispatchfile():
                 'error': 'Forecast file not found. Please generate inventory forecast first!'
             }), 404
 
-        print(f"📤 Sending file: {file_path}")
         return send_file(file_path, as_attachment=False)
 
     except jwt.ExpiredSignatureError:
@@ -429,8 +282,6 @@ def getDispatchfile():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -455,22 +306,17 @@ def getDispatchfile2():
         if not country or not month or not year:
             return jsonify({'error': 'Missing country, month, or year parameters'}), 400
 
-        # ✅ Log input parameters
-        print(f"✅ Dispatch request - Country: {country}, Month: {month}, Year: {year}, User ID: {user_id}")
 
         # Ensure UPLOAD_FOLDER is absolute
         uploads_folder = os.path.abspath(UPLOAD_FOLDER)
 
         filename = f"purchase_order_{user_id}_{country}_{month}_{year}.xlsx"
-        print(f"🔍 Matched files: {filename}")
         file_path = os.path.join(uploads_folder, filename)
 
 
         if not os.path.exists(file_path):
             return jsonify({'error': f'File {filename} not found'}), 404
         
-
-        print(f"📤 Sending file: {file_path}")
         return send_file(file_path, as_attachment=False)
 
     except jwt.ExpiredSignatureError:
@@ -478,8 +324,6 @@ def getDispatchfile2():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -1028,7 +872,6 @@ def global_PO_generated():
     
     try:
         final_df.to_excel(output_path, index=False)
-        print(f"File saved successfully: {output_path}")
     except Exception as e:
         db_session.close()
         return jsonify({'error': f'Error saving file: {str(e)}'}), 500
@@ -1125,9 +968,6 @@ def getForecastFile():
         if not country or not month or not year:
             return jsonify({'error': 'Missing country, month, or year parameters'}), 400
 
-        # ✅ Print the received values
-        print(f"✅ Dispatch request - Country: {country}, Month: {month}, Year: {year}, User ID: {user_id}")
-
         engine = create_engine(db_url)
         meta = MetaData()
         meta.reflect(bind=engine)
@@ -1152,8 +992,6 @@ def getForecastFile():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 def resolve_country(country, currency):

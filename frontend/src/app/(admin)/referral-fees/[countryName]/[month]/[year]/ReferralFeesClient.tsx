@@ -1242,6 +1242,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
     { key: "overcharged", header: "Overcharged", render: (_, v) => fmtCurrency(Number(v)) },
   ];
 
+<<<<<<< HEAD
   const skuTableDisplay: Row[] = useMemo(() => {
     if (!skuTableAll.length) return [];
 
@@ -1367,6 +1368,160 @@ export default function ReferralFeesDashboard(): JSX.Element {
   //     total_charged: row.charged,
   //   }));
   // }, [skuTableDisplay]);
+=======
+const skuTableDisplay: Row[] = useMemo(() => {
+  if (!skuTableAll.length) return [];
+
+  const nonTotal = skuTableAll.filter((row) => !(row as any)._isTotal);
+  const totalRow = skuTableAll.find((row) => (row as any)._isTotal) || null;
+
+  // ✅ 1) Aggregate rows by DISTINCT productName
+  const map = new Map<string, any>();
+
+  for (const r of nonTotal as any[]) {
+    const nameRaw = String(r.productName ?? "").trim();
+    if (!nameRaw) continue;
+
+    const key = nameRaw.toLowerCase(); // distinct productName (case-insensitive)
+
+    if (!map.has(key)) {
+      map.set(key, {
+        sno: "",
+        productName: nameRaw,
+        sku: r.sku ? String(r.sku) : "", // will be fixed below if multiple
+        units: 0,
+        sales: 0,
+
+        ref_applicable: 0,
+        ref_charged: 0,
+
+        fba_applicable: 0,
+        fba_charged: 0,
+
+        other_applicable: 0,
+        other_charged: 0,
+
+        total_applicable: 0,
+        total_charged: 0,
+
+        overcharged: 0,
+
+        _skus: new Set<string>(),
+      });
+    }
+
+    const acc = map.get(key);
+
+    acc.units += Math.round(toNumberSafe(r.units));
+    acc.sales += toNumberSafe(r.sales);
+
+    acc.ref_applicable += toNumberSafe(r.ref_applicable);
+    acc.ref_charged += toNumberSafe(r.ref_charged);
+
+    acc.fba_applicable += toNumberSafe(r.fba_applicable);
+    acc.fba_charged += toNumberSafe(r.fba_charged);
+
+    acc.other_applicable += toNumberSafe(r.other_applicable);
+    acc.other_charged += toNumberSafe(r.other_charged);
+
+    acc.total_applicable += toNumberSafe(r.total_applicable);
+    acc.total_charged += toNumberSafe(r.total_charged);
+
+    acc.overcharged += toNumberSafe(r.overcharged);
+
+    const skuStr = String(r.sku ?? "").trim();
+    if (skuStr) acc._skus.add(skuStr);
+  }
+
+  // ✅ 2) Convert to array + decide SKU display
+  const aggregated = Array.from(map.values()).map((x) => {
+    const skus = Array.from(x._skus);
+    return {
+      ...x,
+      sku: skus.length === 1 ? skus[0] : skus.length > 1 ? "Multiple" : "",
+    };
+  });
+
+  if (!aggregated.length) return totalRow ? [totalRow] : [];
+
+  // ✅ 3) Sort + Top5 + Others based on DISTINCT products
+  const sorted = [...aggregated].sort(
+    (a, b) => toNumberSafe(b.sales) - toNumberSafe(a.sales)
+  );
+
+  const top5 = sorted.slice(0, 5);
+  const remaining = sorted.slice(5);
+
+  let othersRow: Row | null = null;
+  if (remaining.length) {
+    const agg = remaining.reduce(
+      (acc: any, row: any) => {
+        acc.units += Math.round(toNumberSafe(row.units));
+        acc.sales += toNumberSafe(row.sales);
+
+        acc.ref_applicable += toNumberSafe(row.ref_applicable);
+        acc.ref_charged += toNumberSafe(row.ref_charged);
+
+        acc.fba_applicable += toNumberSafe(row.fba_applicable);
+        acc.fba_charged += toNumberSafe(row.fba_charged);
+
+        acc.other_applicable += toNumberSafe(row.other_applicable);
+        acc.other_charged += toNumberSafe(row.other_charged);
+
+        acc.total_applicable += toNumberSafe(row.total_applicable);
+        acc.total_charged += toNumberSafe(row.total_charged);
+
+        acc.overcharged += toNumberSafe(row.overcharged);
+        return acc;
+      },
+      {
+        units: 0,
+        sales: 0,
+        ref_applicable: 0,
+        ref_charged: 0,
+        fba_applicable: 0,
+        fba_charged: 0,
+        other_applicable: 0,
+        other_charged: 0,
+        total_applicable: 0,
+        total_charged: 0,
+        overcharged: 0,
+      }
+    );
+
+    othersRow = {
+      sno: "",
+      sku: "",
+      productName: "Others",
+      units: agg.units,
+      sales: agg.sales,
+      overcharged: agg.overcharged,
+
+      ref_applicable: agg.ref_applicable,
+      ref_charged: agg.ref_charged,
+      fba_applicable: agg.fba_applicable,
+      fba_charged: agg.fba_charged,
+      other_applicable: agg.other_applicable,
+      other_charged: agg.other_charged,
+      total_applicable: agg.total_applicable,
+      total_charged: agg.total_charged,
+
+      _isOthers: true,
+    } as Row;
+  }
+
+  // ✅ 4) Final rows + serial numbers (not for Grand Total)
+  const finalRows: any[] = [...top5];
+  if (othersRow) finalRows.push(othersRow);
+  if (totalRow) finalRows.push(totalRow);
+
+  let counter = 1;
+  return finalRows.map((row: any) => {
+    if (row._isTotal) return { ...row, sno: "" };
+    return { ...row, sno: counter++ };
+  });
+}, [skuTableAll]);
+>>>>>>> e417589e2470f1339d2eb9af039b2b1ce9f378f4
 
   const groupedSkuTableDisplay: any[] = useMemo(() => {
   return skuTableDisplay.map((row: any) => ({
@@ -1609,7 +1764,11 @@ export default function ReferralFeesDashboard(): JSX.Element {
         <>
           {/* ===================== 6 CARDS (UPDATED) ===================== */}
 
+<<<<<<< HEAD
           <div className="grid grid-cols-1 sm:grid-cols-6 lg:grid-cols-3 gap-3 mt-4">
+=======
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3 mt-4">
+>>>>>>> e417589e2470f1339d2eb9af039b2b1ce9f378f4
             <SalesCard
               title="Sales"
               sales={card6.sales}
@@ -1938,11 +2097,15 @@ export default function ReferralFeesDashboard(): JSX.Element {
             ========================= */
             return (
               <div className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+<<<<<<< HEAD
                 {/* <div className="text-lg font-semibold text-slate-800 mb-4">
                   Referral Fee Recon
                 </div> */}
 
                 <div className="flex flex-col md:flex-row items-center justify-between gap-2 flex-wrap w-full mb-2 md:mb-0">
+=======
+                <div className="flex flex-row items-center justify-between gap-2 flex-wrap w-full mb-2 md:mb-0">
+>>>>>>> e417589e2470f1339d2eb9af039b2b1ce9f378f4
                   <PageBreadcrumb
                     pageTitle="Referral Fee Recon"
                     variant="page"

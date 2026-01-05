@@ -143,12 +143,6 @@ def print_comparison_range():
         except ValueError as ve:
             return jsonify({'error': str(ve)}), 400
 
-        print("========== /MonthsforBI DEBUG ==========")
-        print(f"User: {user_id} | Country: {country} | is_global: {is_global}")
-        print(f"Month1: {month1}-{year1} | Month2: {month2}-{year2}")
-        print(f"Tables -> Month1: {table1} | Month2: {table2}")
-        print(f"key_column (FE): {key_column} | scan_key (backend): {scan_key}")
-
         # Dynamic column list
         columns = ['asp', 'quantity', 'profit', 'sales_mix', 'product_name', 'net_sales', 'unit_wise_profitability', 'product_sales','profit_percentage','rembursement_fee','advertising_total']
         if not is_global:
@@ -241,11 +235,6 @@ def print_comparison_range():
         
         expense_total_month1 = query_expense_total(table1)
         expense_total_month2 = query_expense_total(table2)
-
-
-
-
-        print(f"Rows fetched -> data1: {len(data1)} | data2: {len(data2)}")
         if data2:
             print("Sample Month2 row:", {k: data2[0].get(k) for k in ['sku', 'product_name', 'sales_mix', 'quantity', 'net_sales'] if k in data2[0]})
 
@@ -404,7 +393,6 @@ def print_comparison_range():
 
 
         growth_data = calculate_growth(data1, data2)
-        print(f"Growth rows: {len(growth_data)}")
 
         # ✅ Total "summary" object (DO NOT append to rows; frontend already has total row UI)
         def build_total_row(rows, key_column, bucket_label="Total"):
@@ -470,7 +458,6 @@ def print_comparison_range():
                 if p and p in last6_periods:
                     last6_tables.append(tname)
 
-        print(f"Last6 tables found: {len(last6_tables)} -> {last6_tables}")
 
         # (optional / debug)
         historical_keys_last6m = set()
@@ -483,14 +470,8 @@ def print_comparison_range():
         month1_keys = {str(row.get(scan_key)).strip() for row in data1 if row.get(scan_key) is not None and str(row.get(scan_key)).strip()}
         month2_keys = {str(row.get(scan_key)).strip() for row in data2 if row.get(scan_key) is not None and str(row.get(scan_key)).strip()}
 
-        print(f"Unique keys -> Month1: {len(month1_keys)} | Month2: {len(month2_keys)}")
-        print("Month1 keys sample:", list(month1_keys)[:10])
-        print("Month2 keys sample:", list(month2_keys)[:10])
-
         # ✅ Reviving
         reviving_keys = month2_keys - month1_keys
-        print(f"Reviving keys (Month2 - Month1): {len(reviving_keys)}")
-        print("Reviving keys sample:", list(reviving_keys)[:10])
 
         # ✅ Newly launched (baseline based)
         def shift_month(year, month, offset):
@@ -508,7 +489,6 @@ def print_comparison_range():
             return parse_period_from_table_name(tname, user_id, country_lower) or "9999-99"
 
         last6_tables_sorted = sorted(last6_tables, key=table_period)  # oldest -> newest
-        print("Last6 tables sorted (oldest->newest):", last6_tables_sorted)
 
         baseline_keys = set()
         baseline_table = None
@@ -539,7 +519,6 @@ def print_comparison_range():
             except Exception as e:
                 print(f"Warning reading keys from baseline pre-window table {baseline_table}: {e}")
                 baseline_keys = set()
-            print(f"[NEW-LAUNCH] Using pre-window baseline: {baseline_period} table={baseline_table} keys={len(baseline_keys)}")
         else:
             if last6_tables_sorted:
                 baseline_table = last6_tables_sorted[0]
@@ -555,15 +534,9 @@ def print_comparison_range():
                 baseline_keys = set()
 
         newly_launched_keys = (month2_keys - baseline_keys) if baseline_keys else set()
-        print(f"[NEW-LAUNCH] Newly launched keys computed: {len(newly_launched_keys)}")
-        print("[NEW-LAUNCH] Newly launched sample:", list(newly_launched_keys)[:10])
 
         # New/Reviving = reviving OR newly launched
         new_reviving_keys = reviving_keys | newly_launched_keys
-        print(f"Final New/Reviving keys (union): {len(new_reviving_keys)}")
-        print("Final New/Reviving sample:", list(new_reviving_keys)[:10])
-        print("=======================================")
-
         # ✅ Build bucket rows
         new_reviving_growth = [
             row for row in growth_data
@@ -860,7 +833,6 @@ Data:
                     item = future_to_sku[future]
                     sku = item.get('sku', 'N/A')
                     product_name = item.get('product_name', 'N/A')
-                    print(f"Error processing item - SKU: {sku}, Product: {product_name}, Error: {e}")
 
 
         return jsonify({'insights': insights}), 200
@@ -870,7 +842,6 @@ Data:
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
     except Exception as e:
-        print("Unexpected error in /analyze_skus:", e)
         return jsonify({'error': 'Server error', 'details': str(e)}), 500
 
 def parse_period_from_table_name(table_name, user_id, country_lower):
@@ -967,5 +938,4 @@ def get_available_periods_for_bi():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
     except Exception as e:
-        print("Unexpected error in /MonthsforBI/available-periods:", e)
         return jsonify({'error': 'Server error', 'details': str(e)}), 500

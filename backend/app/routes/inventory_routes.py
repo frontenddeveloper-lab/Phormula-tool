@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app import db
 from sqlalchemy import delete
 from app.models.user_models import Inventory, CountryProfile, MonthwiseInventory , InventoryAged
-from app.routes.amazon_api_routes import amazon_client, _apply_region_and_marketplace_from_request
+from app.utils.amazon_utils import amazon_client, _apply_region_and_marketplace_from_request
 from app.utils.live_bi_utils import generate_inventory_alerts_for_all_skus
 
 from config import Config

@@ -1,7 +1,5 @@
-from flask import  jsonify
-from sqlalchemy import create_engine,  inspect
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text
 from config import Config
 SECRET_KEY = Config.SECRET_KEY
 UPLOAD_FOLDER = Config.UPLOAD_FOLDER
@@ -11,15 +9,7 @@ import pandas as pd
 import numpy as np 
 import base64
 from app.models.user_models import User, CountryProfile
-from sqlalchemy import MetaData, Table
-from datetime import datetime, timedelta
-from flask_mail import Message
-from flask import current_app
-from app import mail
-from calendar import month_name
-from pmdarima import auto_arima
 from dotenv import load_dotenv
-from app.models.user_models import UploadHistory , CountryProfile , User
 
 
 load_dotenv()
@@ -46,25 +36,18 @@ MONTHS_MAP = {
 
 def get_previous_month_year(month, year):
     """Calculate the previous month and year."""
-
-    print(f" Previous_Month1: {month}, Previous Year: {year}")
     year = int(year)
     prev_month_num = MONTHS_MAP[month] - 1
     if prev_month_num == 0:
         prev_month_num = 12
         year -= 1
     prev_month = MONTHS_REVERSE_MAP[prev_month_num]
-
-    print(f"Previous Month: {prev_month}, Previous Year: {year}")
-   
-
     return prev_month, year
 
 
 
 
 def process_skuwise_us_data(user_id, country, month, year): 
-    print(f" Month: {month}, Previous Year: {year}")
     engine = create_engine(db_url)
     engine1 = create_engine(db_url1)
     conn = engine.connect()
@@ -80,7 +63,7 @@ def process_skuwise_us_data(user_id, country, month, year):
 
     prev_month, prev_year = get_previous_month_year(month, year)
     prev_table = f"skuwisemonthly_{user_id}_{country}_{prev_month}{prev_year}"
-    print('hello Fee')
+    
     
     try:
         # Fetch main table data
@@ -93,15 +76,9 @@ def process_skuwise_us_data(user_id, country, month, year):
             print(f"No data found in {source_table}")
             return
 
-        print("Main data loaded successfully")
-
-        # sku_blank_rows = df[df['sku'].isnull() | (df['sku'].astype(str).str.strip() == '')]
-        # advertising_total = abs(sku_blank_rows['other_transaction_fees'].sum())
-
         advertising_total = df[
             (df["sku"].isna()) | (df["sku"] == "") | (df["sku"] == "0")
         ]["other_transaction_fees"].sum()
-        print(f"adv Fees (including blank, None, and '0' SKU): {advertising_total}")
         
         # Check if previous month table exists - PostgreSQL version
         table_exists_query = f"""
@@ -117,8 +94,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         
         a = b = c = d = e = f = g = h = i = j = k = l = m = n = o = p = q = r = 0
         if table_exists:
-            print(f"Previous month table {prev_table} exists. Fetching previous data...")
-            # Load previous month full data
             query = f"""
                 SELECT sku,
                     net_sales AS previous_net_sales,
@@ -206,13 +181,8 @@ def process_skuwise_us_data(user_id, country, month, year):
         if not table_exists:
             df_prev = df_prev.apply(pd.to_numeric, errors='ignore')  # Only apply to numeric-like cols
             df_prev.fillna(0, inplace=True)
-        
-        print("hello Fee")
         df["total"] = pd.to_numeric(df["total"].astype(str).str.replace(",", ""), errors="coerce")
         df["other"] = pd.to_numeric(df["other"].astype(str).str.replace(",", ""), errors="coerce")
-        # transfer_df = df[df["type"] == "Transfer"]
-        # print(transfer_df[["sku", "total"]]) 
-        # rembursement_fee = df[df["type"] == "Transfer"]["total"].sum()
 
         transfer_df = df[df["type"] == "Transfer"]
         rembursement_fee_desc_sum = abs(transfer_df["total"].sum())
@@ -255,12 +225,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         
         # Calculate shipment charges
         shipment_charges = abs(df[shipment_mask]["total"].sum())
-
-        print(f"Platform Fee: {platform_fee}")
-        print(f"Advertising Total: {advertising_total}")
-        print(f"Reimbursement Fee: {rembursement_fee}")
-        
-        
         df = df[df["sku"].notna() & (df["sku"].astype(str).str.strip() != "")]
         df["sku"] = df["sku"].astype(str).str.strip()
         df = df[df["sku"].notna() & (df["sku"] != "")]
@@ -271,8 +235,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         refund_fees = df[df["type"] == "Refund"].groupby("sku")["selling_fees"].sum().reset_index()
         refund_fees.rename(columns={"selling_fees": "refund_selling_fees"}, inplace=True)
         refund_fees["sku"] = refund_fees["sku"].astype(str).str.strip()
-        # quantity_df = df[df["type"] == "Order"].groupby("sku")["quantity"].sum().reset_index()
-        # quantity_df.rename(columns={"quantity": "quantity"}, inplace=True)  # Optional, for clarity
 
         df["type_norm"] = df["type"].astype(str).str.strip().str.lower()
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
@@ -298,7 +260,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         }).reset_index()
         
         sku_grouped = sku_grouped.merge(df_prev, on="sku", how="left").fillna(0)
-        print("Columns in df:", df.columns)
         
         sku_grouped["sku"] = sku_grouped["sku"].astype(str).str.strip()
         sku_grouped = sku_grouped.merge(refund_fees, on="sku", how="left")
@@ -306,21 +267,9 @@ def process_skuwise_us_data(user_id, country, month, year):
         sku_grouped = sku_grouped.merge(quantity_df, on="sku", how="left")
         sku_grouped["quantity"] = sku_grouped["quantity"].fillna(0) 
         total_quantity = abs(sku_grouped["quantity"].sum())
-        print(f"total quantity: {total_quantity}")
- # In case some SKUs have no 'Order' type
-
-        
-
-        
-        print("Before Subtracting Refund Fees:")
-        print(sku_grouped[["sku", "selling_fees", "refund_selling_fees"]])
-        
         sku_grouped["selling_fees"] = pd.to_numeric(sku_grouped["selling_fees"], errors='coerce').fillna(0)
         sku_grouped["refund_selling_fees"] = pd.to_numeric(sku_grouped["refund_selling_fees"], errors='coerce').fillna(0)
         sku_grouped["selling_fees"] -= 2 * sku_grouped["refund_selling_fees"]
-        
-        print("After Subtracting Refund Fees:")
-        print(sku_grouped[["sku", "selling_fees", "refund_selling_fees"]])
         
         # Calculate additional fields
         sku_grouped["Net Sales"] = sku_grouped["product_sales"] + sku_grouped["promotional_rebates"] 
@@ -353,10 +302,6 @@ def process_skuwise_us_data(user_id, country, month, year):
             sku_grouped["shipping_credits"]
         )
 
-        # Step 6: Print the result
-        print(sku_grouped[["sku", "Net Credits"]])
-        
-        print("Columns in sku_grouped before profit calculation:", sku_grouped.columns)
         sku_grouped["amazon_fee"] = (
             abs(sku_grouped["fba_fees"]) + 
             abs(sku_grouped["selling_fees"]) - abs(sku_grouped["other"]) 
@@ -365,16 +310,11 @@ def process_skuwise_us_data(user_id, country, month, year):
         sku_grouped["profit%"] = (sku_grouped["profit"] / sku_grouped["Net Sales"]) * 100
         sku_grouped["profit%"] = sku_grouped["profit%"].replace([float('inf'), -float('inf')], 0).fillna(0)
         
-        print("Columns in sku_grouped after profit calculation:", sku_grouped.columns)
-        print(sku_grouped[["sku", "profit"]].head())  # Check profit column values
-        
         sku_grouped["unit_wise_profitability"] = sku_grouped["profit"] / sku_grouped["quantity"]
-        print("Columns error1")
         sku_grouped["unit_wise_profitability"] = sku_grouped["unit_wise_profitability"].replace([float('inf'), -float('inf')], 0).fillna(0)
         
         sku_grouped["previous_unit_wise_profitability"] = sku_grouped["previous_profit"] / sku_grouped["previous_quantity"]
         sku_grouped["previous_unit_wise_profitability"] = sku_grouped["previous_unit_wise_profitability"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        print("Columns error2")
         # Percentage change in unit-wise profitability
         sku_grouped["unit_wise_profitability_percentage"] = (
             (sku_grouped["unit_wise_profitability"] - sku_grouped["previous_unit_wise_profitability"]) /
@@ -383,7 +323,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         
         # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["unit_wise_profitability_percentage"] = sku_grouped["unit_wise_profitability_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        print("Columns error3")
         sku_grouped["unit_wise_profitability_growth"] = np.select(
             [
                 sku_grouped["unit_wise_profitability_percentage"] >= 5,
@@ -397,21 +336,17 @@ def process_skuwise_us_data(user_id, country, month, year):
             ],
             default="No Growth"
         )
-        print("Columns error4")
         # Add new columns
         sku_grouped["cm1_profit"] = sku_grouped["profit%"].apply(lambda x: "High" if (x / 100) > 0.5 else "Low")
         sku_grouped["asp"] = sku_grouped["Net Sales"] / sku_grouped["quantity"]
         sku_grouped["asp"] = sku_grouped["asp"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        print("Columns error5")
         sku_grouped["previous_asp"] = sku_grouped["previous_net_sales"] / sku_grouped["previous_quantity"]
         sku_grouped["previous_asp"] = sku_grouped["previous_asp"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        print("Columns error6")
         # Percentage change in unit-wise profitability
         sku_grouped["asp_percentag"] = (
             (sku_grouped["asp"] - sku_grouped["previous_asp"]) /
             sku_grouped["previous_asp"]
         ) * 100
-        print("Columns error7")
 
         # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["asp_percentag"] = sku_grouped["asp_percentag"].replace([float('inf'), -float('inf')], 0).fillna(0)
@@ -429,14 +364,12 @@ def process_skuwise_us_data(user_id, country, month, year):
             ],
             default="No Growth"
         )
-        print("Columns error8")
         
         sku_grouped["text_credit_change"] = (
             (sku_grouped["Net Taxes"] - sku_grouped["Net Credits"]) /
             sku_grouped["quantity"]
         ) 
         sku_grouped["text_credit_change"] = sku_grouped["text_credit_change"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        print("Columns error9")
         to_num = [
             "previous_net_taxes",
             "previous_net_credits",
@@ -451,14 +384,12 @@ def process_skuwise_us_data(user_id, country, month, year):
             (sku_grouped["previous_net_taxes"] - sku_grouped["previous_net_credits"]) /
             sku_grouped["previous_quantity"]
         ) 
-        print("Columns error91")
         sku_grouped["previous_text_credit_change"] = sku_grouped["previous_text_credit_change"].replace([float('inf'), -float('inf')], 0).fillna(0)
         
         sku_grouped["profit_change"] = (
             (sku_grouped["profit"] - sku_grouped["previous_profit"]) /
             sku_grouped["previous_profit"]
         ) * 100
-        print("Columns error10")
 
         # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["profit_change"] = sku_grouped["profit_change"].replace([float('inf'), -float('inf')], 0).fillna(0)
@@ -475,9 +406,7 @@ def process_skuwise_us_data(user_id, country, month, year):
                 "Negative Growth"
             ],
             default="No Growth"
-        )
-        print("Columns error11")
-        
+        ) 
         sku_grouped["unit_increase"] = (
             (sku_grouped["quantity"] - sku_grouped["previous_quantity"]) /
             sku_grouped["previous_quantity"]
@@ -499,8 +428,6 @@ def process_skuwise_us_data(user_id, country, month, year):
             ],
             default="No Growth"
         )
-        print("Columns error12")
-        
         sku_grouped["category"] = ""  # Empty string initially
         sku_grouped["positive"] = ""  # Empty string initially
         sku_grouped["improvements"] = ""  # Empty string initially
@@ -526,8 +453,6 @@ def process_skuwise_us_data(user_id, country, month, year):
             (sku_grouped["Net Sales"] - sku_grouped["previous_net_sales"]) /
             sku_grouped["previous_net_sales"]
         ) * 100
-        print("Columns error13")
-        # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["sales_percentage"] = sku_grouped["sales_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
         
         sku_grouped["sales_growth"] = np.select(
@@ -546,8 +471,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         
         sku_grouped["user_id"] = user_id
         total_amazon_fee = sku_grouped["amazon_fee"].sum()
-        print(f"amazon Fee as expense: {total_amazon_fee}")
-        print("Columns error14")
         
         # Calculate Total Sales & profit
         total_sales = abs(sku_grouped["Net Sales"].sum())
@@ -557,15 +480,8 @@ def process_skuwise_us_data(user_id, country, month, year):
         total_tax = abs(sku_grouped["Net Taxes"].sum())
         total_credits = abs(sku_grouped["Net Credits"].sum())
         
-
-
-        
-        
-        print("error hai kya?1")
         sku_grouped["sales_mix"] = (sku_grouped["Net Sales"] / total_sales) * 100
         sku_grouped["sales_mix"] = sku_grouped["sales_mix"].replace([float('inf'), -float('inf')], 0).fillna(0)
-
-        print("error hai kya?2")
 
         sku_grouped["profit_mix"] = (sku_grouped["profit"] / total_profit) * 100
         sku_grouped["profit_mix"] = sku_grouped["profit_mix"].replace([float('inf'), -float('inf')], 0).fillna(0)
@@ -575,9 +491,6 @@ def process_skuwise_us_data(user_id, country, month, year):
             (sku_grouped["profit_mix"] - sku_grouped["previous_profit_mix"]) /
             sku_grouped["previous_profit_mix"]
         ) * 100
-        
-        print("error hai kya?3")
-        # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["profit_mix_percentage"] = sku_grouped["profit_mix_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
         
         sku_grouped["profit_mix_growth"] = np.select(
@@ -597,34 +510,21 @@ def process_skuwise_us_data(user_id, country, month, year):
         sku_grouped["profit_mix_analysis"] = sku_grouped["profit_mix_percentage"].apply(lambda x: "High" if (x / 100) > 0.2 else "Low")
         sku_grouped["change_in_fee"] = (sku_grouped["amazon_fee"] / sku_grouped["Net Sales"])*100
         sku_grouped["change_in_fee"] = sku_grouped["change_in_fee"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        
-        print("error hai kya?4")
         sku_grouped["previous_change_in_fee"] = (sku_grouped["previous_amazon_fee"] / sku_grouped["previous_net_sales"])*100
         sku_grouped["previous_change_in_fee"] = sku_grouped["previous_change_in_fee"].replace([float('inf'), -float('inf')], 0).fillna(0)
         sku_grouped["precentage_change_in_fee"] = sku_grouped["change_in_fee"] - sku_grouped["previous_change_in_fee"] 
         sku_grouped["sales_mix_analysis"] = sku_grouped["sales_mix"].apply(lambda x: "High" if (x / 100) > 0.2 else "Low")
-        
-        print("error hai kya?5")
         sku_grouped["unit_wise_amazon_fee"] = (sku_grouped["amazon_fee"]- sku_grouped["Net Taxes"]) / sku_grouped["quantity"]
         sku_grouped["unit_wise_amazon_fee"] = sku_grouped["unit_wise_amazon_fee"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        
-        print("error hai kya?51")
         sku_grouped["previous_amazon_fee"] = pd.to_numeric(sku_grouped["previous_amazon_fee"], errors='coerce')
         sku_grouped["previous_net_taxes"] = pd.to_numeric(sku_grouped["previous_net_taxes"], errors='coerce')
         sku_grouped["previous_quantity"] = pd.to_numeric(sku_grouped["previous_quantity"], errors='coerce')
         sku_grouped["previous_unit_wise_amazon_fee"] = (sku_grouped["previous_amazon_fee"]- sku_grouped["previous_net_taxes"]) / sku_grouped["previous_quantity"]
         sku_grouped["previous_unit_wise_amazon_fee"] = sku_grouped["previous_unit_wise_amazon_fee"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        
-        print("error hai kya?52")
-        print("Columns before percentage calc:", sku_grouped.columns.tolist())
-        
         sku_grouped["unit_wise_amazon_fee_percentage"] = (
             (sku_grouped["unit_wise_amazon_fee"] - sku_grouped["previous_unit_wise_amazon_fee"]) /
             sku_grouped["previous_unit_wise_amazon_fee"]
         ) * 100
-        
-        print("error hai kya?53")
-        # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["unit_wise_amazon_fee_percentage"] = sku_grouped["unit_wise_amazon_fee_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
         
         sku_grouped["amazon_fee_growth"] = np.select(
@@ -640,14 +540,10 @@ def process_skuwise_us_data(user_id, country, month, year):
             ],
             default="No Growth"
         )
-        
-        print("error hai kya?6")
         sku_grouped["unit_sales_analysis"] = (
             (sku_grouped["quantity"] - sku_grouped["previous_quantity"]) *
             sku_grouped["unit_wise_profitability"]
         ) 
-        
-        print("error hai kya?7")
         # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["unit_sales_analysis"] = sku_grouped["unit_sales_analysis"].replace([float('inf'), -float('inf')], 0).fillna(0)
 
@@ -655,9 +551,6 @@ def process_skuwise_us_data(user_id, country, month, year):
             (sku_grouped["asp"] - sku_grouped["previous_asp"]) *
             sku_grouped["quantity"]
         ) 
-        
-        print("error hai kya?8")
-        # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["unit_asp_analysis"] = sku_grouped["unit_asp_analysis"].replace([float('inf'), -float('inf')], 0).fillna(0)
         
         sku_grouped["amazon_fee_increase"] = (
@@ -671,8 +564,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         sku_grouped["total_analysis"] = (
             (sku_grouped["profit"] - sku_grouped["previous_profit"])
         ) 
-        
-        print("error hai kya?9")
         sku_grouped["text_credit_increase"] = (
             (sku_grouped["previous_text_credit_change"] - sku_grouped["text_credit_change"]) *
             sku_grouped["quantity"]
@@ -711,8 +602,6 @@ def process_skuwise_us_data(user_id, country, month, year):
             sku_grouped["previous_sales_mix"]
         ) * 100
 
-        print("error hai kya?10")
-
  # Handle cases where previous_unit_wise_profitability is zero to avoid division errors
         sku_grouped["sales_mix_percentage"] = sku_grouped["sales_mix_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
 
@@ -729,10 +618,7 @@ def process_skuwise_us_data(user_id, country, month, year):
             ],
             default="No Growth"
         )
-        print("error hai kya?11")
         total_cous = abs(sku_grouped["cost_of_unit_sold"].sum())
-        print(f"profit: {total_profit}")
-        print(f"netsales: {total_sales}")
         total_fba_fees = abs(sku_grouped["fba_fees"].sum())
         
         
@@ -743,16 +629,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         cm2_margins = (cm2_profit / total_sales) * 100 if total_sales != 0 else 0
         acos = (advertising_total / total_sales) * 100 if total_sales != 0 else 0
         rembursment_vs_cm2_margins = abs((rembursement_fee / cm2_profit) * 100) if cm2_profit != 0 else 0
-        print(f"Platform Fee: {platform_fee}")
-        print(f"Advertising Total: {advertising_total}")
-        print(f"Reimbursement Fee: {rembursement_fee}")
-        print(f"Reimbursement vs Sales: {reimbursement_vs_sales:.2f}%")
-        print(f"CM2 profit: {cm2_profit}")
-        print(f"CM2 Margins: {cm2_margins:.2f}%")
-        print(f"acos: {acos:.2f}%")
-        print(f"Reimbursement vs CM2 Margins: {rembursment_vs_cm2_margins:.2f}%")
-        # Add user_id column
-        print("error hai kya?")
         # Sum row for total
         sum_row = sku_grouped[numeric_columns + ["Net Sales", "Net Taxes", "Net Credits", "profit", "amazon_fee", "sales_mix", "previous_sales_mix", "sales_mix_percentage", "profit_mix", "previous_profit_mix", "unit_sales_analysis", "unit_asp_analysis", "amazon_fee_increase", "cross_check_analysis", "text_credit_increase", "final_total_analysis", "positive_action", "negative_action", "cross_check_analysis_backup", "total_analysis" ]].sum()
         sum_row["sku"] = "TOTAL"
@@ -762,7 +638,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         
         sum_row["product_name"] = "TOTAL"
         sum_row["profit%"] = (sum_row["profit"] / sum_row["Net Sales"]) * 100 if sum_row["Net Sales"] != 0 else 0
-        print("error hai kya?q")
         sum_row["platform_fee"] = abs(platform_fee)
         sum_row["shipment_charges"] = abs(shipment_charges)
         sum_row ["rembursement_fee"]= abs(rembursement_fee)
@@ -790,20 +665,15 @@ def process_skuwise_us_data(user_id, country, month, year):
         sum_row["previous_net_taxes"]= p
         sum_row["previous_fba_fees"]= q
         sum_row["previous_selling_fees"]= r
-        print("error hai kya?r")
-        
         # sum_ow["cm1_profit"] = sum_row["profit%"].apply(lambda x: "High" if (x / 100) > 0.5 else "Low")
         sum_row["unit_wise_profitability"] = (
             (sum_row["profit"]) /
             sum_row["quantity"]
         ) if sum_row["quantity"] != 0 else 0
-        print("error hai kya?z")
         sum_row["previous_unit_wise_profitability"] = (
             (float(sum_row["previous_profit"]) - float(sum_row["previous_net_taxes"])) /
             sum_row["previous_quantity"]
         ) * 100 if sum_row["previous_quantity"] != 0 else 0
-
-        print("error hai kya?s")
         sum_row["unit_wise_profitability_percentage"] = (
             (sum_row["unit_wise_profitability"] - sum_row["previous_unit_wise_profitability"]) /
             sum_row["previous_unit_wise_profitability"]
@@ -812,9 +682,6 @@ def process_skuwise_us_data(user_id, country, month, year):
             (sum_row["quantity"] - sum_row["previous_quantity"]) /
             sum_row["previous_quantity"]
         ) * 100 if sum_row["previous_quantity"] != 0 else 0
-
-        print("error hai kya?t")
-
         sum_row["asp"] = (
             sum_row["Net Sales"] /
             sum_row["quantity"]
@@ -839,34 +706,23 @@ def process_skuwise_us_data(user_id, country, month, year):
             sum_row["previous_net_sales"]
         ) * 100 if sum_row["previous_net_sales"] != 0 else 0
 
-        print("error hai kya?u")
-
         sum_row["precentage_change_in_fee"] = (
             (sum_row["change_in_fee"]) -
             sum_row["previous_change_in_fee"]
         )
-        print("error hai kya?u1")
         # sum_row["sales_mix_analysis"] = sum_row["sales_mix"].apply(lambda x: "High" if (x / 100) > 0.2 else "Low")
         sum_row["unit_wise_amazon_fee"] = (
             (sum_row["amazon_fee"] - sum_row["Net Taxes"]) /
             sum_row["quantity"]
         )  if sum_row["quantity"] != 0 else 0
-
-        print("error hai kya?u12")
         sum_row["unit_wise_amazon_fee"] = (
             (sum_row["amazon_fee"] - sum_row["Net Taxes"]) /
             sum_row["quantity"]
         )  if sum_row["quantity"] != 0 else 0
-
-        print("error hai kya?u13")
         sum_row["previous_unit_wise_amazon_fee"] = (
             (float(sum_row["previous_amazon_fee"]) - float(sum_row["previous_net_taxes"])) /
             float(sum_row["previous_quantity"])
         ) if float(sum_row["previous_quantity"]) != 0 else 0
-        print("error hai kya?v")
-
-        print("error hai kya?v")
-
         sum_row["unit_wise_amazon_fee_percentage"] = (
             (sum_row["unit_wise_amazon_fee"] - sum_row["previous_unit_wise_amazon_fee"]) /
             sum_row["previous_unit_wise_amazon_fee"]
@@ -967,8 +823,6 @@ def process_skuwise_us_data(user_id, country, month, year):
             sum_row["sales_mix_growth"] = "Negative Growth"
         else:
             sum_row["sales_mix_growth"] = "No Growth"
-
-        print("error hai kya?w")
         sum_row["user_id"] = user_id
 
         # Append total row
@@ -1259,16 +1113,6 @@ def process_skuwise_us_data(user_id, country, month, year):
                     'cross_check_analysis_backup', 'text_credit_increase', 'final_total_analysis'
         ]
 
-
-                # Prepare USD converted DataFrame
-        # df_usd = sku_grouped.copy()
-        # if currency_rate:
-        #     for col in monetary_columns:
-        #         if col in df_usd.columns:
-        #             df_usd[col] = pd.to_numeric(df_usd[col], errors='coerce') * currency_rate
-        # else:
-        #     print("⚠️ No conversion rate found for:", currency1, country, month, year)
-
         # 4 alag DF – base sku_grouped se
         df_usd  = sku_grouped.copy()
         df_ind  = sku_grouped.copy()
@@ -1294,13 +1138,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         df_can["country"] = "canada"
         df_gbp["country"] = "gbp"   # ya "uk_gbp" jo bhi tum chaho
 
-
-                # Fill NaNs in df_usd
-        # for col in df_usd.columns:
-        #     if df_usd[col].dtype == 'object':
-        #         df_usd[col] = df_usd[col].fillna('')
-        #     elif pd.api.types.is_numeric_dtype(df_usd[col]):
-        #         df_usd[col] = df_usd[col].fillna(0)
 
         for df_conv in [df_usd, df_ind, df_can, df_gbp]:
             for col in df_conv.columns:
@@ -1427,10 +1264,6 @@ def process_skuwise_us_data(user_id, country, month, year):
         conn.execute(text(f"DELETE FROM {target_table2} WHERE month = :month AND year = :year AND user_id = :user_id"), 
              {"month": month, "year": year, "user_id": user_id})
         conn.commit()
-        # conn.execute(text(f"DELETE FROM {target_table3} WHERE month = :month AND year = :year AND country = :country AND user_id = :user_id"), 
-        #      {"month": month, "year": year, "country":country, "user_id": user_id})
-        # conn.commit()
-
         # mapping: dest_country_value, dataframe, target_table
         conversion_sets = [
             ("us",    df_usd, target_table_us),
@@ -1459,8 +1292,6 @@ def process_skuwise_us_data(user_id, country, month, year):
                 pass
 
             df_conv.to_sql(tbl, conn, if_exists="append", index=False, method="multi", chunksize=100)
-
-            # insert fresh data
             
 
         # Insert data into the respective table
@@ -1478,26 +1309,9 @@ def process_skuwise_us_data(user_id, country, month, year):
                 sku_grouped[col] = sku_grouped[col].fillna(0)
 
         conn.commit()
-        print(f"Data saved successfully in {target_table}!")
-        print(f"Data saved successfully in {target_table2}!")
-        print(f"Data saved successfully in {target_table_us} (USD converted)!")
-        print(f"Data saved successfully in {target_table_ind} (India converted)!")
-        print(f"Data saved successfully in {target_table_can} (Canada converted)!")
-        print(f"Data saved successfully in {target_table_gbp} (GBP converted/base)!")
-                
-        
-        
-
-
-
         total_expense = total_sales - cm2_profit
-        print(f"Total Expense: {total_expense}")
         otherwplatform = platform_fee
-        print(f"Otherwplatform: {otherwplatform}")
         taxncredit = (total_tax) + abs(total_credits)
-        print(f"Tax and Credit: {taxncredit}")
-
-
 
         return platform_fee, rembursement_fee, total_cous, total_amazon_fee, total_profit, total_expense, total_fba_fees, cm2_profit, cm2_margins, acos, rembursment_vs_cm2_margins, advertising_total, reimbursement_vs_sales, total_quantity, total_sales, otherwplatform,taxncredit
     except Exception as e:
@@ -1531,15 +1345,6 @@ def process_us_yearly_skuwise_data(user_id, country, year):
         advertising_total = df[
             (df["sku"].isna()) | (df["sku"] == "") | (df["sku"] == "0")
         ]["other_transaction_fees"].sum()
-        print(f"adv Fees (including blank, None, and '0' SKU): {advertising_total}")
-
-        # keywords = ["Subscription", "FBA storage fee", "FBA Removal Order:", "FBA Long-Term Storage Fee"]
-
-        # # Filter rows where the description contains any of the keywords
-        # mask = df["description"].astype(str).str.contains('|'.join(keywords), case=False, na=False)
-
-        # # Calculate the platform fees
-        # platform_fee = abs(df[mask]["total"].sum())
 
         platform_fee_desc_sum = abs(
             df[df["description"].str.startswith(
@@ -1562,25 +1367,13 @@ def process_us_yearly_skuwise_data(user_id, country, year):
         # Calculate shipment charges
         shipment_charges = abs(df[shipment_mask]["total"].sum())
 
-        print(f"Platform Fee: {platform_fee}")
-        print(f"Advertising Total: {advertising_total}")
-        # print(f"Reimbursement Fee: {rembursement_fee}")
-
         df["total"] = pd.to_numeric(df["total"], errors="coerce").fillna(0)
         df["other"] = pd.to_numeric(df["other"], errors="coerce").fillna(0)
-        # transfer_df = df[df["type"] == "Transfer"]
-        # print(transfer_df[["sku", "total"]])
-        # rembursment_fee = transfer_df["total"].sum()
 
         transfer_df = df[df["type"] == "Transfer"]
         rembursement_fee_desc_sum = abs(transfer_df["total"].sum())
         rembursement_fee_col_sum = df["net_reimbursement"].sum() if "net_reimbursement" in df.columns else 0
         rembursment_fee = rembursement_fee_desc_sum + rembursement_fee_col_sum
-                
-        print(f"Reimbursement Fee: {rembursment_fee}")
-
-    
-
         # Normalize numeric columns
         numeric_columns = [
             "product_sales", "promotional_rebates", "product_sales_tax", "promotional_rebates_tax",
@@ -1603,11 +1396,6 @@ def process_us_yearly_skuwise_data(user_id, country, year):
         refund_fees = df[df["type"] == "Refund"].groupby("sku")["selling_fees"].sum().reset_index()
         refund_fees.rename(columns={"selling_fees": "refund_selling_fees"}, inplace=True)
         refund_fees["sku"] = refund_fees["sku"].astype(str).str.strip()
-
-        
-        # === Rembursement Fee (Transfer Type) ===
-        # quantity_df = df[df["type"] == "Order"].groupby("sku")["quantity"].sum().reset_index()
-        # quantity_df.rename(columns={"quantity": "quantity"}, inplace=True)  # Optional, for clarity
 
 
         df["type_norm"] = df["type"].astype(str).str.strip().str.lower()
@@ -1675,40 +1463,25 @@ def process_us_yearly_skuwise_data(user_id, country, year):
         )
 
         # Step 6: Print the result
-        print(sku_grouped[["sku", "Net Credits"]])
-        print('hello Fee')
         sku_grouped["asp"] = (sku_grouped["Net Sales"] / sku_grouped["quantity"].replace(0, np.nan)).fillna(0)
-        print('hello Fee')
         sku_grouped["amazon_fee"] = (
             abs(sku_grouped["fba_fees"]) + 
             abs(sku_grouped["selling_fees"]) - abs(sku_grouped["other"]) 
         )
-        print('hello Fee')
         sku_grouped["profit"] = abs(sku_grouped["Net Sales"]) + abs(sku_grouped["Net Credits"]) - abs(sku_grouped["Net Taxes"]) -abs(sku_grouped["amazon_fee"]) - abs(sku_grouped["cost_of_unit_sold"])
-        print('hello Fee')
-        # sku_grouped["profit%"] = (sku_grouped["profit"] / sku_grouped["Net Sales"]).replace([float('inf'), -float('inf')], 0).fillna(0) * 100
-
         sku_grouped["profit%"] = (
             (sku_grouped["profit"] / sku_grouped["Net Sales"].replace(0, np.nan))   # avoid divide by zero
             .replace([np.inf, -np.inf], 0)      # replace infinite values
             .fillna(0)                          # replace NaN
             * 100                               # finally multiply
         )
-
-        print('hello Fee')
-
         sku_grouped["unit_wise_profitability"] = (sku_grouped["profit"] / sku_grouped["quantity"].replace(0, np.nan)
         ).fillna(0)
-        print('hello Fee')
         sku_grouped["unit_wise_profitability"] = sku_grouped["unit_wise_profitability"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        print('hello Fee')
-        
         sku_grouped["user_id"] = user_id
         sku_grouped["platform_fee"] = platform_fee
         sku_grouped["rembursement_fee"] = rembursment_fee
         sku_grouped["advertising_total"] = advertising_total
-        print('hello Fee')
-
         sku_grouped["shipment_charges"] = 0
 
         # Placeholders for row-level metrics
@@ -1717,8 +1490,6 @@ def process_us_yearly_skuwise_data(user_id, country, year):
         sku_grouped["cm2_margins"] = 0
         sku_grouped["acos"] = 0
         sku_grouped["rembursment_vs_cm2_margins"] = 0
-        print('hello Fee')
-
         # === Total Row Calculations ===
         total_sales = abs(sku_grouped["Net Sales"].sum())
         total_profit = abs(sku_grouped["profit"].sum())
@@ -1729,8 +1500,6 @@ def process_us_yearly_skuwise_data(user_id, country, year):
         cm2_margins = (cm2_profit / total_sales) * 100 if total_sales else 0
         acos = (advertising_total / total_sales) * 100 if total_sales else 0
         rembursment_vs_cm2_margins = abs((rembursment_fee / cm2_profit) * 100)  if cm2_profit != 0 else 0
-        print('hello Fee')
-
         sum_row = sku_grouped[numeric_columns + ["Net Sales", "Net Taxes", "Net Credits", "profit", "amazon_fee"]].sum()
         sum_row["sku"] = "TOTAL"
         sum_row["product_name"] = "TOTAL"
@@ -1750,8 +1519,6 @@ def process_us_yearly_skuwise_data(user_id, country, year):
             sum_row["quantity"]
         )  if sum_row["quantity"] != 0 else 0
         sum_row["user_id"] = user_id
-        print('hello Fee')
-
         sku_grouped = pd.concat([sku_grouped[sku_grouped["sku"] != "TOTAL"], pd.DataFrame([sum_row])], ignore_index=True)
 
         # Rename columns
@@ -1811,8 +1578,6 @@ def process_us_yearly_skuwise_data(user_id, country, year):
         }
 
         sku_grouped.to_sql(yearly_table, con=engine, if_exists='replace', index=False, dtype=dtype_map)
-        print(f"Yearly SKU-wise data saved to table: {yearly_table}")
-
     except Exception as e:
         print(f"Error processing yearly SKU-wise data: {e}")
 
@@ -1875,30 +1640,15 @@ def process_us_quarterly_skuwise_data(user_id, country, month, year, quarter, db
         advertising_total = df[
             (df["sku"].isna()) | (df["sku"] == "") | (df["sku"] == "0")
         ]["other_transaction_fees"].sum()
-        print(f"adv Fees (including blank, None, and '0' SKU): {advertising_total}")
         
-                # === Preprocessing & Conversion ===
+        # === Preprocessing & Conversion ===
         df["total"] = pd.to_numeric(df["total"].astype(str).str.replace(",", ""), errors="coerce")
         df["other"] = pd.to_numeric(df["other"].astype(str).str.replace(",", ""), errors="coerce")
-
-        # transfer_df = df[df["type"] == "Transfer"]
-        # rembursment_fee = transfer_df["total"].sum()
 
         transfer_df = df[df["type"] == "Transfer"]
         rembursement_fee_desc_sum = abs(transfer_df["total"].sum())
         rembursement_fee_col_sum = df["net_reimbursement"].sum() if "net_reimbursement" in df.columns else 0
         rembursment_fee = rembursement_fee_desc_sum + rembursement_fee_col_sum
-                
-
-        # keywords =  ["Subscription", "FBA storage fee", "FBA Removal Order:", "FBA Long-Term Storage Fee"]
-
-        # # Filter rows where the description contains any of the keywords
-        # mask = df["description"].astype(str).str.contains('|'.join(keywords), case=False, na=False)
-
-        # # Calculate the platform fees
-        # platform_fee = abs(df[mask]["total"].sum())
-
-
         platform_fee_desc_sum = abs(
             df[df["description"].str.startswith(
                 ("FBA Return Fee", "FBA Long-Term Storage Fee", "FBA storage fee", "Subscription"),
@@ -1920,10 +1670,6 @@ def process_us_quarterly_skuwise_data(user_id, country, month, year, quarter, db
         
         # Calculate shipment charges
         shipment_charges = abs(df[shipment_mask]["total"].sum())
-
-        print(f"Platform Fee: {platform_fee}")
-        print(f"Advertising Total: {advertising_total}")
-        print(f"Reimbursement Fee: {rembursment_fee}")
 
         # Normalize numeric columns
         numeric_columns = [
@@ -1947,17 +1693,6 @@ def process_us_quarterly_skuwise_data(user_id, country, month, year, quarter, db
         refund_fees = df[df["type"] == "Refund"].groupby("sku")["selling_fees"].sum().reset_index()
         refund_fees.rename(columns={"selling_fees": "refund_selling_fees"}, inplace=True)
         refund_fees["sku"] = refund_fees["sku"].astype(str).str.strip()
-
-        
-
-
-        # === Group by SKU ===
-
-        # quantity_df = df[df["type"] == "Order"].groupby("sku")["quantity"].sum().reset_index()
-        # quantity_df.rename(columns={"quantity": "quantity"}, inplace=True)  # 
-        # 
-        # Optional, for clarity
-
 
         df["type_norm"] = df["type"].astype(str).str.strip().str.lower()
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
@@ -2023,17 +1758,12 @@ def process_us_quarterly_skuwise_data(user_id, country, month, year, quarter, db
         )
 
         # Step 6: Print the result
-        print(sku_grouped[["sku", "Net Credits"]])
-        print('hello Fee')
         sku_grouped["asp"] = (sku_grouped["Net Sales"] / sku_grouped["quantity"].replace(0, np.nan)).fillna(0)
-        print('hello Fee')
         sku_grouped["amazon_fee"] = (
             abs(sku_grouped["fba_fees"]) + 
             abs(sku_grouped["selling_fees"]) - abs(sku_grouped["other"]) 
         )
-        print('hello Fee')
         sku_grouped["profit"] = abs(sku_grouped["Net Sales"]) + abs(sku_grouped["Net Credits"]) - abs(sku_grouped["Net Taxes"]) -abs(sku_grouped["amazon_fee"]) - abs(sku_grouped["cost_of_unit_sold"])
-        print('hello Fee')
         # sku_grouped["profit%"] = (sku_grouped["profit"] / sku_grouped["Net Sales"]).replace([float('inf'), -float('inf')], 0).fillna(0) * 100
         sku_grouped["profit%"] = (
             (sku_grouped["profit"] / sku_grouped["Net Sales"].replace(0, np.nan))   # avoid divide by zero
@@ -2042,12 +1772,9 @@ def process_us_quarterly_skuwise_data(user_id, country, month, year, quarter, db
             * 100                               # finally multiply
         )
 
-        print('hello Fee')
         sku_grouped["unit_wise_profitability"] = (sku_grouped["profit"] / sku_grouped["quantity"].replace(0, np.nan)
         ).fillna(0)
-        print('hello Fee')
         sku_grouped["unit_wise_profitability"] = sku_grouped["unit_wise_profitability"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        print('hello Fee')
         sku_grouped["user_id"] = user_id
         sku_grouped["platform_fee"] = platform_fee
         sku_grouped["rembursement_fee"] = rembursment_fee
@@ -2153,7 +1880,6 @@ def process_us_quarterly_skuwise_data(user_id, country, month, year, quarter, db
         }
 
         sku_grouped.to_sql(quarter_table, engine, if_exists='replace', index=False, dtype=dtype_map)
-        print(f"Yearly SKU-wise data saved to table: {quarter_table}")
 
     except Exception as e:
         print(f"Error processing yearly SKU-wise data: {e}")

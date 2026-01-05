@@ -11,7 +11,7 @@ import jwt
 from config import Config
 SECRET_KEY = Config.SECRET_KEY
 
-db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/phormula')
+db_url = os.getenv('DATABASE_URL')
 
 pie_chart_bp = Blueprint('pie_chart_bp', __name__)
 
@@ -200,7 +200,6 @@ def fetch_data_from_table(table_name):
         
         # Check if table exists
         if not check_table_exists(cursor, table_name):
-            print(f"Table {table_name} does not exist")
             return None
         
         # Fetch data - adjust column names as per your actual table structure
@@ -336,212 +335,8 @@ def resolve_country(country, currency):
     return country
 
 
-
-# @pie_chart_bp.route('/pie-chart', methods=['GET', 'POST'])
-# def generate_pie_chart():
-#     """
-#     Generate pie chart for product profit data
-    
-#     Parameters:
-#     - country: Country name
-#     - month: Month name or Quarter (Q1, Q2, Q3, Q4) (optional)
-#     - year: Year (optional)
-#     - quarter: Quarter (Q1, Q2, Q3, Q4) (optional)
-#     - range: 'quarterly', 'monthly', 'yearly' (optional)
-#     - table_type: 'auto', 'monthly', 'yearly', 'quarterly' (optional, default: 'auto')
-#     - format: 'json' or 'image' (optional, default: 'json')
-#     """
-    
-#     # Authentication check
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         # Decode the JWT token to check the user
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-
-#     try:
-#         # Get parameters from request
-#         if request.method == 'POST':
-#             data = request.get_json()
-#             # country = data.get('country')
-#             country_param = request.args.get('country', '')
-#             currency_param = (request.args.get('homeCurrency') or 'USD').lower()
-
-#             print("Resolved Home Currency Country:", currency_param)
-
-    
-#             country = resolve_country(country_param, currency_param)
-#             print("Resolved Home  Country:", country)
-#             month = data.get('month')
-#             year = data.get('year')
-#             quarter = data.get('quarter')
-#             range_type = data.get('range')
-#             table_type = data.get('table_type', 'auto')
-#             response_format = data.get('format', 'json')
-#         else:
-#             # country = data.get('country')
-#             country_param = request.args.get('country', '')
-#             currency_param = (request.args.get('homeCurrency') or 'USD').lower()
-
-    
-#             country = resolve_country(country_param, currency_param)
-#             print("Resolved Home Currency Country:", currency_param)
-#             print("Resolved Home  Country:", country)
-#             month = request.args.get('month')
-#             year = request.args.get('year')
-#             quarter = request.args.get('quarter')
-#             range_type = request.args.get('range')
-#             table_type = request.args.get('table_type', 'auto')
-#             response_format = request.args.get('format', 'json')
-        
-#         # Validate required parameters
-#         if not user_id or not country:
-#             return jsonify({
-#                 'error': 'user_id and country are required parameters'
-#             }), 400
-        
-#         # Convert year to string if provided
-#         if year:
-#             year = str(year)
-        
-#         print(f"Generating pie chart for User: {user_id}, Country: {country}")
-#         print(f"Parameters - Month: {month}, Year: {year}, Quarter: {quarter}, Range: {range_type}")
-        
-#         # Get data from database
-#         df = None
-#         used_table = None
-        
-#         if table_type == 'auto':
-#             # Try to get data from available tables
-#             table_names = generate_table_names(user_id, country, month, year, quarter, range_type)
-            
-#             for table_name in table_names:
-#                 print(f"Trying table: {table_name}")
-#                 df = fetch_data_from_table(table_name)
-#                 if df is not None and not df.empty:
-#                     used_table = table_name
-#                     break
-#         else:
-#             # Use specific table type
-#             table_names = get_table_name_by_type(user_id, country, table_type, month, year, quarter)
-            
-#             if not table_names:
-#                 return jsonify({'error': 'Invalid parameters for specified table type'}), 400
-            
-#             # Try each table in the list
-#             for table_name in table_names:
-#                 print(f"Trying specific table: {table_name}")
-#                 df = fetch_data_from_table(table_name)
-#                 if df is not None and not df.empty:
-#                     used_table = table_name
-#                     break
-        
-#         if df is None or df.empty:
-#             tables_checked = generate_table_names(user_id, country, month, year, quarter, range_type) if table_type == 'auto' else get_table_name_by_type(user_id, country, table_type, month, year, quarter)
-#             return jsonify({
-#                 'error': 'No data found in any of the available tables',
-#                 'tables_checked': tables_checked,
-#                 'parameters': {
-#                     'user_id': user_id,
-#                     'country': country,
-#                     'month': month,
-#                     'year': year,
-#                     'quarter': quarter,
-#                     'range_type': range_type
-#                 }
-#             }), 404
-        
-#         # Prepare pie chart data
-#         labels, values = prepare_pie_chart_data(df)
-        
-#         if not labels or not values:
-#             return jsonify({
-#                 'error': 'No valid data available for pie chart'
-#             }), 404
-        
-#         # Create title
-#         title_parts = ["Top 5 Products by Profit"]
-        
-#         # Handle title based on what data we're showing
-#         if range_type == 'quarterly' or quarter:
-#             quarter_display = quarter if quarter else (month if is_quarter_format(month) else None)
-#             if quarter_display and year:
-#                 title_parts.append(f"({quarter_display} {year})")
-#         elif month and not is_quarter_format(month):
-#             if year:
-#                 title_parts.append(f"({month.title()} {year})")
-#             else:
-#                 title_parts.append(f"({month.title()})")
-#         elif year:
-#             title_parts.append(f"({year})")
-        
-#         # Add country or global indicator to title
-#         if 'global' in used_table.lower():
-#             title_parts.append("- Global")
-#         elif country:
-#             title_parts.append(f"- {country.title()}")
-        
-#         title = " ".join(title_parts)
-        
-#         # Generate chart
-#         chart_base64 = create_pie_chart(labels, values, title)
-        
-#         if not chart_base64:
-#             return jsonify({'error': 'Failed to generate chart'}), 500
-        
-#         # Prepare response data
-#         response_data = {
-#             'success': True,
-#             'data': {
-#                 'labels': labels,
-#                 'values': values,
-#                 'total_products': len(df),
-#                 'top_5_count': min(5, len(df)),
-#                 'others_count': max(0, len(df) - 5),
-#                 'total_profit': sum(values),
-#                 'table_used': used_table,
-#                 'title': title,
-#                 'is_global_data': 'global' in used_table.lower() if used_table else False
-#             }
-#         }
-        
-#         if response_format == 'image':
-#             response_data['data']['chart_image'] = f"data:image/png;base64,{chart_base64}"
-#         else:
-#             response_data['data']['chart_base64'] = chart_base64
-        
-#         return jsonify(response_data)
-        
-#     except Exception as e:
-#         print(f"Error in generate_pie_chart: {str(e)}")
-#         return jsonify({
-#             'error': f'An error occurred: {str(e)}'
-#         }), 500
-
-
 @pie_chart_bp.route('/pie-chart', methods=['GET', 'POST'])
 def generate_pie_chart():
-    """
-    Generate pie chart for product profit data
-
-    Parameters (GET):
-    - country: Country name (required)
-    - month: Month name (optional)
-    - year: Year (optional)
-    - quarter: Quarter (Q1..Q4) (optional)
-    - range: 'quarterly', 'monthly', 'yearly' (optional)
-    - table_type: 'auto', 'monthly', 'yearly', 'quarterly' (optional, default: 'auto')
-    - format: 'json' or 'image' (optional, default: 'json')
-    - homeCurrency: ONLY used when country == 'global'
-    """
 
     # ---------------- Auth ----------------
     auth_header = request.headers.get('Authorization')
@@ -587,11 +382,6 @@ def generate_pie_chart():
         if year:
             year = str(year)
 
-        print("Resolved Home Currency (only for global):", currency_param)
-        print("Resolved Country:", country)
-        print(f"Generating pie chart for User: {user_id}, Country: {country}")
-        print(f"Parameters - Month: {month}, Year: {year}, Quarter: {quarter}, Range: {range_type}")
-
         # ---------------- Fetch data from DB ----------------
         df = None
         used_table = None
@@ -599,7 +389,6 @@ def generate_pie_chart():
         if table_type == 'auto':
             table_names = generate_table_names(user_id, country, month, year, quarter, range_type)
             for table_name in table_names:
-                print(f"Trying table: {table_name}")
                 df = fetch_data_from_table(table_name)
                 if df is not None and not df.empty:
                     used_table = table_name
@@ -610,7 +399,6 @@ def generate_pie_chart():
                 return jsonify({'error': 'Invalid parameters for specified table type'}), 400
 
             for table_name in table_names:
-                print(f"Trying specific table: {table_name}")
                 df = fetch_data_from_table(table_name)
                 if df is not None and not df.empty:
                     used_table = table_name
@@ -692,7 +480,6 @@ def generate_pie_chart():
         return jsonify(response_data), 200
 
     except Exception as e:
-        print(f"Error in generate_pie_chart: {str(e)}")
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
 
