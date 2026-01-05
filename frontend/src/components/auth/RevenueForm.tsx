@@ -225,10 +225,10 @@ submitSelectForm({
     <div className="flex flex-col flex-1 lg:w-1/2 w-full">
 
       {/* Form column */}
-      <div className="flex flex-col justify-center flex-1 w-full max-w-lg mx-auto">
-        <div className="flex flex-col gap-14">
+      <div className="flex flex-col justify-center flex-1 w-full  xl:max-w-lg xl:mx-auto lg:mx-6 max-w-md mx-auto">
+        <div className="flex flex-col xl:gap-14 gap-10">
           <div className="">
-            <h1 className="mb-2 font-semibold text-charcoal-500 text-title-sm dark:text-white/90 sm:text-title-md">
+            <h1 className=" font-semibold text-charcoal-500 text-title-sm dark:text-white/90 xl:text-title-md lg:text-4xl sm:text-title-md">
             Select  <span className="text-[#5EA68E]">Estimated Revenue</span> achieved in the past 12 Months
             </h1>
           </div>

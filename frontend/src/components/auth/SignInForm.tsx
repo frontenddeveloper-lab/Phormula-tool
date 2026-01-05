@@ -332,6 +332,7 @@ import { setAuthError, setAuthLoading, setCredentials, setUser } from "@/lib/fea
 import { useLoginMutation } from "@/lib/api/authApi";
 import { API_BASE } from "@/config/env";
 import ForgotPasswordModal from "./ForgotPasswordModal";
+import axios from "axios";
 
 export default function SignInForm() {
   const router = useRouter();
@@ -350,8 +351,7 @@ export default function SignInForm() {
 
   const [login, { isLoading: isLoggingIn }] = useLoginMutation();
 
-  // ✅ This flag tells us "this navigation came from a fresh login"
-  const [hasJustLoggedIn, setHasJustLoggedIn] = useState(false);
+ 
 
   // Prefill from localStorage (Remember Me)
   useEffect(() => {
@@ -364,8 +364,7 @@ export default function SignInForm() {
     }
   }, []);
 
-  // If already authenticated and user manually hits /signin,
-  // bounce them away (but NOT right after a fresh login)
+
  
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -373,12 +372,14 @@ export default function SignInForm() {
     if (status === "loading" || isLoggingIn) return;
 
     dispatch(setAuthLoading());
+    
 
     try {
       const result = await login({ email: email.trim(), password }).unwrap();
 
       // Save token in slice & localStorage
       dispatch(setCredentials({ token: result.token }));
+      
 
       // Remember Me
       if (isChecked) {
@@ -435,10 +436,10 @@ router.replace(profitPath);
 
   return (
     <div className="flex flex-col  lg:w-1/2 w-full">
-      <div className="flex flex-col justify-center  flex-1 w-full max-w-lg mx-auto">
+      <div className="flex flex-col justify-center  flex-1 w-full xl:max-w-lg lg:mx-6 max-w-md xl:mx-auto mx-auto ">
         <div>
           <div className="mb-5 sm:mb-8">
-            <h1 className="mb-2  text-green-500 text-title-sm dark:text-white/90 sm:text-title-lg">
+            <h1 className="mb-2  text-green-500 text-title-sm dark:text-white/90 xl:text-title-lg lg:text-4xl sm:text-title-lg">
               Welcome!
             </h1>
             <p className="text-base text-gray-500 dark:text-gray-400">
@@ -500,7 +501,7 @@ router.replace(profitPath);
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(true)}
-                  className="text-base text-blue-700"
+                  className="text-theme-sm text-blue-700"
                 >
                   Forgot password?
                 </button>

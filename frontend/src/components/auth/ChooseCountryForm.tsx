@@ -228,10 +228,10 @@ router.replace("/signin");
     <div className="flex flex-col flex-1 lg:w-1/2 w-full">
       
 
-      <div className="flex flex-col justify-center flex-1 w-full max-w-lg mx-auto">
+      <div className="flex flex-col justify-center flex-1 w-full xl:max-w-lg xl:mx-auto lg:mx-6 max-w-md mx-auto">
         <div className="flex flex-col gap-8">
-          <div className="mb-5 sm:mb-8">
-            <h1 className="mb-2 font-semibold text-charcoal-500 text-title-sm dark:text-white/90 sm:text-title-md">
+          <div className="mb-5 xl:mb-8">
+            <h1 className="mb-2 font-semibold text-charcoal-500 text-title-sm dark:text-white/90 xl:text-title-md lg:text-4xl sm:text-title-md">
               Which <span className="text-[#5EA68E]">Country</span> do you want to start with?
             </h1>
           </div>
