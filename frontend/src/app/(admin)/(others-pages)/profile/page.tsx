@@ -15,11 +15,8 @@ export const metadata: Metadata = {
 export default function Profile() {
   return (
     <div>
-      <div className="rounded-2xl bg-white dark:bg-white/[0.03] ">
-
-        <PageBreadcrumb pageTitle="Profile" align="left" textSize="2xl" />
+      <div className="rounded-2xl bg-white ">
         <div className="space-y-6 mt-4">
-          {/* <UserMetaCard /> */}
           <UserInfoCard />
           <UserAddressCard />
         </div>
