@@ -23,6 +23,8 @@ from app.utils.formulas_utils import uk_sales, uk_tax, uk_credits, uk_amazon_fee
 from collections import defaultdict
 import inspect
 # ---------- env & setup ----------
+
+
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 logging.basicConfig(level=logging.INFO)
