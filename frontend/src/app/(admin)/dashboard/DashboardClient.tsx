@@ -15,6 +15,7 @@ import AmazonStatCard from "@/components/dashboard/AmazonStatCard";
 import CurrentInventorySection from "@/components/dashboard/CurrentInventorySection";
 import { RootState } from "@/lib/store";
 import { useAmazonConnections } from "@/lib/utils/useAmazonConnections";
+import axios from "axios";
 
 import {
   getISTYearMonth,
@@ -349,7 +350,6 @@ const sliceByDayRange = (
 export default function DashboardPage() {
   const { platform } = usePlatform();
   const { data: userData } = useGetUserDataQuery();
-  console.log("DATAAA", userData)
 
   const isCountryMode = platform !== "global" && platform !== "shopify";
 
@@ -366,6 +366,7 @@ export default function DashboardPage() {
     }
   }, [platform]);
 
+  // const showLiveBI = isCountryMode;
   const showLiveBI = isCountryMode || platform === "global";
 
 
@@ -384,6 +385,54 @@ export default function DashboardPage() {
     () => currencyForCountry(biCountryName),
     [biCountryName]
   );
+
+  const handleInventoryForecastFetch = useCallback(async () => {
+  try {
+    if (typeof window === "undefined") return;
+
+    const token = localStorage.getItem("jwtToken");
+    if (!token) return;
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
+
+    // current month/year (same source as dashboard)
+    const { monthName, year } = getISTYearMonth();
+
+    const months = [
+      "january","february","march","april","may","june",
+      "july","august","september","october","november","december",
+    ];
+
+    const monthIndex = months.indexOf(monthName.toLowerCase());
+    if (monthIndex === -1) return;
+
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+
+    const lastDateISO = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(
+      lastDay
+    ).padStart(2, "0")}`;
+
+    const url =
+      `${baseUrl}/amazon_api/inventory/ledger-summary` +
+      `?start_date=${lastDateISO}` +
+      `&end_date=${lastDateISO}` +
+      `&store_in_db=true`;
+
+    // 🔥 fire-and-forget (intentionally no await chain)
+    axios
+      .get(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      .catch(() => {
+        // silent background failure
+      });
+  } catch (err) {
+    console.error("Inventory Forecast background API failed", err);
+  }
+}, []);
 
 
   /* ===================== PLATFORM → DISPLAY CURRENCY ===================== */
@@ -463,6 +512,8 @@ export default function DashboardPage() {
   const [inrToUsd, setInrToUsd] = useState(INR_TO_USD_ENV);
   const [cadToUsd, setCadToUsd] = useState(CAD_TO_USD_ENV);
   const [fxLoading, setFxLoading] = useState(false);
+
+
 
   const fetchFxRates = useCallback(async () => {
     try {
@@ -626,16 +677,6 @@ export default function DashboardPage() {
     },
     [displayCurrency, gbpToUsd, inrToUsd, cadToUsd]
   );
-
-  const userMonthlyTargetGBP = useMemo(() => {
-    return toNumberSafe(userData?.target_sales ?? 0);
-  }, [userData?.target_sales]);
-
-  const userMonthlyTargetHome = useMemo(() => {
-    if (!userMonthlyTargetGBP) return 0;
-    return convertToDisplayCurrency(userMonthlyTargetGBP, "GBP");
-  }, [userMonthlyTargetGBP, convertToDisplayCurrency]);
-
 
   const prevFullMonthNetSalesDisp = useMemo(() => {
     const v = liveBiPayload?.aligned_totals?.total_previous_net_sales_full_month;
@@ -1040,6 +1081,11 @@ export default function DashboardPage() {
   const didRefreshRef = useRef(false);
 
   useEffect(() => {
+  handleInventoryForecastFetch();
+}, [handleInventoryForecastFetch]);
+
+
+  useEffect(() => {
     if (didRefreshRef.current) return;
     didRefreshRef.current = true;
 
@@ -1379,168 +1425,76 @@ export default function DashboardPage() {
   }, [amazonPrevNetDisp, shopifyPrevDeriv?.netSales, convertToDisplayCurrency]);
 
 
-  // const regions = useMemo(() => {
-  //   const globalLastMonthTotal = chooseLastMonthTotal(
-  //     MANUAL_LAST_MONTH_USD_GLOBAL,
-  //     globalPrevTotalUSD
-  //   );
-
-  //   const globalTarget =
-  //     userMonthlyTargetHome > 0
-  //       ? userMonthlyTargetHome
-  //       : (globalPrevFullMonthNetSalesDisp > 0 ? globalPrevFullMonthNetSalesDisp : globalPrevNetDisp);
-
-  //   const global: RegionMetrics = {
-  //     mtdUSD: globalCurrNetDisp,
-  //     lastMonthToDateUSD: globalPrevNetDisp,   // prev MTD
-  //     lastMonthTotalUSD: globalTarget,         // ✅ prev FULL month total
-  //     targetUSD: globalTarget,                 // ✅ target = prev FULL month total
-  //     decTargetUSD: globalTarget,
-  //   };
-
-  //   const ukTarget =
-  //     userMonthlyTargetHome > 0
-  //       ? userMonthlyTargetHome
-  //       : (prevFullMonthNetSalesDisp > 0 ? prevFullMonthNetSalesDisp : amazonPrevNetDisp);
-
-  //   const ukRegion: RegionMetrics = {
-  //     mtdUSD: amazonCurrNetDisp,
-  //     lastMonthToDateUSD: amazonPrevNetDisp,
-  //     lastMonthTotalUSD: ukTarget,
-  //     targetUSD: ukTarget,
-  //     // ✅ Dec target
-  //     decTargetUSD: ukTarget,
-  //   };
-
-
-  //   const ukLastMonthTotal = chooseLastMonthTotal(
-  //     MANUAL_LAST_MONTH_USD_UK,
-  //     prevAmazonUKTotalUSD
-  //   );
-
-
-
-  //   const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
-  //   const usRegion: RegionMetrics = {
-  //     mtdUSD: 0,
-  //     lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
-  //     lastMonthTotalUSD: usLastMonthTotal,
-  //     targetUSD: usLastMonthTotal,
-  //     decTargetUSD: usLastMonthTotal,
-  //   };
-
-  //   const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
-  //   const caRegion: RegionMetrics = {
-  //     mtdUSD: 0,
-  //     lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
-  //     lastMonthTotalUSD: caLastMonthTotal,
-  //     targetUSD: caLastMonthTotal,
-  //     // ✅ Dec target (fallback)
-  //     decTargetUSD: caLastMonthTotal,
-  //   };
-
-  //   return {
-  //     Global: global,
-  //     UK: ukRegion,
-  //     US: usRegion,
-  //     CA: caRegion,
-  //   } as Record<RegionKey, RegionMetrics>;
-  // }, [
-  //   globalCurrNetDisp,
-  //   globalPrevNetDisp,
-  //   amazonCurrNetDisp,
-  //   amazonPrevNetDisp,
-  //   prevFullMonthNetSalesDisp,
-  //   globalPrevFullMonthNetSalesDisp,
-  //   userMonthlyTargetHome,
-  // ]);
-
   const regions = useMemo(() => {
-  // ✅ user target is stored in GBP; convert to display (home) currency
-  const userMonthlyTargetGBP = toNumberSafe(userData?.target_sales ?? 0);
-  const userMonthlyTargetHome =
-    userMonthlyTargetGBP > 0
-      ? convertToDisplayCurrency(userMonthlyTargetGBP, "GBP")
-      : 0;
+    const globalLastMonthTotal = chooseLastMonthTotal(
+      MANUAL_LAST_MONTH_USD_GLOBAL,
+      globalPrevTotalUSD
+    );
 
-  // ✅ GLOBAL: keep "sales" (lastMonthTotalUSD) as your computed prev full-month sales
-  const globalPrevFullMonthSales =
-    globalPrevFullMonthNetSalesDisp > 0
-      ? globalPrevFullMonthNetSalesDisp
-      : globalPrevNetDisp;
+    const globalTarget =
+      globalPrevFullMonthNetSalesDisp > 0 ? globalPrevFullMonthNetSalesDisp : globalPrevNetDisp;
 
-  // ✅ GLOBAL target: prefer user target, else fallback to sales baseline
-  const globalTarget =
-    userMonthlyTargetHome > 0 ? userMonthlyTargetHome : globalPrevFullMonthSales;
+    const global: RegionMetrics = {
+      mtdUSD: globalCurrNetDisp,
+      lastMonthToDateUSD: globalPrevNetDisp,   // prev MTD
+      lastMonthTotalUSD: globalTarget,         // ✅ prev FULL month total
+      targetUSD: globalTarget,                 // ✅ target = prev FULL month total
+      decTargetUSD: globalTarget,
+    };
 
-  const global: RegionMetrics = {
-    mtdUSD: globalCurrNetDisp,
-    lastMonthToDateUSD: globalPrevNetDisp, // prev MTD
-    lastMonthTotalUSD: globalPrevFullMonthSales, // ✅ Dec/prev full-month SALES (as-is)
-    targetUSD: globalTarget, // ✅ Target from userData
-    decTargetUSD: globalTarget,
-  };
+    const ukTarget =
+      prevFullMonthNetSalesDisp > 0 ? prevFullMonthNetSalesDisp : amazonPrevNetDisp;
 
-  // ✅ UK: keep "sales" (lastMonthTotalUSD) as your computed prev full-month sales
-  const ukPrevFullMonthSales =
-    prevFullMonthNetSalesDisp > 0
-      ? prevFullMonthNetSalesDisp
-      : amazonPrevNetDisp;
+    const ukRegion: RegionMetrics = {
+      mtdUSD: amazonCurrNetDisp,
+      lastMonthToDateUSD: amazonPrevNetDisp,
+      lastMonthTotalUSD: ukTarget,
+      targetUSD: ukTarget,
+      // ✅ Dec target
+      decTargetUSD: ukTarget,
+    };
 
-  // ✅ UK target: prefer user target, else fallback
-  const ukTarget =
-    userMonthlyTargetHome > 0 ? userMonthlyTargetHome : ukPrevFullMonthSales;
 
-  const ukRegion: RegionMetrics = {
-    mtdUSD: amazonCurrNetDisp,
-    lastMonthToDateUSD: amazonPrevNetDisp, // prev MTD
-    lastMonthTotalUSD: ukPrevFullMonthSales, // ✅ Dec/prev full-month SALES (as-is)
-    targetUSD: ukTarget, // ✅ Target from userData
-    decTargetUSD: ukTarget,
-  };
+    const ukLastMonthTotal = chooseLastMonthTotal(
+      MANUAL_LAST_MONTH_USD_UK,
+      prevAmazonUKTotalUSD
+    );
 
-  // ✅ US/CA unchanged (you currently use manual env fallbacks)
-  const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
-  const usRegion: RegionMetrics = {
-    mtdUSD: 0,
-    lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
-    lastMonthTotalUSD: usLastMonthTotal,
-    targetUSD: usLastMonthTotal,
-    decTargetUSD: usLastMonthTotal,
-  };
 
-  const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
-  const caRegion: RegionMetrics = {
-    mtdUSD: 0,
-    lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
-    lastMonthTotalUSD: caLastMonthTotal,
-    targetUSD: caLastMonthTotal,
-    decTargetUSD: caLastMonthTotal,
-  };
 
-  return {
-    Global: global,
-    UK: ukRegion,
-    US: usRegion,
-    CA: caRegion,
-  } as Record<RegionKey, RegionMetrics>;
-}, [
-  // existing deps you already had
-  globalCurrNetDisp,
-  globalPrevNetDisp,
-  amazonCurrNetDisp,
-  amazonPrevNetDisp,
-  prevFullMonthNetSalesDisp,
-  globalPrevFullMonthNetSalesDisp,
+    const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
+    const usRegion: RegionMetrics = {
+      mtdUSD: 0,
+      lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
+      lastMonthTotalUSD: usLastMonthTotal,
+      targetUSD: usLastMonthTotal,
+      decTargetUSD: usLastMonthTotal,
+    };
 
-  // ✅ add these because we use them inside now
-  userData?.target_sales,
-  convertToDisplayCurrency,
+    const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
+    const caRegion: RegionMetrics = {
+      mtdUSD: 0,
+      lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
+      lastMonthTotalUSD: caLastMonthTotal,
+      targetUSD: caLastMonthTotal,
+      // ✅ Dec target (fallback)
+      decTargetUSD: caLastMonthTotal,
+    };
 
-  // these are referenced by US/CA regions
-  chooseLastMonthTotal,
-  prorateToDate,
-]);
+    return {
+      Global: global,
+      UK: ukRegion,
+      US: usRegion,
+      CA: caRegion,
+    } as Record<RegionKey, RegionMetrics>;
+  }, [
+    globalCurrNetDisp,
+    globalPrevNetDisp,
+    amazonCurrNetDisp,
+    amazonPrevNetDisp,
+    prevFullMonthNetSalesDisp,
+    globalPrevFullMonthNetSalesDisp,
+  ]);
 
 
   const anyLoading = loading || shopifyLoading;
@@ -2330,12 +2284,12 @@ export default function DashboardPage() {
                       label="ASP"
                       current={
                         showLiveBI && rangeActive
-                          ? biCardKpis.curr.asp
+                          ? biCardKpis.curr.asp                        // ✅ no conversion
                           : convertToDisplayCurrency(uk.aspGBP ?? 0, amazonDataCurrency)
                       }
                       previous={
                         showLiveBI && rangeActive
-                          ? biCardKpis.prev.asp
+                          ? biCardKpis.prev.asp                        // ✅ no conversion
                           : convertToDisplayCurrency(prev.asp, amazonDataCurrency)
                       }
                       deltaPct={useBiForAmazonCards ? biCardKpis.deltas.asp : deltas.aspPct}
@@ -2532,7 +2486,6 @@ export default function DashboardPage() {
                 targetTrendPct={stats_targetTrendPct}
                 currentReimbursement={reimbursementHome.current}
                 previousReimbursement={reimbursementHome.previous}
-                 targetHome={stats_targetHome}
               />
             </div>
 
