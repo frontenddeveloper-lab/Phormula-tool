@@ -41,7 +41,7 @@ export function generateMetadata({ params }: { params: Params }): Metadata {
   const monthFormatted = monthName(decodeURIComponent(params.month || ""));
   const year = String(params.year || "");
 
-  const title = `P&L Forecast`;
+  const title = `P&L Forecast | Amazon ${country}`;
 
   return {
     title,

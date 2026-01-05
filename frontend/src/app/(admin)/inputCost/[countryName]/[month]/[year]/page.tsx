@@ -42,7 +42,7 @@ export function generateMetadata({ params }: { params: Params }): Metadata {
   const monthFormatted = monthName(decodeURIComponent(params.month || ""));
   const year = String(params.year || "");
 
-  const title = ` Inventory reconciliation`;
+  const title = ` Inventory reconciliation | Amazon ${country}`;
 
   return {
     title,

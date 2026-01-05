@@ -1318,11 +1318,11 @@ export default function ReferralFeesDashboard(): JSX.Element {
     { key: "overcharged", header: "Overcharged", render: (_, v) => fmtCurrency(Number(v)) },
   ];
 
-const skuTableDisplay: Row[] = useMemo(() => {
-  if (!skuTableAll.length) return [];
+  const skuTableDisplay: Row[] = useMemo(() => {
+    if (!skuTableAll.length) return [];
 
-  const nonTotal = skuTableAll.filter((row) => !(row as any)._isTotal);
-  const totalRow = skuTableAll.find((row) => (row as any)._isTotal) || null;
+    const nonTotal = skuTableAll.filter((row) => !(row as any)._isTotal);
+    const totalRow = skuTableAll.find((row) => (row as any)._isTotal) || null;
 
     // ✅ 1) Aggregate rows by DISTINCT productName
     const map = new Map<string, any>();
@@ -1408,8 +1408,9 @@ const skuTableDisplay: Row[] = useMemo(() => {
           acc.units += Math.round(toNumberSafe(row.units));
           acc.sales += toNumberSafe(row.sales);
 
-        total_applicable: 0,
-        total_charged: 0,
+          // ✅ YOU WERE MISSING THESE TOO
+          acc.ref_applicable += toNumberSafe(row.ref_applicable);
+          acc.ref_charged += toNumberSafe(row.ref_charged);
 
           acc.fba_applicable += toNumberSafe(row.fba_applicable);
           acc.fba_charged += toNumberSafe(row.fba_charged);
@@ -1426,17 +1427,23 @@ const skuTableDisplay: Row[] = useMemo(() => {
         {
           units: 0,
           sales: 0,
+
           ref_applicable: 0,
           ref_charged: 0,
+
           fba_applicable: 0,
           fba_charged: 0,
+
           other_applicable: 0,
           other_charged: 0,
+
           total_applicable: 0,
           total_charged: 0,
+
           overcharged: 0,
         }
       );
+
 
       othersRow = {
         sno: "",

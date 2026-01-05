@@ -9,6 +9,10 @@ import { IoDownload } from "react-icons/io5";
 import { FaCaretLeft, FaCaretRight } from "react-icons/fa";
 import MonthYearPickerTable from '@/components/filters/MonthYearPickerTable';
 import DataTable, { ColumnDef } from "@/components/ui/table/DataTable";
+import MonthYearPickerWithCurrent from "@/components/filters/MonthYearPickerWithCurrent";
+
+
+
 
 
 
@@ -767,16 +771,16 @@ const columns: ColumnDef<any>[] = [
         .fetch-button:hover:not(:disabled) { background-color: #1f2a36; }
         .fetch-button:disabled { background-color: #6b7280; cursor: not-allowed; opacity: 0.8; }
 `}</style>
-
 <h2 className='text-2xl text-[#414042] font-bold '>
         Inventory Summary - <span style={{ color: '#60a68e' }}> {countryName?.toUpperCase()}</span>
       </h2>
+<div className='flex justify-between w-full items-center '>
+<div>
+
      <div className="flex gap-4 items-center my-4">
-       <MonthYearPickerTable
+       <MonthYearPickerWithCurrent
   month={month}
   year={year}
-  months={filteredMonths}   // 👈 ADD THIS
-  yearOptions={[new Date().getFullYear(), new Date().getFullYear() - 1]}
   onMonthChange={setMonth}
   onYearChange={setYear}
   valueMode="lower"
@@ -801,6 +805,21 @@ const columns: ColumnDef<any>[] = [
           </button>
         )}
       </div>
+</div>
+ <div className='flex justify-end items-end '>
+           <button
+                    onClick={handleDownloadXLSX}
+                  className="bg-white border border-[#8B8585] px-1 rounded-sm py-1"
+                                              style={{
+                                   boxShadow: "0px 4px 4px 0px #00000040",  
+                                 }}
+                                           >
+                                           <IoDownload size={27} />
+                  </button>
+        </div>
+</div>
+
+
 
       {/* ================= TABLE ================= */}
      <DataTable
@@ -821,17 +840,7 @@ const columns: ColumnDef<any>[] = [
 
 
       
-        <div className='flex justify-end items-end mt-4'>
-           <button
-                    onClick={handleDownloadXLSX}
-                  className="bg-white border border-[#8B8585] px-1 rounded-sm py-1"
-                                              style={{
-                                   boxShadow: "0px 4px 4px 0px #00000040",  
-                                 }}
-                                           >
-                                           <IoDownload size={27} />
-                  </button>
-        </div>
+       
 
 
       {showMultiuseCountry && (

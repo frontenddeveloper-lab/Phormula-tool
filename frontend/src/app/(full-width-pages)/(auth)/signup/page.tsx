@@ -1,10 +1,14 @@
+import type { Metadata } from "next";
 import SignUpForm from "@/components/auth/SignUpForm";
-import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Next.js SignUp Page | TailAdmin - Next.js Dashboard Template",
-  description: "This is Next.js SignUp Page TailAdmin Dashboard Template",
-  // other metadata
+  title: "Create Account",
+  description:
+    "Create your Phormula account to start tracking sales, forecasting inventory, and analyzing performance.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function SignUp() {

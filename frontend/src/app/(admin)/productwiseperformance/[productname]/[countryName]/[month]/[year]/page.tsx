@@ -58,7 +58,7 @@ export function generateMetadata({
   const monthFormatted = monthName(params.month);
   const year = params.year;
 
-  const title = `SKU wise Profit`;
+  const title = `${product} | SKU wise Profit | Amazon ${country}`;
 
   return {
     title,

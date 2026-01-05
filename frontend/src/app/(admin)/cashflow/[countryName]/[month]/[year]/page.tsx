@@ -45,7 +45,7 @@ export function generateMetadata({
   const monthFormatted = monthName(decodeURIComponent(params.month || ""));
   const year = String(params.year || "");
 
-  const title = `Cash Flow`;
+  const title = `Cash Flow | Amazon ${country}`;
 
   return {
     title,

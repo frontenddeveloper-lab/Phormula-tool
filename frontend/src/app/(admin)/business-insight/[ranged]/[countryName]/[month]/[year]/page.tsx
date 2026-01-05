@@ -44,7 +44,7 @@ export async function generateMetadata({
   const country = formatCountry(countryName);
   const monthNameFormatted = monthName(month);
 
-  const title = `Buisness Insights`;
+  const title = `Buisness Insights | Amazon ${country}`;
 
   return {
     title: `${title}` ,
