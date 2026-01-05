@@ -9,6 +9,7 @@ import PageBreadcrumb from "../common/PageBreadCrumb";
 import DownloadIconButton from "../ui/button/DownloadIconButton";
 import { FaCaretLeft, FaCaretRight } from "react-icons/fa";
 import Tooltip from "./Tooltip";
+import { SkuExportPayload } from "@/lib/utils/exportTypes";
 
 /* ---------- Types ---------- */
 
@@ -20,8 +21,9 @@ type SKUtableProps = {
   quarter?: string;
   year: string | number;
   countryName: string;
-  /** only used when countryName === 'global' */
   homeCurrency?: string;
+  onExportPayloadChange?: (payload: SkuExportPayload) => void;
+  hideDownloadButton?: boolean;
 };
 
 type TableRow = {
@@ -29,7 +31,7 @@ type TableRow = {
   sku?: string;
   quantity?: number;
   asp?: number;
-  ASP?: number; // sometimes keys differ in casing
+  ASP?: number;
   product_sales?: number;
   net_sales?: number;
   cost_of_unit_sold?: number;
@@ -132,6 +134,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
   year,
   countryName,
   homeCurrency,
+  onExportPayloadChange,
+  hideDownloadButton = false,
 }) => {
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -303,6 +307,15 @@ const SKUtable: React.FC<SKUtableProps> = ({
       unit_wise_profitability: 5.62,
     },
   ];
+
+
+const periodLabel =
+  range === "monthly"
+    ? `SKU-wise Profitability-${convertToAbbreviatedMonth(month)}'${yearShort}`
+    : range === "quarterly"
+      ? `SKU-wise Profitability-${quarter}'${yearShort}`
+      : `SKU-wise Profitability-Year'${yearShort}`;
+
 
   const CustomModal: React.FC<React.PropsWithChildren<{ onClose: () => void }>> = ({
     onClose,
@@ -525,6 +538,32 @@ const SKUtable: React.FC<SKUtableProps> = ({
     isGlobalPage,
     effectiveHomeCurrency,
   ]);
+
+useEffect(() => {
+  if (!tableData || tableData.length === 0) return;
+
+  onExportPayloadChange?.({
+    tableData,
+    totals,
+    currencySymbol,
+    brandName: userData?.brand_name,
+    companyName: userData?.company_name,
+    title: "Profit Breakup (SKU Level)",
+    periodLabel,
+    range,
+    countryName, // ✅ ADD THIS (from props)
+  });
+}, [
+  tableData,
+  totals,
+  currencySymbol,
+  userData?.brand_name,
+  userData?.company_name,
+  periodLabel,
+  range,
+  countryName, // ✅ ADD in deps
+  onExportPayloadChange,
+]);
 
   /* --------- UI Handlers --------- */
   const handleProductClick = (product: string) => {
@@ -799,8 +838,9 @@ const SKUtable: React.FC<SKUtableProps> = ({
           </div>
 
           <div className="flex justify-center sm:justify-end">
-            <DownloadIconButton onClick={handleDownloadExcel} />
+            {!hideDownloadButton && <DownloadIconButton onClick={handleDownloadExcel} />}
           </div>
+
         </div>
 
         <div className={`transition-opacity ${noDataFound ? "opacity-30" : "opacity-100"}`}>

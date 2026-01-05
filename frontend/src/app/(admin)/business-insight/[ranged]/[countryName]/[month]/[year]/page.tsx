@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import ImprovementsClient from "./ImprovementsClient";
 
-type Params = {
-  country: string;
+type Params = Promise<{
+  ranged: string;
+  countryName: string;
   month: string;
   year: string;
-};
+}>;
 
 const monthName = (m: string) => {
   const v = String(m).toLowerCase();
@@ -34,20 +35,28 @@ const formatCountry = (c: string) => {
   return v.toUpperCase();
 };
 
-export function generateMetadata({ params }: { params: Params }): Metadata {
-  const country = formatCountry(params.country);
-  const month = monthName(params.month);
-  const year = params.year;
+export async function generateMetadata({
+  params,
+}: {
+  params: Params;
+}): Promise<Metadata> {
+  const { countryName, month, year } = await params;
+  const country = formatCountry(countryName);
+  const monthNameFormatted = monthName(month);
 
   const title = `Buisness Insights`;
 
   return {
-    title: `${title} `,
-    description: `Improvements dashboard for ${country} for ${month} ${year}.`,
+    title: `${title}` ,
+    description: `Improvements dashboard for ${country} for ${monthNameFormatted} ${year}.`,
     robots: { index: false, follow: false },
   };
 }
 
-export default function Page() {
+export default async function Page({
+  params,
+}: {
+  params: Params;
+}) {
   return <ImprovementsClient />;
 }

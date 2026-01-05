@@ -21,6 +21,12 @@ import { TbMoneybag } from "react-icons/tb";
 import { FcSalesPerformance } from "react-icons/fc";
 import Loader from "@/components/loader/Loader";
 import { useGetUserDataQuery } from "@/lib/api/profileApi";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+import type { ProfitChartExportApi, SkuExportPayload } from "@/lib/utils/exportTypes";
+import DownloadIconButton from "../ui/button/DownloadIconButton";
+
+
 
 /* ---------------------- Types ---------------------- */
 type Summary = {
@@ -193,6 +199,11 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   const [loading, setLoading] = useState(false);
   const [showNoDataOverlay, setShowNoDataOverlay] = useState(false);
 
+  const [chartExportApi, setChartExportApi] = useState<ProfitChartExportApi | null>(null);
+  const [skuExportPayload, setSkuExportPayload] = useState<SkuExportPayload | null>(null);
+  const [expenseBreakdownPieBase64, setExpenseBreakdownPieBase64] = useState<string | null>(null);
+  const [productWiseCm1PieBase64, setProductWiseCm1PieBase64] = useState<string | null>(null);
+
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const [overlayBounds, setOverlayBounds] = useState<{
     left: number;
@@ -204,6 +215,10 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
   useEffect(() => {
     setShowNoDataOverlay(false);
+    setChartExportApi(null);
+    setSkuExportPayload(null);
+    setExpenseBreakdownPieBase64(null);
+    setProductWiseCm1PieBase64(null);
   }, [range, selectedMonth, selectedQuarter, selectedYear]);
 
   useEffect(() => {
@@ -381,8 +396,443 @@ const Dropdowns: React.FC<DropdownsProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, selectedMonth, selectedQuarter, selectedYear, countryName, fetchCurrencyKey]);
 
+  const cropPngBase64WithSize = async (
+    base64: string,
+    pad = 0,
+    opts?: {
+      // how close to white counts as background (0-255)
+      whiteThreshold?: number;     // default 253
+      // how much non-bg must exist in a row/col to keep it (0..1)
+      minContentRatio?: number;    // default 0.002 (0.2%)
+    }
+  ): Promise<{ base64: string; w: number; h: number }> => {
+    const isDataUrl = base64.startsWith("data:image/");
+    const raw = base64.includes("base64,") ? base64.split("base64,")[1] : base64;
 
-  // Validate dropdown completeness
+    const img = new Image();
+
+    // ✅ Use original data URL if present (jpeg/png)
+    // ✅ Otherwise assume png (your older charts send raw png base64)
+    img.src = isDataUrl ? base64 : `data:image/png;base64,${raw}`;
+
+
+    await new Promise<void>((res, rej) => {
+      img.onload = () => res();
+      img.onerror = () => rej(new Error("Failed to load image for cropping"));
+    });
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { base64: raw, w: img.width, h: img.height };
+
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    const whiteThreshold = opts?.whiteThreshold ?? 253;
+    const minContentRatio = opts?.minContentRatio ?? 0.002; // 0.2%
+
+    // Background: transparent OR near-white
+    const isBg = (r: number, g: number, b: number, a: number) => {
+      if (a === 0) return true;
+      return r >= whiteThreshold && g >= whiteThreshold && b >= whiteThreshold;
+    };
+
+    // Count non-bg pixels in a row
+    const rowContentRatio = (y: number) => {
+      let nonBg = 0;
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+        if (!isBg(r, g, b, a)) nonBg++;
+      }
+      return nonBg / width;
+    };
+
+    // Count non-bg pixels in a col
+    const colContentRatio = (x: number) => {
+      let nonBg = 0;
+      for (let y = 0; y < height; y++) {
+        const i = (y * width + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+        if (!isBg(r, g, b, a)) nonBg++;
+      }
+      return nonBg / height;
+    };
+
+    // Trim top/bottom by density
+    let top = 0;
+    while (top < height && rowContentRatio(top) < minContentRatio) top++;
+
+    let bottom = height - 1;
+    while (bottom >= 0 && rowContentRatio(bottom) < minContentRatio) bottom--;
+
+    // Trim left/right by density
+    let left = 0;
+    while (left < width && colContentRatio(left) < minContentRatio) left++;
+
+    let right = width - 1;
+    while (right >= 0 && colContentRatio(right) < minContentRatio) right--;
+
+    // If nothing meaningful found, return original
+    if (right <= left || bottom <= top) return { base64: raw, w: img.width, h: img.height };
+
+    // Apply pad
+    left = Math.max(0, left - pad);
+    top = Math.max(0, top - pad);
+    right = Math.min(width - 1, right + pad);
+    bottom = Math.min(height - 1, bottom + pad);
+
+    const cropW = right - left + 1;
+    const cropH = bottom - top + 1;
+
+    const out = document.createElement("canvas");
+    const outCtx = out.getContext("2d");
+    if (!outCtx) return { base64: raw, w: img.width, h: img.height };
+
+    out.width = cropW;
+    out.height = cropH;
+
+    outCtx.drawImage(canvas, left, top, cropW, cropH, 0, 0, cropW, cropH);
+
+    return {
+      base64: out.toDataURL("image/png").split("base64,")[1],
+      w: cropW,
+      h: cropH,
+    };
+  };
+
+  const toJpegBase64 = async (
+    base64: string,
+    quality = 0.98,
+    opts?: { scale?: number; bg?: string }
+  ): Promise<{ base64: string; w: number; h: number }> => {
+    const raw = base64.includes("base64,") ? base64.split("base64,")[1] : base64;
+
+    // allow passing either png or jpeg data (we always load as image/*)
+    const img = new Image();
+    img.src = base64.startsWith("data:image/")
+      ? base64
+      : `data:image/png;base64,${raw}`;
+
+    await new Promise<void>((res, rej) => {
+      img.onload = () => res();
+      img.onerror = () => rej(new Error("Failed to load image for JPEG conversion"));
+    });
+
+    const scale = opts?.scale ?? 1;          // ✅ upscale to reduce Excel seams
+    const bg = opts?.bg ?? "#FFFFFF";        // ✅ solid bg
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { base64: raw, w: img.width, h: img.height };
+
+    // ✅ high quality scaling
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    // ✅ solid white background
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    return {
+      base64: canvas.toDataURL("image/jpeg", quality).split("base64,")[1],
+      w: canvas.width,
+      h: canvas.height,
+    };
+  };
+
+
+  const handleDownloadProfitabilityBundle = async () => {
+    try {
+      const wb = new ExcelJS.Workbook();
+
+      const addChartBlock = async (
+        ws: ExcelJS.Worksheet,
+        wb: ExcelJS.Workbook,
+        title: string,
+        base64: string | null | undefined,
+        startRow: number,
+        options?: {
+          width?: number;          // only WIDTH is respected; height auto
+          pad?: number;            // crop pad
+          bgCols?: number;         // how many columns to paint white
+          gapRowsAfter?: number;   // spacing after chart block
+          minBase64Len?: number;   // guard against empty export
+          scale?: number;          // jpeg upscale factor (default 2)
+          skipCrop?: boolean;
+        }
+      ): Promise<number> => {
+        const targetW = options?.width ?? 520;
+        const pad = options?.pad ?? 2;
+        const bgCols = options?.bgCols ?? 25;
+        const gapRowsAfter = options?.gapRowsAfter ?? 2;
+        const minBase64Len = options?.minBase64Len ?? 5000;
+        const scale = options?.scale ?? 2; // ✅ important for wedge seam reduction
+        const skipCrop = options?.skipCrop ?? false;
+
+        // ----- Title -----
+        ws.getRow(startRow).getCell(1).value = title;
+        ws.getRow(startRow).getCell(1).font = { bold: true, size: 14 };
+
+        // spacer row
+        ws.getRow(startRow + 1).getCell(1).value = "";
+
+        if (!base64) {
+          ws.getRow(startRow + 2).getCell(1).value = "Chart not available";
+          return startRow + 6;
+        }
+
+        const raw = base64.includes("base64,") ? base64.split("base64,")[1] : base64;
+
+        // ✅ guard: export happened too early -> blank image
+        if (!raw || raw.length < minBase64Len) {
+          ws.getRow(startRow + 2).getCell(1).value = "Chart not available (empty export)";
+          return startRow + 6;
+        }
+
+
+
+        let imgForJpeg = base64;
+
+        // ✅ only crop when allowed
+        if (!skipCrop) {
+          const cropped = await cropPngBase64WithSize(base64, pad, {
+            whiteThreshold: 254,
+            minContentRatio: 0.0015,
+          });
+
+          imgForJpeg = `data:image/png;base64,${cropped.base64}`;
+        }
+
+        // ✅ always convert to JPEG for Excel (no alpha seams)
+        const jpeg = await toJpegBase64(imgForJpeg, 0.98, {
+          scale,
+          bg: "#FFFFFF",
+        });
+
+
+
+        const finalW = targetW;
+        const finalH = Math.round((finalW * jpeg.h) / jpeg.w);
+
+        // Convert pixel height to approximate row count (18px-ish per row)
+        const chartRows = Math.ceil(finalH / 18) + 2;
+
+        // ----- White background block (hide gridlines) -----
+        const bgStart = startRow + 1;
+        const bgEnd = bgStart + chartRows;
+
+        for (let r = bgStart; r <= bgEnd; r++) {
+          for (let c = 1; c <= bgCols; c++) {
+            ws.getRow(r).getCell(c).fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFFFFFFF" },
+            };
+          }
+        }
+
+        // ✅ Add as JPEG (no alpha = no wedge gaps)
+        const imageId = wb.addImage({
+          base64: jpeg.base64,
+          extension: "jpeg",
+        });
+
+        // ✅ Insert
+        ws.addImage(imageId, {
+          tl: { col: 0, row: startRow + 1 },
+          ext: { width: finalW, height: finalH },
+          editAs: "oneCell",
+        });
+
+        return bgEnd + gapRowsAfter;
+
+      };
+
+
+      // =========================================================
+      // ✅ TAB 1: SKU Profitability  (SWAPPED → now first sheet)
+      // =========================================================
+      const wsSku = wb.addWorksheet("SKU Profitability");
+
+      if (skuExportPayload) {
+        const {
+          brandName,
+          companyName,
+          currencySymbol,
+          title,
+          periodLabel,
+          tableData,
+          totals,
+          countryName,
+        } = skuExportPayload;
+
+        // -------- Meta rows --------
+        wsSku.addRow([brandName || "N/A"]);
+        wsSku.addRow([companyName || "N/A"]);
+        wsSku.addRow([`${title || "Profit Breakup (SKU Level)"} - ${periodLabel}`]);
+        wsSku.addRow([`Currency: ${currencySymbol}`]);
+        wsSku.addRow([`Country: ${(countryName || "").toUpperCase()}`]);
+        wsSku.addRow([`Platform: Amazon`]);
+        wsSku.addRow([""]);
+
+        // -------- Columns (same order as your screenshot) --------
+        const columns = [
+          { key: "product_name", header: "Product Name" }, // A
+          { key: "quantity", header: "Quantity Sold" }, // B
+          { key: "asp", header: "ASP" }, // C
+          { key: "product_sales", header: "Gross Sale" }, // D
+          { key: "net_sales", header: "Net Sales" }, // E
+          { key: "cost_of_unit_sold", header: "Cost of Go" }, // F
+          { key: "amazon_fee", header: "Amazon Fe" }, // G
+          { key: "selling_fees", header: "Selling Fee" }, // H
+          { key: "fba_fees", header: "FBA fees" }, // I
+          { key: "net_credits", header: "Net Credits" }, // J
+          { key: "net_taxes", header: "Net Taxes" }, // K
+          { key: "profit", header: "CM1 Profit" }, // L
+          { key: "profit_percentage", header: "CM1 Profit (%)" }, // M
+          { key: "unit_wise_profitability", header: "CM1 Profit per Unit" }, // N
+        ] as const;
+
+        // Header row
+        wsSku.addRow(columns.map((c) => c.header));
+
+        // Signage row
+        wsSku.addRow([
+          "",
+          "",
+          "",
+          "",
+          "(+)", // Net Sales
+          "(-)", // COGS
+          "(-)", // Amazon
+          "(-)", // Selling
+          "(-)", // FBA
+          "(+)", // Net Credits
+          "",
+          "",
+          "",
+          "",
+        ]);
+
+        // Safe name fallback
+        const safeName = (r: any) => {
+          const name = r?.product_name;
+          const sku = r?.sku;
+          return name !== undefined && name !== null && String(name).trim() !== "" && String(name) !== "0"
+            ? String(name)
+            : sku ?? "-";
+        };
+
+        // Data rows
+        // Data rows
+        for (const r of tableData) {
+          wsSku.addRow([
+            safeName(r),
+            r.quantity ?? "",
+            r.asp ?? r.ASP ?? "",
+            r.product_sales ?? "",
+            r.net_sales ?? r.Net_Sales ?? "",
+            r.cost_of_unit_sold ?? "",
+            r.amazon_fee ?? "",
+            r.selling_fees ?? "",
+            r.fba_fees ?? "",
+            r.net_credits ?? "",
+            r.net_taxes ?? "",
+            r.profit ?? r.Profit ?? "",
+            typeof r.profit_percentage === "number" ? r.profit_percentage / 100 : "",
+            r.unit_wise_profitability ?? "",
+          ]);
+        }
+
+        // ✅ spacer row (blank line)
+        wsSku.addRow([""]);
+
+
+
+
+        // Summary rows: label in A, value in K (index 10)
+        const putSummary = (label: string, value: any) => {
+          const row = new Array(14).fill("");
+          row[0] = label;
+          row[10] = value; // Column K
+          wsSku.addRow(row);
+        };
+
+        putSummary("Cost of Advertisement (-)", Math.abs(Number(totals?.advertising_total || 0)));
+        if ((countryName || "").toLowerCase() === "us" || (countryName || "").toLowerCase() === "global") {
+          putSummary("Shipment Charges (-)", Math.abs(Number(totals?.shipment_charges || 0)));
+        }
+        putSummary("Platform Fees (-)", Math.abs(Number(totals?.platform_fee || 0)));
+        putSummary("CM2 Profit/Loss", Math.abs(Number(totals?.cm2_profit || 0)));
+        putSummary("CM2 Margins", Number(totals?.cm2_margins || 0) / 100);
+        putSummary("TACoS (Total Advertising Cost of Sale)", Number(totals?.acos || 0) / 100);
+        putSummary("Net Reimbursement during the month", Math.abs(Number(totals?.rembursement_fee || 0)));
+        putSummary("Reimbursement vs CM2 Margins", Number(totals?.rembursment_vs_cm2_margins || 0) / 100);
+        putSummary("Reimbursement vs Sales", Number(totals?.reimbursement_vs_sales || 0) / 100);
+
+        // Formatting
+        wsSku.getColumn(2).numFmt = "#,##0"; // Quantity
+
+        // Money columns D..L + N  => 4..12 and 14
+        [4, 5, 6, 7, 8, 9, 10, 11, 12, 14].forEach((c) => {
+          wsSku.getColumn(c).numFmt = "#,##0.00";
+        });
+
+        // Percent col M
+        wsSku.getColumn(13).numFmt = "0.00%";
+      } else {
+        wsSku.addRow(["SKU data not available"]);
+      }
+
+      // =========================================================
+      // ✅ TAB 2: All Graphs (SWAPPED → now second sheet)
+      // =========================================================
+      const wsGraphs = wb.addWorksheet("All Graphs");
+      wsGraphs.views = [{ showGridLines: false }];
+
+      let rowCursor = 1;
+
+      rowCursor = await addChartBlock(
+        wsGraphs,
+        wb,
+        chartExportApi?.title || "Profitability Chart",
+        chartExportApi?.getChartBase64?.(),
+        rowCursor,
+        { width: 1000, pad: 2, bgCols: 30 }
+      );
+
+      rowCursor = await addChartBlock(wsGraphs, wb, "Expense Breakdown (Pie Chart)", expenseBreakdownPieBase64, rowCursor,
+        { width: 650, bgCols: 30, scale: 2, skipCrop: true } // ✅
+      );
+
+      rowCursor = await addChartBlock(wsGraphs, wb, "Product Wise CM1 Breakdown (Pie Chart)", productWiseCm1PieBase64, rowCursor,
+        { width: 650, bgCols: 30, scale: 2, skipCrop: true } // ✅
+      );
+
+
+      const buffer = await wb.xlsx.writeBuffer();
+      saveAs(
+        new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        "Profitability_Bundle.xlsx"
+      );
+    } catch (e) {
+      console.error("Combined export failed:", e);
+    }
+  };
+
+
+
   useEffect(() => {
     if (range === "monthly") {
       setAllDropdownsSelected(!!selectedMonth && !!selectedYear);
@@ -890,20 +1340,42 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
       </div>
 
+      {/* Profitability header + bundle download */}
+      {allDropdownsSelected && (
+        <div className="flex items-center justify-between gap-3">
+          <PageBreadcrumb pageTitle="Profitability" variant="page" align="left" textSize="2xl" />
+
+          <DownloadIconButton
+            onClick={handleDownloadProfitabilityBundle}
+            disabled={
+              !chartExportApi ||
+              !skuExportPayload ||
+              !expenseBreakdownPieBase64 ||
+              !productWiseCm1PieBase64
+            }
+          />
+        </div>
+      )}
+
+
       {/* Charts & Tables */}
       {range === "monthly" && selectedMonth && selectedYear && (
         <>
+        <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
           <Bargraph
             range={range}
             selectedMonth={selectedMonth}
             selectedYear={selectedYear}
             countryName={initialCountryName}
             homeCurrency={globalHomeCurrency}
+            hideDownloadButton
+            onExportApiReady={setChartExportApi}
             onNoDataChange={(noData) => {
               console.log("🔥 [Monthly] Bargraph → onNoDataChange:", noData);
               setShowNoDataOverlay(noData);
             }}
           />
+          </div>
           <div className="flex flex-wrap justify-between gap-6 md:gap-4 mb-4">
             <div className="flex-1 min-w-[300px]">
               <CircleChart
@@ -912,6 +1384,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 year={selectedYear}
                 countryName={initialCountryName}
                 homeCurrency={globalHomeCurrency}
+                onExportBase64Ready={setExpenseBreakdownPieBase64}
               />
             </div>
             <div className="flex-1 min-w-[300px]">
@@ -921,6 +1394,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 year={selectedYear}
                 countryName={initialCountryName}
                 homeCurrency={globalHomeCurrency}
+                onExportBase64Ready={setProductWiseCm1PieBase64}
               />
             </div>
           </div>
@@ -930,23 +1404,29 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             year={selectedYear}
             countryName={initialCountryName}
             homeCurrency={globalHomeCurrency}
+            hideDownloadButton
+            onExportPayloadChange={setSkuExportPayload}
           />
         </>
       )}
 
       {range === "quarterly" && isQuarter(selectedQuarter) && selectedYear && (
         <>
+        <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
           <GraphPage
             range={range}
             selectedQuarter={selectedQuarter}
             selectedYear={selectedYear}
             countryName={initialCountryName}
             homeCurrency={globalHomeCurrency}
+            hideDownloadButton
+            onExportApiReady={setChartExportApi}
             onNoDataChange={(noData) => {
               console.log("🔥 [Quarterly] GraphPage → onNoDataChange:", noData);
               setShowNoDataOverlay(noData);
             }}
           />
+          </div>
           <div className="flex flex-wrap justify-between gap-6 md:gap-4">
             <div className="flex-1 min-w-[300px]">
               <CircleChart
@@ -955,6 +1435,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 year={selectedYear}
                 countryName={initialCountryName}
                 homeCurrency={globalHomeCurrency}
+                onExportBase64Ready={setExpenseBreakdownPieBase64}
               />
             </div>
             <div className="flex-1 min-w-[300px]">
@@ -964,6 +1445,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 year={selectedYear}
                 countryName={initialCountryName}
                 homeCurrency={globalHomeCurrency}
+                onExportBase64Ready={setProductWiseCm1PieBase64}
               />
             </div>
           </div>
@@ -973,6 +1455,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             year={selectedYear}
             countryName={initialCountryName}
             homeCurrency={globalHomeCurrency}
+            hideDownloadButton
+            onExportPayloadChange={setSkuExportPayload}
           />
         </>
       )}
@@ -984,6 +1468,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             selectedYear={selectedYear}
             countryName={initialCountryName}
             homeCurrency={globalHomeCurrency}
+            hideDownloadButton
+            onExportApiReady={setChartExportApi}
             onNoDataChange={(noData) => {
               console.log("🔥 [Yearly] GraphPage → onNoDataChange:", noData);
               setShowNoDataOverlay(noData);
@@ -996,6 +1482,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 year={selectedYear}
                 countryName={initialCountryName}
                 homeCurrency={globalHomeCurrency}
+                onExportBase64Ready={setExpenseBreakdownPieBase64}
               />
             </div>
             <div className="flex-1 min-w-[300px]">
@@ -1004,6 +1491,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 year={selectedYear}
                 countryName={initialCountryName}
                 homeCurrency={globalHomeCurrency}
+                onExportBase64Ready={setProductWiseCm1PieBase64}
               />
             </div>
           </div>
@@ -1012,7 +1500,10 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             year={selectedYear}
             countryName={initialCountryName}
             homeCurrency={globalHomeCurrency}
+            hideDownloadButton
+            onExportPayloadChange={setSkuExportPayload}
           />
+
         </>
       )}
 

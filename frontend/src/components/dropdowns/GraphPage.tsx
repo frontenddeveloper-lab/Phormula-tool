@@ -777,14 +777,13 @@ import {
   Legend,
   type Chart as ChartInstance,
 } from "chart.js";
-
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-
 import ModalMsg from "@/components/common/ModalMsg";
 import PageBreadcrumb from "../common/PageBreadCrumb";
 import Loader from "@/components/loader/Loader";
 import DownloadIconButton from "../ui/button/DownloadIconButton";
+import { ProfitChartExportApi } from "@/lib/utils/exportTypes";
 
 ChartJS.register(
   CategoryScale,
@@ -802,9 +801,10 @@ type GraphPageProps = {
   selectedQuarter?: "Q1" | "Q2" | "Q3" | "Q4";
   selectedYear: number | string;
   countryName: string;
-  /** Only passed for GLOBAL pages from Dropdowns */
   homeCurrency?: string;
   onNoDataChange?: (noData: boolean) => void;
+  onExportApiReady?: (api: ProfitChartExportApi) => void;
+  hideDownloadButton?: boolean;
 };
 
 type UploadRow = {
@@ -855,6 +855,8 @@ const GraphPage: React.FC<GraphPageProps> = ({
   countryName,
   homeCurrency,
   onNoDataChange,
+  onExportApiReady,
+  hideDownloadButton,
 }) => {
   const isGlobalPage = (countryName || "").toLowerCase() === "global";
   const normalizedHomeCurrency = (homeCurrency || "").trim().toLowerCase();
@@ -1387,9 +1389,19 @@ const GraphPage: React.FC<GraphPageProps> = ({
     setSelectedGraphs((prev) => ({ ...prev, [name]: !isChecked }));
   };
 
+  useEffect(() => {
+  onExportApiReady?.({
+    getChartBase64,
+    title: `Profitability - ${periodInfo}`,
+    currencySymbol,
+  });
+}, [onExportApiReady, periodInfo, currencySymbol]);
+
+
   return (
-    <div className="relative w-full rounded-xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
-      {loading ? (
+    // <div className="relative w-full rounded-xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
+    <div className="relative w-full">  
+    {loading ? (
         <div className="flex h-[260px] md:h-[320px] items-center justify-center">
           <Loader
             src="/infinity-unscreen.gif"
@@ -1402,7 +1414,7 @@ const GraphPage: React.FC<GraphPageProps> = ({
         </div>
       ) : (
         <div className={allValuesZero ? "opacity-30 pointer-events-none" : "opacity-100"}>
-          <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-baseline gap-2 justify-center sm:justify-start">
               <PageBreadcrumb
                 pageTitle="Profitability"
@@ -1413,9 +1425,10 @@ const GraphPage: React.FC<GraphPageProps> = ({
             </div>
 
             <div className="flex justify-center sm:justify-end">
-              <DownloadIconButton onClick={exportToExcel} />
+              {!hideDownloadButton && <DownloadIconButton onClick={exportToExcel} />}
             </div>
-          </div>
+
+          </div> */}
 
           {/* Metric toggles */}
           <div
