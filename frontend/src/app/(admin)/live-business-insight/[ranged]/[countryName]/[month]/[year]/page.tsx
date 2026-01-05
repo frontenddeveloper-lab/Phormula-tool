@@ -1355,31 +1355,49 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
 const renderAiActionLine = (line: string) => {
   if (!line) return null;
 
-  // 1️⃣ Remove "Product name -"
-  const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, '');
+  // 1) Remove leading "Product name -"
+  const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, "").trim();
 
-  // 2️⃣ Extract Inventory line (even if stuck or ⚠ prefixed)
-  const inventoryMatch = cleaned.match(/⚠?\s*Inventory\s*:\s*[^.]+\.?/i);
-  const inventoryLine = inventoryMatch?.[0]?.trim() || null;
-
-  // 3️⃣ Extract Action line (Check / Review / Monitor etc, even with ⚠)
-  const actionMatch = cleaned.match(
-    /⚠?\s*(Check|Review|Monitor|Increase|Reduce|Maintain)[^.]+\.?/i
-  );
-  const actionLine = actionMatch?.[0]?.trim() || null;
-
-  // 4️⃣ Remove extracted lines from description
-  let descriptionText = cleaned;
-  if (inventoryLine) descriptionText = descriptionText.replace(inventoryLine, '');
-  if (actionLine) descriptionText = descriptionText.replace(actionLine, '');
-
-  // 5️⃣ Split product name from description
-  const split = descriptionText.split(
-    /\s+(There is|There was|There are|An increase|A decrease|Increase|Decrease)/i
+  // 2) Extract product name safely:
+  //    take text from start until we hit common sentence starters like "The/There/A/An/Increase/Decrease/..."
+  const productMatch = cleaned.match(
+    /^(.+?)(?=\s+(?:The|There|A|An|Increase|Decreased|Decreasing|Increased|Increasing)\b|$)/i
   );
 
-  const productName = split[0]?.trim();
-  const description = descriptionText.replace(productName, '').trim();
+  const productName = (productMatch?.[1] || "").trim();
+
+  // 3) Remaining text (everything after product name)
+  let rest = cleaned;
+  if (productName) {
+    // remove ONLY first occurrence at the start
+    rest = rest.replace(new RegExp("^" + productName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*", "i"), "");
+  }
+  rest = rest.trim();
+
+  // 4) Split into sentences (keeps simple, works for your AI text)
+  const sentences = rest
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const verbs = ["Check", "Review", "Monitor", "Increase", "Reduce", "Maintain", "Push"];
+  const isAction = (s: string) =>
+    new RegExp(`^(?:⚠\\s*)?(?:${verbs.join("|")})\\b`, "i").test(s);
+
+  const isInventory = (s: string) =>
+    /inventory\s*:/i.test(s) || /^\s*⚠\s*inventory\s*:/i.test(s);
+
+  const inventoryLines: string[] = [];
+  const actionLines: string[] = [];
+  const descLines: string[] = [];
+
+  for (const s of sentences) {
+    if (isInventory(s)) inventoryLines.push(s);
+    else if (isAction(s)) actionLines.push(s);
+    else descLines.push(s);
+  }
+
+  const description = descLines.join(" ");
 
   return (
     <div className="space-y-2">
@@ -1397,19 +1415,19 @@ const renderAiActionLine = (line: string) => {
         </div>
       )}
 
-      {/* Action line */}
-      {actionLine && (
-        <div className="font-bold text-[#414042]">
-          {actionLine.replace(/^⚠\s*/, '')}
+      {/* Actions (bold, separate lines) */}
+      {actionLines.map((a, i) => (
+        <div key={i} className="font-bold text-[#414042]">
+          {a.replace(/^⚠\s*/, "")}
         </div>
-      )}
+      ))}
 
-      {/* Inventory line (always last) */}
-      {inventoryLine && (
-        <div className="font-bold text-[#414042]">
-          ⚠ {inventoryLine.replace(/^⚠?\s*Inventory\s*:\s*/i, 'Inventory: ')}
+      {/* Inventory (always last, bold) */}
+      {inventoryLines.map((inv, i) => (
+        <div key={i} className="font-bold text-[#414042]">
+          ⚠ {inv.replace(/^⚠?\s*Inventory\s*:\s*/i, "Inventory: ")}
         </div>
-      )}
+      ))}
     </div>
   );
 };

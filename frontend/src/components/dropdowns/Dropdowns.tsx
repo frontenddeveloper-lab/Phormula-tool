@@ -980,6 +980,105 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 maximumFractionDigits: 2,
               })}`;
 
+            // ✅ Cost of Ads
+            const costOfAds = summary.advertising_total ?? 0;
+
+            // ✅ "ROAS" as you defined: (Cost of Ads / Net Sales) * 100
+            const getRoas = (s?: Summary) => {
+              const ns = s?.total_sales ?? 0;            // net sales
+              const ads = s?.advertising_total ?? 0;     // cost of ads
+              return ns > 0 ? (ads / ns) * 100 : 0;
+            };
+
+
+            const roas = getRoas(summary);
+
+            const formatRoas = (val: number) =>
+              `${val.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}%`;
+
+
+         const renderRoasComparisons = () => {
+  const yNum = Number(selectedYear);
+
+  const label =
+    range === "monthly"
+      ? selectedMonth && yNum
+        ? getPrevMonthLabel(selectedMonth, yNum)
+        : "Prev month"
+      : range === "quarterly"
+        ? selectedQuarter && yNum
+          ? getPrevQuarterLabel(selectedQuarter as Quarter, yNum)
+          : "Prev quarter"
+        : yNum
+          ? getPrevYearLabel(yNum)
+          : "Prev year";
+
+  const prevVal =
+    range === "monthly"
+      ? comparisons?.lastMonth
+        ? getRoas(comparisons.lastMonth)
+        : undefined
+      : range === "quarterly"
+        ? comparisons?.lastQuarter
+          ? getRoas(comparisons.lastQuarter)
+          : undefined
+        : comparisons?.lastYear
+          ? getRoas(comparisons.lastYear)
+          : undefined;
+
+  const hasPrev = typeof prevVal === "number" && !isNaN(prevVal);
+
+  // ✅ Absolute difference (simple subtraction), NOT percent-change formula
+  // e.g. 25.09 - 22.72 = 2.37
+  const diffAbs = hasPrev ? roas - prevVal! : null;
+
+  // ✅ For TACoS: higher is worse (RED), lower is better (GREEN)
+  const diffClass =
+    typeof diffAbs === "number"
+      ? diffAbs > 0
+        ? "text-red-600"
+        : diffAbs < 0
+          ? "text-emerald-600"
+          : "text-gray-400"
+      : "text-gray-400";
+
+  const formatDelta = (v: number) =>
+    `${Math.abs(v).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}%`;
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
+        <div className="min-w-0">
+          <div className="font-semibold text-gray-600 whitespace-nowrap">
+            {label}:
+          </div>
+          <div className="font-semibold text-gray-800 whitespace-nowrap">
+            {hasPrev ? formatRoas(prevVal!) : "-"}
+          </div>
+        </div>
+
+        <span className={`font-bold whitespace-nowrap ${diffClass}`}>
+          {typeof diffAbs === "number" ? (
+            <>
+              {diffAbs > 0 ? "▲" : diffAbs < 0 ? "▼" : ""} {formatDelta(diffAbs)}
+            </>
+          ) : (
+            "-"
+          )}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+
+
             const formatUnits = (val: number) =>
               val.toLocaleString(undefined, { maximumFractionDigits: 0 });
 
@@ -1261,7 +1360,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               <div
                 className={[
                   "w-full grid gap-4",
-                  "grid-cols-2 xl:grid-cols-6",
+                  "grid-cols-2 xl:grid-cols-8",
                   isSummaryZero ? "opacity-30" : "opacity-100",
                 ].join(" ")}
               >
@@ -1310,6 +1409,30 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                   </div>
                   {renderComparisons("total_expense", formatMoney)}
                 </div>
+
+                {/* Cost of Advertisement */}
+                <div className="w-full rounded-2xl border border-[#A78BFA] bg-[#A78BFA26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-charcoal-500">Cost of Advertisement</span>
+                  </div>
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                    {formatMoney(costOfAds)}
+                  </div>
+                  {renderComparisons("advertising_total", formatMoney)}
+                </div>
+
+                {/* ROAS */}
+                <div className="w-full rounded-2xl border border-[#10B981] bg-[#10B98126] shadow-sm px-4 py-3 flex flex-col justify-between">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-charcoal-500">TACoS</span>
+                  </div>
+                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                    {formatRoas(roas)}
+                  </div>
+
+                  {renderRoasComparisons()}
+                </div>
+
 
                 {/* CM2 Profit */}
                 <div className="w-full rounded-2xl border border-[#2DA49A] bg-[#2DA49A26] shadow-sm px-4 py-3 flex flex-col justify-between">
@@ -1361,20 +1484,20 @@ const Dropdowns: React.FC<DropdownsProps> = ({
       {/* Charts & Tables */}
       {range === "monthly" && selectedMonth && selectedYear && (
         <>
-        <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
-          <Bargraph
-            range={range}
-            selectedMonth={selectedMonth}
-            selectedYear={selectedYear}
-            countryName={initialCountryName}
-            homeCurrency={globalHomeCurrency}
-            hideDownloadButton
-            onExportApiReady={setChartExportApi}
-            onNoDataChange={(noData) => {
-              console.log("🔥 [Monthly] Bargraph → onNoDataChange:", noData);
-              setShowNoDataOverlay(noData);
-            }}
-          />
+          <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
+            <Bargraph
+              range={range}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              countryName={initialCountryName}
+              homeCurrency={globalHomeCurrency}
+              hideDownloadButton
+              onExportApiReady={setChartExportApi}
+              onNoDataChange={(noData) => {
+                console.log("🔥 [Monthly] Bargraph → onNoDataChange:", noData);
+                setShowNoDataOverlay(noData);
+              }}
+            />
           </div>
           <div className="flex flex-wrap justify-between gap-6 md:gap-4 mb-4">
             <div className="flex-1 min-w-[300px]">
@@ -1412,20 +1535,20 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
       {range === "quarterly" && isQuarter(selectedQuarter) && selectedYear && (
         <>
-        <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
-          <GraphPage
-            range={range}
-            selectedQuarter={selectedQuarter}
-            selectedYear={selectedYear}
-            countryName={initialCountryName}
-            homeCurrency={globalHomeCurrency}
-            hideDownloadButton
-            onExportApiReady={setChartExportApi}
-            onNoDataChange={(noData) => {
-              console.log("🔥 [Quarterly] GraphPage → onNoDataChange:", noData);
-              setShowNoDataOverlay(noData);
-            }}
-          />
+          <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
+            <GraphPage
+              range={range}
+              selectedQuarter={selectedQuarter}
+              selectedYear={selectedYear}
+              countryName={initialCountryName}
+              homeCurrency={globalHomeCurrency}
+              hideDownloadButton
+              onExportApiReady={setChartExportApi}
+              onNoDataChange={(noData) => {
+                console.log("🔥 [Quarterly] GraphPage → onNoDataChange:", noData);
+                setShowNoDataOverlay(noData);
+              }}
+            />
           </div>
           <div className="flex flex-wrap justify-between gap-6 md:gap-4">
             <div className="flex-1 min-w-[300px]">
