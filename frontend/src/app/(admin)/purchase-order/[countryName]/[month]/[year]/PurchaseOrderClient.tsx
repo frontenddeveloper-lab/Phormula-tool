@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import UploadLocalInvModal from '@/components/Modal/UploadLocalInvModal';
+import MonthYearPickerTable from '@/components/filters/MonthYearPickerTable';
 
 // ---------- Types ----------
 interface Row {
@@ -304,7 +305,7 @@ font-weight: bold;
           border: none;
           border-radius: 5px;
           cursor: pointer;
-          padding: 10px 18px;
+          padding: 9px 18px;
         }
         .fetch-button:hover {
           background: #1f2a36;
@@ -364,7 +365,7 @@ font-weight: bold;
       </h2>
 
       <div className="inline-dropdowns flex sm:flex-row flex-col">
-        <table className="dropdown-table">
+        {/* <table className="dropdown-table">
           <thead>
             <tr className="dropdown-header">
               <th className="dropdown-cell">Month</th>
@@ -403,7 +404,18 @@ font-weight: bold;
               </td>
             </tr>
           </tbody>
-        </table>
+        </table> */}
+        <MonthYearPickerTable
+                        month={month}
+                        year={year}
+                        yearOptions={[
+                          new Date().getFullYear(),
+                          new Date().getFullYear() - 1,
+                        ]}
+                        onMonthChange={(v) => setMonth(v)}
+                        onYearChange={(v) => setYear(v)}
+                        valueMode="lower"
+                      />
 
         <div className="flex sm:flex-row flex-col gap-4">
           <button

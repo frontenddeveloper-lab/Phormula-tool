@@ -1,10 +1,14 @@
-// app/(full-width-pages)/(auth)/brand/page.tsx
+import type { Metadata } from "next";
 import BrandForm from "@/components/auth/BrandForm";
-import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Company & Brand | Auth",
-  description: "Collect company & brand details during onboarding.",
+  title: "Company & Brand Details",
+  description:
+    "Provide your company and brand details to personalize your Phormula experience during onboarding.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function BrandPage() {
