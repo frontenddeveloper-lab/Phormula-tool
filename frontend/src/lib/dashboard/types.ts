@@ -7,4 +7,5 @@ export type RegionMetrics = {
   lastMonthToDateUSD: number;
   lastMonthTotalUSD: number;
   targetUSD: number;
+    decTargetUSD?: number;
 };

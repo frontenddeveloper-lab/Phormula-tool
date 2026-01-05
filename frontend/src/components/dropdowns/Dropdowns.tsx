@@ -25,7 +25,9 @@ import { useGetUserDataQuery } from "@/lib/api/profileApi";
 /* ---------------------- Types ---------------------- */
 type Summary = {
   unit_sold: number;
-  total_sales: number;
+  total_sales: number;      // (your current "Sales")
+  gross_sales?: number;     // ✅ ADD THIS
+  total_product_sales?: number;
   total_expense: number;
   cm2_profit: number;
   total_cous?: number;
@@ -33,6 +35,7 @@ type Summary = {
   advertising_total?: number;
   total_amazon_fee?: number;
 };
+
 
 
 type SummaryComparisons = {
@@ -47,6 +50,8 @@ type UploadHistoryResponse = {
   summaryComparisons?: SummaryComparisons;
   [key: string]: unknown;
 };
+
+
 
 type RangeType = "monthly" | "quarterly" | "yearly" | "";
 
@@ -226,6 +231,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   const zeroData: Summary = {
     unit_sold: 0,
     total_sales: 0,
+    gross_sales: 0, // ✅ ADD THIS
+    total_product_sales: 0,
     total_expense: 0,
     cm2_profit: 0,
     total_cous: 0,
@@ -234,10 +241,14 @@ const Dropdowns: React.FC<DropdownsProps> = ({
     total_amazon_fee: 0,
   };
 
+
   const displayData: Summary =
     allDropdownsSelected && uploadsData?.summary
       ? uploadsData.summary
       : zeroData;
+
+
+  console.log("🔍 displayData:", displayData);
 
   // range: "monthly" | "quarterly" | "yearly"
   const handleRangeChange = (v: "monthly" | "quarterly" | "yearly") => {
@@ -285,7 +296,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         console.error(`API Error: ${err?.error ?? res.statusText}`);
-        setUploadsData(null);
+        // setUploadsData(null);
         return;
       }
 
@@ -293,7 +304,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
       setUploadsData(data);
     } catch (error) {
       console.error("Error fetching data: ", error);
-      setUploadsData(null);
+      // setUploadsData(null);
     } finally {
       setLoading(false);
     }
@@ -353,10 +364,12 @@ const Dropdowns: React.FC<DropdownsProps> = ({
     }
   }, [ranged, month, year]);
 
-  // Auto-fetch when selections change
+  // ✅ only change when global currency changes (prevents country pages going 0)
+  const fetchCurrencyKey = isGlobalPage ? homeCurrency : "country";
+
   useEffect(() => {
     if (!countryName) return;
-    if (range === "") return;
+    if (range === "" || !selectedYear) return;
 
     fetchUploadHistory(
       range,
@@ -366,7 +379,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
       countryName
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, selectedMonth, selectedQuarter, selectedYear, countryName, homeCurrency]);
+  }, [range, selectedMonth, selectedQuarter, selectedYear, countryName, fetchCurrencyKey]);
+
 
   // Validate dropdown completeness
   useEffect(() => {
@@ -406,6 +420,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   /* 🌟 Initial fullscreen loader for this page */
   const hasAnyContent = !!uploadsData?.summary;
   const initialLoading = loading && !hasAnyContent;
+
+
 
   if (initialLoading) {
     return (
@@ -447,29 +463,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   };
 
   return (
-    <div ref={layoutRef} className="space-y-5 relative">
-      {/* Back / Title */}
-      {/* <div className="flex flex-col leading-tight">
-        <div className="flex gap-2">
-          <PageBreadcrumb
-            pageTitle="Financial Metrics -"
-            variant="page"
-            align="left"
-            textSize="2xl"
-          />
-
-          <span className="text-green-500 font-bold text-lg sm:text-2xl md:text-2xl">
-            {countryName?.toLowerCase() === "global"
-              ? "Global"
-              : countryName?.toUpperCase()}
-          </span>
-        </div>
-
-   
-        <p className="text-sm text-charcoal-500 mt-1">
-          Track your profitability and key metrics
-        </p>
-      </div> */}
+    <div ref={layoutRef} className="space-y-6 relative">
 
       <div className="w-full flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         {/* LEFT: Title + Subtitle */}
@@ -517,8 +511,10 @@ const Dropdowns: React.FC<DropdownsProps> = ({
         {uploadsData?.summary &&
           (() => {
             const summary = displayData;
+            const netSales = summary.total_sales;
 
-            // Try both camelCase and snake_case from backend
+
+            // ✅ comparisons (camelCase OR snake_case)
             const rawComparisons =
               (uploadsData as any).summaryComparisons ??
               (uploadsData as any).summary_comparisons;
@@ -527,30 +523,15 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               ? (rawComparisons as SummaryComparisons)
               : undefined;
 
-            console.log("🔍 comparisons from API:", comparisons);
-
-            const isSummaryZero =
-              summary.unit_sold === 0 &&
-              summary.total_sales === 0 &&
-              summary.total_expense === 0 &&
-              summary.cm2_profit === 0;
-
-            const cm2Percent =
-              summary.total_sales > 0
-                ? (summary.cm2_profit / summary.total_sales) * 100
-                : 0;
-
+            // ✅ define formatters FIRST (used below)
             const formatMoney = (val: number) =>
               `${currencySymbol} ${val.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}`;
 
-
             const formatUnits = (val: number) =>
-              val.toLocaleString(undefined, {
-                maximumFractionDigits: 0,
-              });
+              val.toLocaleString(undefined, { maximumFractionDigits: 0 });
 
             const formatPercent = (val: number) =>
               `${val.toLocaleString(undefined, {
@@ -558,18 +539,29 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 maximumFractionDigits: 2,
               })}%`;
 
-            // ---------- numeric comparisons helper ----------
+            // ✅ gross sales accessor (uses backend total_product_sales)
+            const getGrossSales = (s?: Summary) =>
+              s?.total_product_sales ?? s?.gross_sales ?? 0;
 
+            const isSummaryZero =
+              summary.unit_sold === 0 &&
+              summary.total_sales === 0 &&
+              summary.total_expense === 0 &&
+              summary.cm2_profit === 0;
+
+            // const cm2Percent =
+            //   summary.total_sales > 0 ? (summary.cm2_profit / summary.total_sales) * 100 : 0;
+
+            const cm2Percent =
+              netSales > 0 ? (summary.cm2_profit / netSales) * 100 : 0;
+
+            console.log("SUMMARY KEYS:", Object.keys(summary as any));
+            console.log("SUMMARY RAW:", summary);
+
+
+            // ---------- generic comparisons helper ----------
             const getComparisons = (metric: keyof Summary): ComparisonItem[] => {
               const current = summary[metric] ?? 0;
-
-              const rawComparisons =
-                (uploadsData as any).summaryComparisons ??
-                (uploadsData as any).summary_comparisons;
-
-              const comparisons: SummaryComparisons | undefined = rawComparisons
-                ? (rawComparisons as SummaryComparisons)
-                : undefined;
 
               const lm = comparisons?.lastMonth?.[metric];
               const lq = comparisons?.lastQuarter?.[metric];
@@ -584,8 +576,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               const yNum = Number(selectedYear);
 
               if (range === "monthly") {
-                const label =
-                  selectedMonth && yNum ? getPrevMonthLabel(selectedMonth, yNum) : "Prev month";
+                const label = selectedMonth && yNum ? getPrevMonthLabel(selectedMonth, yNum) : "Prev month";
                 return [makeItem(label, lm)];
               }
 
@@ -605,60 +596,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               return [];
             };
 
-            // const renderComparisons = (
-            //   metric: keyof Summary,
-            //   formatter: (val: number) => string
-            // ) => {
-            //   const items = getComparisons(metric);
-            //   if (!items.length) return null;
-
-            //   return (
-            //     <div className="mt-3 space-y-1.5 min-h-[44px]">
-            //       {items.map((item) => {
-            //         const hasValue = typeof item.value === "number" && !isNaN(item.value);
-            //         const hasDiff =
-            //           typeof item.diffPct === "number" && !isNaN(item.diffPct);
-
-            //         return (
-            //           <div
-            //             key={item.label}
-            //             className="flex items-center justify-between text-xs"
-            //           >
-            //             <div className="flex items-baseline gap-1">
-            //               <span className="font-semibold text-gray-600">{item.label}:</span>
-            //               <span className="font-semibold text-gray-700">
-            //                 {hasValue ? formatter(item.value!) : "-"}
-            //               </span>
-            //             </div>
-
-            //             <span
-            //               className={`font-bold ${hasDiff
-            //                 ? item.diffPct! >= 0
-            //                   ? "text-emerald-600"
-            //                   : "text-red-600"
-            //                 : "text-gray-400"
-            //                 }`}
-            //             >
-            //               {hasDiff ? (
-            //                 <>
-            //                   {item.diffPct! >= 0 ? "▲" : "▼"}{" "}
-            //                   {Math.abs(item.diffPct!).toFixed(1)}%
-            //                 </>
-            //               ) : (
-            //                 "-"
-            //               )}
-            //             </span>
-            //           </div>
-            //         );
-            //       })}
-            //     </div>
-            //   );
-            // };
-
-            const renderComparisons = (
-              metric: keyof Summary,
-              formatter: (val: number) => string
-            ) => {
+            const renderComparisons = (metric: keyof Summary, formatter: (val: number) => string) => {
               const items = getComparisons(metric);
               if (!items.length) return null;
 
@@ -679,7 +617,6 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                         key={item.label}
                         className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums"
                       >
-                        {/* LEFT: label on first line, value on next line */}
                         <div className="min-w-0">
                           <div className="font-semibold text-gray-600 whitespace-nowrap">
                             {item.label}:
@@ -689,7 +626,6 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                           </div>
                         </div>
 
-                        {/* RIGHT: delta */}
                         <div className={`font-bold whitespace-nowrap ${diffClass}`}>
                           {hasDiff ? (
                             <>
@@ -707,28 +643,34 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               );
             };
 
+            const pickNum = (obj: any, keys: string[]) => {
+              for (const k of keys) {
+                const v = obj?.[k];
+                if (v === 0) return 0;
+                if (typeof v === "number" && !isNaN(v)) return v;
+                if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) return Number(v);
+              }
+              return 0;
+            };
 
-            const getCm2Percent = (s?: Summary) =>
-              s && s.total_sales > 0 ? (s.cm2_profit / s.total_sales) * 100 : 0;
 
-            const cm2PercentComparisons = (): ComparisonItem[] => {
-              if (!comparisons) return [];
-
+            // ---------- Gross Sales comparisons ----------
+            const getGrossSalesComparisons = (): ComparisonItem[] => {
+              const current = getGrossSales(summary);
               const yNum = Number(selectedYear);
 
-              const prevMonth = comparisons.lastMonth ? getCm2Percent(comparisons.lastMonth) : undefined;
-              const prevQuarter = comparisons.lastQuarter ? getCm2Percent(comparisons.lastQuarter) : undefined;
-              const prevYear = comparisons.lastYear ? getCm2Percent(comparisons.lastYear) : undefined;
+              const prevMonth = comparisons?.lastMonth ? getGrossSales(comparisons.lastMonth) : undefined;
+              const prevQuarter = comparisons?.lastQuarter ? getGrossSales(comparisons.lastQuarter) : undefined;
+              const prevYear = comparisons?.lastYear ? getGrossSales(comparisons.lastYear) : undefined;
 
               const makeItem = (label: string, prevVal?: number): ComparisonItem => {
                 if (typeof prevVal !== "number") return { label, value: undefined, diffPct: null };
-                const diffPct = prevVal === 0 ? null : ((cm2Percent - prevVal) / prevVal) * 100;
+                const diffPct = prevVal === 0 ? null : ((current - prevVal) / prevVal) * 100;
                 return { label, value: prevVal, diffPct };
               };
 
               if (range === "monthly") {
-                const label =
-                  selectedMonth && yNum ? getPrevMonthLabel(selectedMonth, yNum) : "Prev month";
+                const label = selectedMonth && yNum ? getPrevMonthLabel(selectedMonth, yNum) : "Prev month";
                 return [makeItem(label, prevMonth)];
               }
 
@@ -748,262 +690,202 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               return [];
             };
 
-            const renderCm2PercentComparisons = () => {
-              let items = cm2PercentComparisons();
-
-              // ✅ Hide last quarter only in Monthly view
-              if (range === "monthly") {
-                items = items.filter((item) => item.label !== "Last quarter");
-              }
-
+            const renderGrossSalesComparisons = () => {
+              const items = getGrossSalesComparisons();
               if (!items.length) return null;
-
               return (
-                <div className="mt-3 space-y-1.5">
+                <div className="mt-3 space-y-2">
                   {items.map((item) => {
-                    const hasValue =
-                      typeof item.value === "number" && !isNaN(item.value);
-                    const hasDiff =
-                      typeof item.diffPct === "number" && !isNaN(item.diffPct);
+                    const hasValue = typeof item.value === "number" && !isNaN(item.value);
+                    const hasDiff = typeof item.diffPct === "number" && !isNaN(item.diffPct);
+
+                    const diffClass = hasDiff
+                      ? item.diffPct! >= 0
+                        ? "text-emerald-600"
+                        : "text-red-600"
+                      : "text-gray-400";
 
                     return (
-                      // <div
-                      //   key={item.label}
-                      //   className="flex items-center justify-between text-xs"
-                      // >
-                      //   {/* LEFT: label + value */}
-                      //   <div className="flex items-baseline gap-1">
-                      //     <span className="font-semibold text-gray-600">
-                      //       {item.label}:
-                      //     </span>
-                      //     <span className="font-semibold text-gray-700">
-                      //       {hasValue ? formatPercent(item.value) : "-"}
-                      //     </span>
-                      //   </div>
-
-                      //   {/* RIGHT: percentage */}
-                      //   <span
-                      //     className={`font-bold ${hasDiff
-                      //       ? item.diffPct! >= 0
-                      //         ? "text-emerald-600"
-                      //         : "text-red-600"
-                      //       : "text-gray-400"
-                      //       }`}
-                      //   >
-                      //     {hasDiff ? (
-                      //       <>
-                      //         {item.diffPct! >= 0 ? "▲" : "▼"}{" "}
-                      //         {Math.abs(item.diffPct!).toFixed(1)}%
-                      //       </>
-                      //     ) : (
-                      //       "-"
-                      //     )}
-                      //   </span>
-                      // </div>
-
                       <div
                         key={item.label}
                         className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums"
                       >
-                        {/* LEFT: label then value */}
                         <div className="min-w-0">
                           <div className="font-semibold text-gray-600 whitespace-nowrap">
                             {item.label}:
                           </div>
                           <div className="font-semibold text-gray-800 whitespace-nowrap">
-                            {hasValue ? formatPercent(item.value) : "-"}
+                            {hasValue ? formatMoney(item.value!) : "-"}
                           </div>
                         </div>
 
-                        {/* RIGHT: delta */}
-                        <span
-                          className={[
-                            "font-bold whitespace-nowrap",
-                            hasDiff
-                              ? item.diffPct! >= 0
-                                ? "text-emerald-600"
-                                : "text-red-600"
-                              : "text-gray-400",
-                          ].join(" ")}
-                        >
+                        <div className={`font-bold whitespace-nowrap ${diffClass}`}>
                           {hasDiff ? (
                             <>
                               {item.diffPct! >= 0 ? "▲" : "▼"}{" "}
-                              {Math.abs(item.diffPct!).toFixed(1)}%
+                              {Math.abs(item.diffPct!).toFixed(2)}%
                             </>
                           ) : (
                             "-"
                           )}
-                        </span>
+                        </div>
                       </div>
-
                     );
                   })}
                 </div>
               );
             };
 
+            // ---------- CM2% comparisons ----------
+            const getCm2Percent = (s?: Summary) =>
+              s && s.total_sales > 0 ? (s.cm2_profit / s.total_sales) * 100 : 0;
+            const renderCm2PercentComparisons = () => {
+              const yNum = Number(selectedYear);
 
-            // return (
-            //   <div
-            //     className={[
-            //       "w-full flex flex-col gap-4",
-            //       "sm:flex-row sm:flex-wrap sm:gap-6",
-            //       "xl:flex-nowrap xl:gap-6", // ✅ single line on larger screens
-            //       isSummaryZero ? "opacity-30" : "opacity-100",
-            //     ].join(" ")}
-            //   >
+              const label =
+                range === "monthly"
+                  ? selectedMonth && yNum
+                    ? getPrevMonthLabel(selectedMonth, yNum)
+                    : "Prev month"
+                  : range === "quarterly"
+                    ? selectedQuarter && yNum
+                      ? getPrevQuarterLabel(selectedQuarter as Quarter, yNum)
+                      : "Prev quarter"
+                    : yNum
+                      ? getPrevYearLabel(yNum)
+                      : "Prev year";
 
-            //     {/* Units */}
-            //     <div className="w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[20%] rounded-2xl border border-[#87AD12] bg-[#87AD1226] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">Units</span>
-            //         <FaBoxArchive color="#87AD12" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatUnits(summary.unit_sold)}
-            //       </div>
+              const prevVal =
+                range === "monthly"
+                  ? comparisons?.lastMonth
+                    ? getCm2Percent(comparisons.lastMonth)
+                    : undefined
+                  : range === "quarterly"
+                    ? comparisons?.lastQuarter
+                      ? getCm2Percent(comparisons.lastQuarter)
+                      : undefined
+                    : comparisons?.lastYear
+                      ? getCm2Percent(comparisons.lastYear)
+                      : undefined;
 
-            //       {renderComparisons("unit_sold", formatUnits)}
-            //     </div>
+              const hasPrev = typeof prevVal === "number" && !isNaN(prevVal);
 
-            //     {/* Sales */}
-            //     <div className="w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[20%] rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">Sales</span>
-            //         <FcSalesPerformance fill="000" color="#000" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatMoney(summary.total_sales)}
-            //       </div>
+              const diffPct =
+                hasPrev && prevVal !== 0 ? ((cm2Percent - prevVal) / prevVal) * 100 : null;
 
-            //       {renderComparisons("total_sales", formatMoney)}
-            //     </div>
+              const diffClass =
+                typeof diffPct === "number"
+                  ? diffPct >= 0
+                    ? "text-emerald-600"
+                    : "text-red-600"
+                  : "text-gray-400";
 
-            //     {/* Expenses */}
-            //     <div className="w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[20%] rounded-2xl border border-[#FF5C5C] bg-[#FF5C5C26] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">Expenses</span>
-            //         <MdEditDocument color="#FF5C5C" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatMoney(summary.total_expense)}
-            //       </div>
+              return (
+                <div className="mt-3 space-y-1.5">
+                  <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-600 whitespace-nowrap">
+                        {label}:
+                      </div>
+                      <div className="font-semibold text-gray-800 whitespace-nowrap">
+                        {hasPrev ? formatPercent(prevVal!) : "-"}
+                      </div>
+                    </div>
 
-            //       {renderComparisons("total_expense", formatMoney)}
-            //     </div>
-
-            //     {/* CM2 Profit */}
-            //     <div className="flex-1 min-w-[180px] max-w-xs rounded-2xl border border-[#AB64B5] bg-[#AB64B526] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">CM2 Profit</span>
-            //         <TbMoneybag fill="#AB64B5" color="#AB64B5" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatMoney(summary.cm2_profit)}
-            //       </div>
-
-            //       {renderComparisons("cm2_profit", formatMoney)}
-            //     </div>
-
-            //     {/* CM2 Profit % */}
-            //     <div className="w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.33%-16px)] xl:w-[20%] rounded-2xl border border-[#00627B] bg-[#00627B26] shadow-sm px-4 py-3 flex flex-col justify-between">
-            //       <div className="flex justify-between items-center mb-2">
-            //         <span className="text-xs text-charcoal-500">CM2 Profit %</span>
-            //         <FaMoneyBillTrendUp color="#00627B" size={16} />
-            //       </div>
-            //       <div className="tabular-nums font-extrabold text-charcoal-500 leading-none min-h-[34px] text-[clamp(18px,1.6vw,26px)]">
-            //         {formatPercent(cm2Percent)}
-            //       </div>
-
-            //       {renderCm2PercentComparisons()}
-            //     </div>
-            //   </div>
-            // );
+                    <span className={`font-bold whitespace-nowrap ${diffClass}`}>
+                      {typeof diffPct === "number" ? (
+                        <>
+                          {diffPct >= 0 ? "▲" : "▼"} {Math.abs(diffPct).toFixed(1)}%
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </span>
+                  </div>
+                </div>
+              );
+            };
 
 
             return (
               <div
                 className={[
                   "w-full grid gap-4",
-                  "grid-cols-2 xl:grid-cols-5", // ✅ 2 cols on small screens
+                  "grid-cols-2 xl:grid-cols-6",
                   isSummaryZero ? "opacity-30" : "opacity-100",
                 ].join(" ")}
               >
-
                 {/* Units */}
-                <div className="w-full rounded-2xl border border-[#87AD12] bg-[#87AD1226] shadow-sm px-4 py-3 flex flex-col justify-between">
-
+                <div className="w-full rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">Units</span>
-                    <FaBoxArchive color="#87AD12" size={16} />
+                    {/* <FaBoxArchive color="#87AD12" size={16} /> */}
                   </div>
-
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatUnits(summary.unit_sold)}
                   </div>
-
                   {renderComparisons("unit_sold", formatUnits)}
                 </div>
 
-                {/* Sales */}
-                <div className="w-full rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
+                {/* Gross Sales (✅ uses homeCurrency symbol when global because currencySymbol comes from homeCurrency) */}
+                <div className="w-full rounded-2xl border border-[#F47A00] bg-[#F47A0026] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Sales</span>
-                    <FcSalesPerformance fill="000" color="#000" size={16} />
+                    <span className="text-xs text-charcoal-500">Gross Sales</span>
+                    {/* <FcSalesPerformance fill="000" color="#000" size={16} /> */}
                   </div>
-
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
-                    {formatMoney(summary.total_sales)}
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                    {formatMoney(getGrossSales(summary))}
                   </div>
+                  {renderGrossSalesComparisons()}
+                </div>
 
+                {/* Net Sales */}
+                <div className="w-full rounded-2xl border border-[#2CA9E0] bg-[#2CA9E026] shadow-sm px-4 py-3 flex flex-col justify-between">
+                  <span className="text-xs text-charcoal-500">Net Sales</span>
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                    {formatMoney(netSales)}
+                  </div>
                   {renderComparisons("total_sales", formatMoney)}
                 </div>
+
 
                 {/* Expenses */}
                 <div className="w-full rounded-2xl border border-[#FF5C5C] bg-[#FF5C5C26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">Expenses</span>
-                    <MdEditDocument color="#FF5C5C" size={16} />
+                    {/* <MdEditDocument color="#FF5C5C" size={16} /> */}
                   </div>
-
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(summary.total_expense)}
                   </div>
-
                   {renderComparisons("total_expense", formatMoney)}
                 </div>
 
                 {/* CM2 Profit */}
-                <div className="w-full rounded-2xl border border-[#AB64B5] bg-[#AB64B526] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#2DA49A] bg-[#2DA49A26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">CM2 Profit</span>
-                    <TbMoneybag fill="#AB64B5" color="#AB64B5" size={16} />
+                    {/* <TbMoneybag fill="#AB64B5" color="#AB64B5" size={16} /> */}
                   </div>
-
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(summary.cm2_profit)}
                   </div>
-
                   {renderComparisons("cm2_profit", formatMoney)}
                 </div>
 
                 {/* CM2 Profit % */}
-                <div className="w-full rounded-2xl border border-[#00627B] bg-[#00627B26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#01627F] bg-[#01627F26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-charcoal-500">CM2 Profit %</span>
-                    <FaMoneyBillTrendUp color="#00627B" size={16} />
+                    {/* <FaMoneyBillTrendUp color="#00627B" size={16} /> */}
                   </div>
-
                   <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
                     {formatPercent(cm2Percent)}
                   </div>
-
                   {renderCm2PercentComparisons()}
                 </div>
               </div>
             );
-
           })()}
 
       </div>

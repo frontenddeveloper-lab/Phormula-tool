@@ -143,9 +143,53 @@ p:has(strong:contains("Actions:")) {
   margin-bottom: 0.5rem;
 }
 
+/* ---- Chat message action icons (Like/Dislike/Copy/Share) ---- */
+.chat-msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  user-select: none;
+}
+
+.chat-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.chat-action-btn:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.chat-action-btn.is-active {
+  border-color: rgba(94, 166, 142, 0.9);
+  background: rgba(94, 166, 142, 0.12);
+}
+
+.chat-action-toast {
+  font-size: 11px;
+  color: #4b5563; /* gray-600 */
+  margin-left: 4px;
+}
+
 
 
 
 /* background-image: url('/src/assets/chat-ai-bg.png');
 background-image: url('/src/assets/chat-user-bg.png'); */
 
+
+
+/* ---- Chat timestamps (WhatsApp-style) ---- */
+.chat-date-separator{display:flex;justify-content:center;margin:6px 0;}
+.chat-date-separator span{font-size:11px;line-height:1;background:#e9e9e9;color:#666;padding:4px 10px;border-radius:999px;}
+.chat-msg-meta{display:flex;justify-content:flex-end;gap:6px;margin-top:4px;font-size:10px;opacity:0.75;user-select:none;}
+.chat-msg-meta-user{color:rgba(255,255,255,0.85);}
+.chat-msg-meta-bot{color:rgba(0,0,0,0.55);}

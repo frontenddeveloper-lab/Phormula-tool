@@ -7,6 +7,8 @@ import '@/app/(admin)/pnlforecast/[countryName]/[month]/[year]/Styles.css';
 import { Modal } from '@/components/ui/modal'; // Adjust path as needed
 import FileUploadForm from '@/app/(admin)/(ui-elements)/modals/FileUploadForm'; // Adjust path as needed
 import MonthYearPickerTable from '@/components/filters/MonthYearPickerTable';
+import DataTable, { ColumnDef } from "@/components/ui/table/DataTable"
+import { IoDownload } from "react-icons/io5";
 
 // Types
 interface SkuRow {
@@ -177,7 +179,7 @@ export default function DispatchPage() {
         'Sno.',
         'Product Name',
         'Inventory at Month End',
-        'Inventory Projection',
+        'Projected Sales Total',
         'Dispatch',
         'Current Inventory + Dispatch',
         'Inventory Coverage Ratio Before Dispatch',
@@ -187,7 +189,7 @@ export default function DispatchPage() {
         'sku',
         'Product Name',
         'Inventory at Month End',
-        'Inventory Projection',
+        'Projected Sales Total',
         'Dispatch',
         'Current Inventory + Dispatch',
         'Inventory Coverage Ratio Before Dispatch',
@@ -204,7 +206,7 @@ export default function DispatchPage() {
             isTotalRow(row) &&
             [
               'Inventory at Month End',
-              'Inventory Projection',
+              'Projected Sales Total',
               'Dispatch',
               'Current Inventory + Dispatch',
               'Inventory Coverage Ratio Before Dispatch',
@@ -225,7 +227,7 @@ export default function DispatchPage() {
     // Number formatting
     const numericColumns = [
       'Inventory at Month End',
-      'Inventory Projection',
+      'Projected Sales Total',
       'Dispatch',
       'Current Inventory + Dispatch',
       'Inventory Coverage Ratio Before Dispatch',
@@ -247,6 +249,86 @@ export default function DispatchPage() {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Dispatch')
     XLSX.writeFile(workbook, `Dispatch Report ${monthdp}-${yeardp}.xlsx`)
   }
+
+  // ---- build rows for DataTable ----
+const tableRows = skuData.map((row, index) => {
+  const isTotal = isTotalRow(row)
+
+  const obj: Record<string, any> = {
+    __isTotal: isTotal,
+    sno: isTotal ? "" : index + 1,
+  }
+
+  displayedColumns.forEach((col) => {
+    if (col === "Sno.") return
+
+    if (
+      isTotal &&
+      [
+        "Inventory at Month End",
+        "Projected Sales Total",
+        "Dispatch",
+        "Current Inventory + Dispatch",
+        "Inventory Coverage Ratio Before Dispatch",
+      ].includes(col)
+    ) {
+      obj[col] = calculateColumnTotal(col).toLocaleString("en-US")
+    }else {
+  // ✅ Fix Total row text duplication
+  if (isTotal) {
+    if (col === "sku") {
+      obj[col] = "Total"                // SKU blank
+      return
+    }
+    if (col === "Product Name") {
+      obj[col] = ""           // Total only here
+      return
+    }
+  }
+
+  const v = row[col]
+  obj[col] =
+    typeof v === "number"
+      ? v.toLocaleString("en-US")
+      : v ?? ""
+}
+  })
+
+  return obj
+})
+
+const columns: ColumnDef<any>[] = displayedColumns.map((col) => {
+  const isCoverage =
+    col === "Inventory Coverage Ratio Before Dispatch";
+
+  return {
+    key: col === "Sno." ? "sno" : col,
+
+    // 🔥 HEADER FIX
+    header: isCoverage ? (
+      <div
+        className="one-line-ellipsis"
+        title={col}                 // hover pe full text
+      >
+        {col}
+      </div>
+    ) : (
+      col
+    ),
+
+    // 🔥 FIXED WIDTH (MANDATORY for ellipsis)
+    width: isCoverage ? "200px" : col === "Sno." ? "50px" : undefined,
+
+    // 🔥 CELL alignment
+    cellClassName: isCoverage
+      ? "text-center whitespace-nowrap"
+      : col === "Sno."
+      ? "text-center whitespace-nowrap"
+      : "text-center",
+  };
+});
+
+
 
   return (
     <>
@@ -523,12 +605,34 @@ export default function DispatchPage() {
         .forecast-data {
           margin-top: 20px;
         }
+
+        .ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ellipsis-center {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.one-line-ellipsis {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  text-align: center;
+  display: block;
+  width: 100%;
+}
       `}</style>
-     <h2 className='text-2xl font-bold text-[#414042] mb-6'>
+     <h2 className='text-2xl font-bold text-[#414042] '>
       Dispatch Report for <span style={{ color: '#60a68e' }}>{countryName.toUpperCase()}</span>
     </h2>
 
-    <div className="inline-dropdowns">
+    <div className="inline-dropdowns my-4">
       {/* <table className="dropdown-table">
         <thead>
           <tr className="dropdown-header">
@@ -607,46 +711,30 @@ export default function DispatchPage() {
       <div className="forecast-data">
         {skuData.length > 0 ? (
           <>
-            <table className="tablec">
-              <thead className="theadc">
-                <tr>
-                  {displayedColumns.map((key) => (
-                    <th key={key}>{key.toLowerCase() === 'sku' ? key.toUpperCase() : key}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {skuData.map((row, index) => (
-                  <tr key={index}>
-                    {displayedColumns.map((col) => (
-                      <td key={col}>
-                        {col === 'Sno.'
-                          ? isTotalRow(row)
-                            ? ''
-                            : index + 1
-                          : col === 'sku' && isTotalRow(row)
-                          ? ''
-                          : isTotalRow(row) &&
-                            [
-                              'Inventory at Month End',
-                              'Inventory Projection',
-                              'Dispatch',
-                              'Current Inventory + Dispatch',
-                              'Inventory Coverage Ratio Before Dispatch',
-                            ].includes(col)
-                          ? calculateColumnTotal(col).toLocaleString('en-US')
-                          : typeof row[col] === 'number'
-                          ? (row[col] as number).toLocaleString('en-US')
-                          : (row[col] as string)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button className="styled-button" style={{ display: 'flex', marginTop: '10px' }} onClick={handleExportToExcel}>
-              Download (.xlsx)&nbsp;<i className="fa-solid fa-download fa-beat"></i>
-            </button>
+           <DataTable
+  columns={columns}
+  data={tableRows}
+  paginate={false}          // ❗ pagination OFF so Total row stays visible
+  scrollY
+  maxHeight="70vh"
+  stickyHeader
+  loading={loading}
+  rowClassName={(row: any) =>
+    row.__isTotal ? "bg-[#D9D9D9] font-bold" : ""
+  }
+/>
+    <div className='flex justify-end items-end mt-2'>
+ <button
+                               onClick={handleExportToExcel}
+                              className="bg-white border border-[#8B8585] px-1 rounded-sm py-1"
+                                                          style={{
+                                               boxShadow: "0px 4px 4px 0px #00000040",  
+                                             }}
+                                                       >
+                                                       <IoDownload size={27} />
+                              </button>
+    </div>
+            
           </>
         ) : (
           <p>Select Month and Year to see Dispatch!</p>

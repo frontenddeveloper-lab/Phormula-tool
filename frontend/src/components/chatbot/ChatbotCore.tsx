@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Message, useChatbotStore } from "@/lib/store/chatbotStore";
 import WindowSendButton from "@/components/chatbot/WindowSendButton";
 import './style.css';
+import { Copy, Share2, ThumbsDown, ThumbsUp } from "lucide-react";
 
 
 
@@ -30,12 +31,16 @@ type ParsedAI = {
 export default function ChatbotCore() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const [actionMessage, setActionMessage] = useState<{ id: string; text: string } | null>(null);
+
   const {
     messages,
     loading,
     sendMessage,
     clearChat,
     loadFromStorage,
+    reactToMessage,
+    sendFeedback,
   } = useChatbotStore();
 
   
@@ -49,6 +54,34 @@ export default function ChatbotCore() {
     });
   }, [messages, loading]);
 
+  const flash = (id: string, text: string) => {
+    setActionMessage({ id, text });
+    setTimeout(() => setActionMessage(null), 1200);
+  };
+
+  const handleCopy = async (msg: Message) => {
+    try {
+      await navigator.clipboard.writeText(msg.text || "");
+      flash(msg.id, "Copied!");
+    } catch {
+      flash(msg.id, "Copy failed");
+    }
+  };
+
+  const handleShare = async (msg: Message) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: msg.text || "" });
+        flash(msg.id, "Shared!");
+      } else {
+        await navigator.clipboard.writeText(msg.text || "");
+        flash(msg.id, "Copied to share");
+      }
+    } catch {
+      // user cancelled share or it failed
+    }
+  };
+
   const cleanMarkdown = (s = '') =>
   s
     .replace(/(^|\n)\s*[-*•]\s+/g, '$1')
@@ -61,101 +94,28 @@ export default function ChatbotCore() {
     .replace(/\*{1,3}/g, '')
     .trim()
 
-
-function analyticsTextToMarkdown(raw = ''): string {
-  const text = raw.replace(/\r\n/g, '\n').trim()
-  if (!text) return ''
-
-  // Normalize spaces but keep newlines
-  const normalized = text
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-
-  // --- Split SUMMARY / ACTIONS even if they're in same line ---
-  const upper = normalized.toUpperCase()
-  const sIdx = upper.indexOf('SUMMARY')
-  const aIdx = upper.indexOf('ACTIONS')
-
-  const summaryPart =
-    sIdx >= 0 && aIdx > sIdx ? normalized.slice(sIdx + 'SUMMARY'.length, aIdx).trim() : ''
-  const actionsPart =
-    aIdx >= 0 ? normalized.slice(aIdx + 'ACTIONS'.length).trim() : normalized.trim()
-
-  const splitSentences = (s: string) =>
-    s
-      .replace(/\s+/g, ' ')
-      .split(/(?<=[.?!])\s+/)
-      .map((x) => x.trim())
-      .filter(Boolean)
-
-  let md = ''
-
-  // --- SUMMARY ---
-  if (sIdx >= 0) {
-    md += `## **SUMMARY**\n\n`
-    const bullets = splitSentences(summaryPart)
-    bullets.forEach((b) => {
-      md += `- ${b}\n`
-    })
-    md += `\n---\n\n`
-  }
-
-  // --- ACTIONS ---
-  md += `## **ACTIONS**\n\n`
-
-  // Handle both:
-  // 1) "Product name - Classic ..." (single line)
-  // 2) Multi-line blocks
-  const productChunks = actionsPart
-    .split(/Product\s*name\s*[-:]\s*/i)
-    .map((x) => x.trim())
-    .filter(Boolean)
-
-  // If "Product name -" not present, fallback to old newline-based logic (optional)
-  if (productChunks.length === 0) return md.trim()
-
-  let p = 0
-
-  for (const chunk of productChunks) {
-    p++
-
-    // Product name = text before first known sentence starter
-    const nameMatch = chunk.match(
-      /^(.*?)(?=\s+(There is|The increase|The ASP|Sales mix|The sales mix)\b)/i
-    )
-    const productName = (nameMatch?.[1] || chunk.split('. ')[0] || chunk).trim()
-
-    // Body = rest after productName
-    const body = chunk.slice(productName.length).trim()
-    const sentences = splitSentences(body)
-
-    const metric1 = sentences[0] || ''
-    const metric2 = sentences[1] || ''
-
-    // Remaining sentences -> action (often "Review..." / "Check...")
-    const rest = sentences.slice(2).join(' ').trim()
-    const actionText = rest.replace(/^Actions?\s*[:\-]\s*/i, '').trim()
-
-    // Outer numbered product
-    md += `${p}. **${productName}**\n`
-
-    // Inner points (2 only)
-    if (metric1) md += `    1. ${metric1}\n`
-    if (metric2) md += `    2. ${metric2}\n`
-
-    // Actions bold (no numeral)
-    if (actionText) md += `\n    **Actions: ${actionText}**\n\n`
-
-    md += `\n`
-  }
-
-  return md.trim()
-}
-
-
-
-
+// ---- Timestamp helpers (WhatsApp-style) ----
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const formatTime = (ts?: number) => {
+  const d = new Date(ts || Date.now());
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
+const dayKey = (ts?: number) => {
+  const d = new Date(ts || Date.now());
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+const formatDayLabel = (ts?: number) => {
+  const d = new Date(ts || Date.now());
+  const now = new Date();
+  const todayKey = dayKey(now.getTime());
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  const yKey = dayKey(y.getTime());
+  const k = dayKey(d.getTime());
+  if (k === todayKey) return "Today";
+  if (k === yKey) return "Yesterday";
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+};
 
 function parseAIResponse(rawText: string): ParsedAI {
   const result: ParsedAI = { title: '', details: [], weeks: [] }
@@ -340,7 +300,7 @@ const text = rawText || ''
           </p>
         )}
 
-{Array.from(
+        {Array.from(
   new Map(
     messages
       .filter(
@@ -349,15 +309,20 @@ const text = rawText || ''
       )
       .map((m) => [m.id, m])
   ).values()
-).map((msg) => (
-  <div
+).map((msg, idx, arr) => (
+  <>
+    {(idx === 0 || dayKey(msg.timestamp) !== dayKey(arr[idx - 1]?.timestamp)) && (
+      <div className="chat-date-separator"><span>{formatDayLabel(msg.timestamp)}</span></div>
+    )}
+    <div
     key={msg.id}
     className={`flex ${
       msg.sender === "user" ? "justify-end" : "justify-start"
     }`}
   >
-            <div
-              className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm
+            <div className="flex flex-col max-w-[80%]">
+              <div
+              className={`px-4 py-2 rounded-2xl text-sm
                 ${
                   msg.sender === "user"
                     ? "bg-[#5EA68E] text-white rounded-br-md"
@@ -422,8 +387,68 @@ const text = rawText || ''
   msg.text
 )}
 
+              <div className={`chat-msg-meta ${msg.sender === "user" ? "chat-msg-meta-user" : "chat-msg-meta-bot"}`}>{formatTime(msg.timestamp)}</div>
+
+              </div>
+
+              {msg.sender !== "user" && (
+                <div className="chat-msg-actions">
+                  <button
+                    type="button"
+                    className={`chat-action-btn ${msg.liked === "like" ? "is-active" : ""}`}
+                    onClick={() => {
+                      const next = msg.liked === "like" ? undefined : "like";
+                      reactToMessage(msg.id, next);
+                      if (next) sendFeedback(msg.id, "like");
+                    }}
+                    aria-label="Like"
+                    title="Like"
+                  >
+                    <ThumbsUp size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`chat-action-btn ${msg.liked === "dislike" ? "is-active" : ""}`}
+                    onClick={() => {
+                      const next = msg.liked === "dislike" ? undefined : "dislike";
+                      reactToMessage(msg.id, next);
+                      if (next) sendFeedback(msg.id, "dislike");
+                    }}
+                    aria-label="Dislike"
+                    title="Dislike"
+                  >
+                    <ThumbsDown size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    className="chat-action-btn"
+                    onClick={() => handleCopy(msg)}
+                    aria-label="Copy"
+                    title="Copy"
+                  >
+                    <Copy size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    className="chat-action-btn"
+                    onClick={() => handleShare(msg)}
+                    aria-label="Share"
+                    title="Share"
+                  >
+                    <Share2 size={16} />
+                  </button>
+
+                  {actionMessage?.id === msg.id && (
+                    <span className="chat-action-toast">{actionMessage.text}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
+  </>
         ))}
 
         {loading && (
@@ -432,7 +457,7 @@ const text = rawText || ''
       </div>
 
       {/* Input */}
-      <div className="px-2 border-t border-gray-300 py-2">
+      <div className="px-2 border-t border-gray-300 py-2 shrink-0">
         <div className="flex-1 flex items-center bg-[#D9D9D9] rounded-full px-3 py-2">
         <input
           placeholder="Ask me anything..."
@@ -455,12 +480,13 @@ const text = rawText || ''
     }
   }}
   disabled={loading}
+  
 />
         </div>
         
       </div>
 
-      <p className="text-[10px] text-center text-gray-400 pb-2">
+      <p className="text-[10px] text-center text-gray-400 pb-2 shrink-0">
         AI-generated responses. Verify critical info.
       </p>
     </div>

@@ -95,6 +95,12 @@ const DisplayInventoryForecast: React.FC<DisplayInventoryForecastProps> = ({
     return Array.from(s);
   }, [forecastData]);
 
+  const monthWithYearLabel = (col: string) => {
+  const p = parseMonthHeaderToDate(col);
+  if (!p) return col;
+  return `${MONTH_ABBR[p.m]}'${String(p.y).slice(-2)}`;
+};
+
   // Detect "* Sold" month columns, sort oldest->newest
   const soldColsSorted = useMemo(() => {
     const items: Array<{ key: string; ym: YM }> = [];
@@ -120,10 +126,13 @@ const DisplayInventoryForecast: React.FC<DisplayInventoryForecastProps> = ({
   }, [soldColsSorted]);
 
   // Labels for header 2nd row
-  const soldLabels = useMemo(
-    () => last3SoldOldestFirst.map((k) => monthShortLabel(k.replace(/\s+Sold$/i, ''))),
-    [last3SoldOldestFirst]
-  );
+const soldLabels = useMemo(
+  () => last3SoldOldestFirst.map((k) =>
+    monthWithYearLabel(k.replace(/\s+Sold$/i, ''))
+  ),
+  [last3SoldOldestFirst]
+);
+
 
   // Forecast month columns (no "Sold"), sorted oldest->newest
   const forecastMonthColsSorted = useMemo(() => {
@@ -150,7 +159,11 @@ const DisplayInventoryForecast: React.FC<DisplayInventoryForecastProps> = ({
     return chosen;
   }, [forecastMonthColsSorted, maxSoldYM]);
 
-  const forecastLabels = useMemo(() => forecast3.map((k) => monthShortLabel(k)), [forecast3]);
+  const forecastLabels = useMemo(
+  () => forecast3.map((k) => monthWithYearLabel(k)),
+  [forecast3]
+);
+
 
   // Build table rows
   const tableRows = useMemo(
@@ -597,69 +610,67 @@ const chartOptions = useMemo(
 <h2 className='text-2xl font-bold text-[#414042]'>Detailed Forecast Data (All SKUs)</h2>
       {/* Table with two-row header and totals row */}
    <div className="overflow-x-auto mt-6">
-  <table className="min-w-full text-sm border border-[#414042] rounded-lg">
+  <table className="min-w-full text-sm border border-[#e1e5ea] rounded-lg text-[#414042]">
     <thead>
   <tr className="font-normal">
-    <th className="p-3 border border-[#414042] bg-[#D9D9D9] font-semibold text-center">
-      S.No
-    </th>
-    <th className="p-3 border border-[#414042] bg-[#D9D9D9] font-semibold text-left">
-      Product Name
-    </th>
-    <th className="p-3 border border-[#414042] bg-[#D9D9D9] font-semibold text-center">
-      SKU
-    </th>
+   <th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#D9D9D9] font-semibold text-center align-middle">
+  S.No
+</th>
+<th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#D9D9D9] font-semibold text-left align-middle">
+  Product Name
+</th>
+<th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#D9D9D9] font-semibold text-left align-middle">
+  SKU
+</th>
+
 
     {/* Last 3 Months */}
-    <th className="p-3 border border-[#414042] bg-[#5EA68E] text-[#F8EDCE] font-semibold" colSpan={3}>
+    <th className="p-3 border border-[#e1e5ea] bg-[#5EA68E] text-[#F8EDCE] font-semibold" colSpan={3}>
       Last 3 Months
     </th>
 
     {/* Forecasted Months */}
-    <th className="p-3 border border-[#414042] bg-[#5EA68E] text-[#F8EDCE] font-semibold" colSpan={3}>
+    <th className="p-3 border border-[#e1e5ea] bg-[#5EA68E] text-[#F8EDCE] font-semibold" colSpan={3}>
       Forecasted Months
     </th>
   </tr>
 
   <tr>
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]"></th>
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]"></th>
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]"></th>
-
+   
     {/* Dynamic month labels */}
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]">{soldLabels[0] || ''}</th>
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]">{soldLabels[1] || ''}</th>
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]">{soldLabels[2] || ''}</th>
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]">{forecastLabels[0] || ''}</th>
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]">{forecastLabels[1] || ''}</th>
-    <th className="p-2 border border-[#414042] bg-[#D9D9D9]">{forecastLabels[2] || ''}</th>
+    <th className="p-2 border border-[#e1e5ea] bg-[#D9D9D9]">{soldLabels[0] || ''}</th>
+    <th className="p-2 border border-[#e1e5ea] bg-[#D9D9D9]">{soldLabels[1] || ''}</th>
+    <th className="p-2 border border-[#e1e5ea] bg-[#D9D9D9]">{soldLabels[2] || ''}</th>
+    <th className="p-2 border border-[#e1e5ea] bg-[#D9D9D9]">{forecastLabels[0] || ''}</th>
+    <th className="p-2 border border-[#e1e5ea] bg-[#D9D9D9]">{forecastLabels[1] || ''}</th>
+    <th className="p-2 border border-[#e1e5ea] bg-[#D9D9D9]">{forecastLabels[2] || ''}</th>
   </tr>
 </thead>
 
     <tbody>
       {tableRows.map((row, i) => (
-        <tr key={i} className="text-center border-t border-[#414042] odd:bg-white even:bg-[#5EA68E33]">
-          <td className="p-2 border border-[#414042]">{row.sNo}</td>
-          <td className="p-2 border border-[#414042] text-left">{row.product}</td>
-          <td className="p-2 border border-[#414042]">{row.sku}</td>
-          <td className="p-2 border border-[#414042]">{row.sold1}</td>
-          <td className="p-2 border border-[#414042]">{row.sold2}</td>
-          <td className="p-2 border border-[#414042]">{row.sold3}</td>
-          <td className="p-2 border border-[#414042]">{row.f1}</td>
-          <td className="p-2 border border-[#414042]">{row.f2}</td>
-          <td className="p-2 border border-[#414042]">{row.f3}</td>
+        <tr key={i} className="text-center border-t border-[#e1e5ea] bg-white">
+          <td className="p-2 border border-[#e1e5ea]">{row.sNo}</td>
+          <td className="p-2 border border-[#e1e5ea] text-left">{row.product}</td>
+          <td className="p-2 border border-[#e1e5ea] text-left">{row.sku}</td>
+          <td className="p-2 border border-[#e1e5ea]">{row.sold1}</td>
+          <td className="p-2 border border-[#e1e5ea]">{row.sold2}</td>
+          <td className="p-2 border border-[#e1e5ea]">{row.sold3}</td>
+          <td className="p-2 border border-[#e1e5ea]">{row.f1}</td>
+          <td className="p-2 border border-[#e1e5ea]">{row.f2}</td>
+          <td className="p-2 border border-[#e1e5ea]">{row.f3}</td>
         </tr>
       ))}
-      <tr className="text-center border-t border-[#414042] bg-[#F7F7F7] font-semibold">
-        <td className="p-2 border border-[#414042]"></td>
-        <td className="p-2 border border-[#414042] text-left">Total</td>
-        <td className="p-2 border border-[#414042]"></td>
-        <td className="p-2 border border-[#414042]">{totalsRow.sold1}</td>
-        <td className="p-2 border border-[#414042]">{totalsRow.sold2}</td>
-        <td className="p-2 border border-[#414042]">{totalsRow.sold3}</td>
-        <td className="p-2 border border-[#414042]">{totalsRow.f1}</td>
-        <td className="p-2 border border-[#414042]">{totalsRow.f2}</td>
-        <td className="p-2 border border-[#414042]">{totalsRow.f3}</td>
+      <tr className="text-center border-t border-[#e1e5ea] bg-[#D9D9D9] font-semibold">
+        <td className="p-2 border border-[#e1e5ea]"></td>
+        <td className="p-2 border border-[#e1e5ea] text-left">Total</td>
+        <td className="p-2 border border-[#e1e5ea]"></td>
+        <td className="p-2 border border-[#e1e5ea]">{totalsRow.sold1}</td>
+        <td className="p-2 border border-[#e1e5ea]">{totalsRow.sold2}</td>
+        <td className="p-2 border border-[#e1e5ea]">{totalsRow.sold3}</td>
+        <td className="p-2 border border-[#e1e5ea]">{totalsRow.f1}</td>
+        <td className="p-2 border border-[#e1e5ea]">{totalsRow.f2}</td>
+        <td className="p-2 border border-[#e1e5ea]">{totalsRow.f3}</td>
       </tr>
     </tbody>
   </table>

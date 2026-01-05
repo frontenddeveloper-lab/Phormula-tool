@@ -98,6 +98,147 @@ def passcountryfromprofiles():
 
 
 
+# @dashboard_bp.route('/getDispatchfile', methods=['GET'])
+# def getDispatchfile():
+#     auth_header = request.headers.get('Authorization')
+#     if not auth_header or not auth_header.startswith('Bearer '):
+#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+
+#     token = auth_header.split(' ')[1]
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+#         if 'user_id' not in payload:
+#             return jsonify({'error': 'Invalid token payload: user_id missing'}), 401
+
+#         user_id = payload['user_id']
+#         country = request.args.get('country')
+#         month = request.args.get('month')
+#         short_month = month[:3].lower() if month else None
+#         year = request.args.get('year')
+
+#         if not country or not month or not year:
+#             return jsonify({'error': 'Missing country, month, or year parameters'}), 400
+
+#         print(f"✅ Dispatch request - Country: {country}, Month: {month}, Year: {year}, User ID: {user_id}")
+#         uploads_folder = os.path.abspath(UPLOAD_FOLDER)
+
+#         def find_latest_file(user_id, ctry):
+#             pattern = re.compile(rf"inventory_forecast_{user_id}_{re.escape(ctry)}_{short_month}.*\.xlsx$")
+#             print(f"🔍 Searching for files with pattern: {pattern.pattern}")
+#             matched_files = [f for f in os.listdir(uploads_folder) if pattern.match(f)]
+#             matched_files.sort(reverse=True)
+#             return os.path.join(uploads_folder, matched_files[0]) if matched_files else None
+
+#         # ---------- GLOBAL: merge UK + US ----------
+#         if country.lower() == 'global':
+#             file_uk = find_latest_file(user_id, 'uk')
+#             file_us = find_latest_file(user_id, 'us')
+
+#             if not file_uk and not file_us:
+#                 return jsonify({'error': 'No UK or US dispatch files found'}), 404
+
+#             frames = []
+#             for f in [file_uk, file_us]:
+#                 if f and os.path.exists(f):
+#                     frames.append(pd.read_excel(f))
+
+#             if not frames:
+#                 return jsonify({'error': 'No readable UK/US dispatch files found'}), 404
+
+#             combined_df = pd.concat(frames, ignore_index=True)
+
+#             # ---- Expected columns (new schema) ----
+#             expected_columns = [
+#                 'Product Name',
+#                 'Inventory at Month End',
+#                 'Projected Sales Total',
+#                 'Dispatch',
+#                 'Current Inventory + Dispatch',
+#                 'Inventory Coverage Ratio Before Dispatch'
+#             ]
+
+#             # Keep only columns we actually have
+#             have = [c for c in expected_columns if c in combined_df.columns]
+#             if 'Product Name' not in have:
+#                 return jsonify({'error': "'Product Name' column missing in dispatch files"}), 400
+
+#             combined_df = combined_df[have].copy()
+
+#             # Remove any "Total" summary rows
+#             combined_df['Product Name'] = combined_df['Product Name'].astype(str)
+#             combined_df = combined_df[combined_df['Product Name'].str.lower() != 'total']
+
+#             # Ensure numeric cols are numeric
+#             for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
+#                 if col in combined_df.columns:
+#                     combined_df[col] = pd.to_numeric(combined_df[col], errors='coerce').fillna(0)
+
+#             # ---- Group and aggregate ----
+#             agg_spec = {}
+#             for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
+#                 if col in combined_df.columns:
+#                     agg_spec[col] = 'sum'
+
+#             grouped = combined_df.groupby('Product Name', as_index=False).agg(agg_spec) if agg_spec else combined_df[['Product Name']].drop_duplicates()
+
+#             # ---- Weighted average coverage ratio (if present) ----
+#             if 'Inventory Coverage Ratio Before Dispatch' in combined_df.columns and 'Inventory at Month End' in combined_df.columns:
+#                 def weighted_avg(df):
+#                     denom = df['Inventory at Month End'].sum()
+#                     if denom <= 0:
+#                         return 0
+#                     # allow ratio to be string "-" in some rows
+#                     ratio_num = pd.to_numeric(df['Inventory Coverage Ratio Before Dispatch'], errors='coerce').fillna(0)
+#                     return (ratio_num * df['Inventory at Month End']).sum() / denom
+
+#                 ratio_df = (
+#                     combined_df
+#                     .groupby('Product Name', as_index=False)
+#                     .apply(weighted_avg)
+#                     .rename(columns={None: 'Inventory Coverage Ratio Before Dispatch'})
+#                 )
+#                 final_df = pd.merge(grouped, ratio_df, on='Product Name', how='left')
+#                 # Keep "-" for zeros to match UI pattern
+#                 final_df['Inventory Coverage Ratio Before Dispatch'] = final_df['Inventory Coverage Ratio Before Dispatch'].apply(
+#                     lambda x: "-" if pd.isna(x) or x == 0 else round(float(x), 2)
+#                 )
+#             else:
+#                 final_df = grouped.copy()
+
+#             # ---- Total row ----
+#             total_row = {'Product Name': 'Total'}
+#             for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
+#                 if col in final_df.columns and pd.api.types.is_numeric_dtype(final_df[col]):
+#                     total_row[col] = final_df[col].sum()
+#             if 'Inventory Coverage Ratio Before Dispatch' in final_df.columns:
+#                 total_row['Inventory Coverage Ratio Before Dispatch'] = ''  # leave blank on totals
+
+#             final_df = pd.concat([final_df, pd.DataFrame([total_row])], ignore_index=True)
+
+#             # ---- Export to Excel in memory ----
+#             output = BytesIO()
+#             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+#                 final_df.to_excel(writer, index=False, sheet_name='Dispatch')
+#             output.seek(0)
+#             return send_file(output, download_name='global_dispatch.xlsx', as_attachment=False)
+
+#         # ---------- NON-GLOBAL: just return the latest file ----------
+#         file_path = find_latest_file(user_id, country.lower())
+#         if not file_path:
+#             return jsonify({'error': 'Forecast file not found. Please generate inventory forecast first!'}), 404
+
+#         print(f"📤 Sending file: {file_path}")
+#         return send_file(file_path, as_attachment=False)
+
+#     except jwt.ExpiredSignatureError:
+#         return jsonify({'error': 'Token has expired'}), 401
+#     except jwt.InvalidTokenError:
+#         return jsonify({'error': 'Invalid token'}), 401
+#     except Exception as e:
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({'error': str(e)}), 500
+
 @dashboard_bp.route('/getDispatchfile', methods=['GET'])
 def getDispatchfile():
     auth_header = request.headers.get('Authorization')
@@ -113,19 +254,42 @@ def getDispatchfile():
         user_id = payload['user_id']
         country = request.args.get('country')
         month = request.args.get('month')
-        short_month = month[:3].lower() if month else None
         year = request.args.get('year')
 
         if not country or not month or not year:
             return jsonify({'error': 'Missing country, month, or year parameters'}), 400
 
         print(f"✅ Dispatch request - Country: {country}, Month: {month}, Year: {year}, User ID: {user_id}")
+
+        # ---------------- MONTH RESOLUTION (FIX) ----------------
+      
+
+        requested_month = month.lower()
+        requested_year = int(year)
+
+        current_month = datetime.now().strftime("%B").lower()
+        current_year = datetime.now().year
+
+        # Dispatch files are always saved using CURRENT ongoing month
+        if requested_year == current_year:
+            effective_month = current_month
+        else:
+            effective_month = requested_month
+
+        short_month = effective_month[:3].lower()
+        print(f"📌 Using dispatch files for month: {effective_month} ({short_month})")
+
         uploads_folder = os.path.abspath(UPLOAD_FOLDER)
 
         def find_latest_file(user_id, ctry):
-            pattern = re.compile(rf"inventory_forecast_{user_id}_{re.escape(ctry)}_{short_month}.*\.xlsx$")
+            pattern = re.compile(
+                rf"inventory_forecast_{user_id}_{re.escape(ctry)}_{short_month}.*\.xlsx$"
+            )
             print(f"🔍 Searching for files with pattern: {pattern.pattern}")
-            matched_files = [f for f in os.listdir(uploads_folder) if pattern.match(f)]
+            matched_files = [
+                f for f in os.listdir(uploads_folder)
+                if pattern.match(f)
+            ]
             matched_files.sort(reverse=True)
             return os.path.join(uploads_folder, matched_files[0]) if matched_files else None
 
@@ -147,7 +311,6 @@ def getDispatchfile():
 
             combined_df = pd.concat(frames, ignore_index=True)
 
-            # ---- Expected columns (new schema) ----
             expected_columns = [
                 'Product Name',
                 'Inventory at Month End',
@@ -157,38 +320,55 @@ def getDispatchfile():
                 'Inventory Coverage Ratio Before Dispatch'
             ]
 
-            # Keep only columns we actually have
             have = [c for c in expected_columns if c in combined_df.columns]
             if 'Product Name' not in have:
                 return jsonify({'error': "'Product Name' column missing in dispatch files"}), 400
 
             combined_df = combined_df[have].copy()
 
-            # Remove any "Total" summary rows
             combined_df['Product Name'] = combined_df['Product Name'].astype(str)
             combined_df = combined_df[combined_df['Product Name'].str.lower() != 'total']
 
-            # Ensure numeric cols are numeric
-            for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
+            for col in [
+                'Inventory at Month End',
+                'Projected Sales Total',
+                'Dispatch',
+                'Current Inventory + Dispatch'
+            ]:
                 if col in combined_df.columns:
-                    combined_df[col] = pd.to_numeric(combined_df[col], errors='coerce').fillna(0)
+                    combined_df[col] = pd.to_numeric(
+                        combined_df[col], errors='coerce'
+                    ).fillna(0)
 
-            # ---- Group and aggregate ----
-            agg_spec = {}
-            for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
-                if col in combined_df.columns:
-                    agg_spec[col] = 'sum'
+            agg_spec = {
+                col: 'sum'
+                for col in [
+                    'Inventory at Month End',
+                    'Projected Sales Total',
+                    'Dispatch',
+                    'Current Inventory + Dispatch'
+                ]
+                if col in combined_df.columns
+            }
 
-            grouped = combined_df.groupby('Product Name', as_index=False).agg(agg_spec) if agg_spec else combined_df[['Product Name']].drop_duplicates()
+            grouped = (
+                combined_df.groupby('Product Name', as_index=False).agg(agg_spec)
+                if agg_spec else
+                combined_df[['Product Name']].drop_duplicates()
+            )
 
-            # ---- Weighted average coverage ratio (if present) ----
-            if 'Inventory Coverage Ratio Before Dispatch' in combined_df.columns and 'Inventory at Month End' in combined_df.columns:
+            if (
+                'Inventory Coverage Ratio Before Dispatch' in combined_df.columns and
+                'Inventory at Month End' in combined_df.columns
+            ):
                 def weighted_avg(df):
                     denom = df['Inventory at Month End'].sum()
                     if denom <= 0:
                         return 0
-                    # allow ratio to be string "-" in some rows
-                    ratio_num = pd.to_numeric(df['Inventory Coverage Ratio Before Dispatch'], errors='coerce').fillna(0)
+                    ratio_num = pd.to_numeric(
+                        df['Inventory Coverage Ratio Before Dispatch'],
+                        errors='coerce'
+                    ).fillna(0)
                     return (ratio_num * df['Inventory at Month End']).sum() / denom
 
                 ratio_df = (
@@ -197,35 +377,49 @@ def getDispatchfile():
                     .apply(weighted_avg)
                     .rename(columns={None: 'Inventory Coverage Ratio Before Dispatch'})
                 )
+
                 final_df = pd.merge(grouped, ratio_df, on='Product Name', how='left')
-                # Keep "-" for zeros to match UI pattern
-                final_df['Inventory Coverage Ratio Before Dispatch'] = final_df['Inventory Coverage Ratio Before Dispatch'].apply(
-                    lambda x: "-" if pd.isna(x) or x == 0 else round(float(x), 2)
-                )
+                final_df['Inventory Coverage Ratio Before Dispatch'] = final_df[
+                    'Inventory Coverage Ratio Before Dispatch'
+                ].apply(lambda x: "-" if pd.isna(x) or x == 0 else round(float(x), 2))
             else:
                 final_df = grouped.copy()
 
-            # ---- Total row ----
             total_row = {'Product Name': 'Total'}
-            for col in ['Inventory at Month End', 'Projected Sales Total', 'Dispatch', 'Current Inventory + Dispatch']:
-                if col in final_df.columns and pd.api.types.is_numeric_dtype(final_df[col]):
+            for col in [
+                'Inventory at Month End',
+                'Projected Sales Total',
+                'Dispatch',
+                'Current Inventory + Dispatch'
+            ]:
+                if col in final_df.columns:
                     total_row[col] = final_df[col].sum()
+
             if 'Inventory Coverage Ratio Before Dispatch' in final_df.columns:
-                total_row['Inventory Coverage Ratio Before Dispatch'] = ''  # leave blank on totals
+                total_row['Inventory Coverage Ratio Before Dispatch'] = ''
 
-            final_df = pd.concat([final_df, pd.DataFrame([total_row])], ignore_index=True)
+            final_df = pd.concat(
+                [final_df, pd.DataFrame([total_row])],
+                ignore_index=True
+            )
 
-            # ---- Export to Excel in memory ----
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 final_df.to_excel(writer, index=False, sheet_name='Dispatch')
             output.seek(0)
-            return send_file(output, download_name='global_dispatch.xlsx', as_attachment=False)
 
-        # ---------- NON-GLOBAL: just return the latest file ----------
+            return send_file(
+                output,
+                download_name='global_dispatch.xlsx',
+                as_attachment=False
+            )
+
+        # ---------- NON-GLOBAL ----------
         file_path = find_latest_file(user_id, country.lower())
         if not file_path:
-            return jsonify({'error': 'Forecast file not found. Please generate inventory forecast first!'}), 404
+            return jsonify({
+                'error': 'Forecast file not found. Please generate inventory forecast first!'
+            }), 404
 
         print(f"📤 Sending file: {file_path}")
         return send_file(file_path, as_attachment=False)
@@ -238,6 +432,7 @@ def getDispatchfile():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
 
 
 @dashboard_bp.route('/getDispatchfile2', methods=['GET'])
@@ -988,6 +1183,40 @@ def resolve_country(country, currency):
     # 3. Default (no special logic)
     return country
 
+from calendar import month_name as cal_month_name
+
+MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+
+QUARTER_MONTHS = {
+    "quarter1": ["january", "february", "march"],
+    "quarter2": ["april", "may", "june"],
+    "quarter3": ["july", "august", "september"],
+    "quarter4": ["october", "november", "december"]
+}
+
+def prev_month_year(month_str: str, year: int):
+    # month_str: "November"
+    idx = MONTHS.index(month_str)  # 0-based
+    if idx == 0:
+        return "December", year - 1
+    return MONTHS[idx - 1], year
+
+def quarter_for_month(month_str: str):
+    m = month_str.lower()
+    for q, months in QUARTER_MONTHS.items():
+        if m in months:
+            return q
+    return None
+
+def prev_quarter(q: str):
+    # q like "quarter4"
+    order = ["quarter1","quarter2","quarter3","quarter4"]
+    i = order.index(q)
+    if i == 0:
+        return "quarter4", -1  # means year-1
+    return order[i-1], 0
+
+
 
 @dashboard_bp.route('/cashflow', methods=['GET'])
 def cashflow():
@@ -1007,28 +1236,17 @@ def cashflow():
     month = request.args.get('month')
     year = request.args.get('year')
     country_param = request.args.get('country', '')
-    currency_param = (request.args.get('currency') or 'USD').lower()
-
-    
+    currency_param = (request.args.get('currency') or '').lower()
     country = resolve_country(country_param, currency_param)
-    period_type = request.args.get('period_type', 'monthly')
+
+    period_type = (request.args.get('period_type') or 'monthly').lower()
 
     if not year:
         return jsonify({'error': 'Year must be provided'}), 400
-    if period_type in ['monthly', 'quarterly'] and not month:
-        return jsonify({'error': 'Month must be provided for monthly and quarterly period types'}), 400
 
-    try:
-        year = int(year)
-        if month:
-            month_name = datetime.strptime(month, "%B").strftime("%B")
-    except ValueError:
-        try:
-            if month:
-                month_name = datetime.strptime(month.capitalize(), "%B").strftime("%B")
-            year = int(year)
-        except ValueError:
-            return jsonify({'error': 'Invalid month or year format. Use full month names like "January" or "january"'}), 400
+    # --- Quarter map + helpers ---
+    MONTHS = ["January","February","March","April","May","June",
+              "July","August","September","October","November","December"]
 
     quarter_months = {
         "quarter1": ["january", "february", "march"],
@@ -1037,44 +1255,110 @@ def cashflow():
         "quarter4": ["october", "november", "december"]
     }
 
+    def quarter_for_month(month_str: str):
+        m = (month_str or '').lower()
+        for q, months in quarter_months.items():
+            if m in months:
+                return q
+        return None
+
+    def prev_month_year(month_str: str, y: int):
+        idx = MONTHS.index(month_str)  # 0-based
+        if idx == 0:
+            return "December", y - 1
+        return MONTHS[idx - 1], y
+
+    def prev_quarter(q: str):
+        order = ["quarter1", "quarter2", "quarter3", "quarter4"]
+        i = order.index(q)
+        if i == 0:
+            return "quarter4", -1  # year-1
+        return order[i - 1], 0
+
+    # --- Validation + parsing ---
+    try:
+        year = int(year)
+    except ValueError:
+        return jsonify({'error': 'Invalid year format. Provide year like 2025'}), 400
+
+    # Month is required only for monthly OR old quarterly mode ("quarterly")
+    if period_type == 'monthly' and not month:
+        return jsonify({'error': 'Month must be provided for monthly period type'}), 400
+    if period_type == 'quarterly' and not month:
+        return jsonify({'error': 'Month must be provided for quarterly period type'}), 400
+
+    month_name = None
+    if month:
+        try:
+            month_name = datetime.strptime(month, "%B").strftime("%B")
+        except ValueError:
+            try:
+                month_name = datetime.strptime(month.capitalize(), "%B").strftime("%B")
+            except ValueError:
+                return jsonify({'error': 'Invalid month format. Use full month names like "January" or "january"'}), 400
+
     engine = create_engine(db_url)
     SessionLocal = sessionmaker(bind=engine)
     db_session = SessionLocal()
     inspector = inspect(engine)
 
-    try:
+    def compute_cashflow_summary(user_id: int, year: int, country: str, period_type: str, month_name: str = None):
+        """
+        Returns:
+          summary_totals: dict (combined_totals)
+          detailed_data: list (per country)
+          meta: dict (month / quarter_months / year_months)
+        """
         all_cashflow_data = []
         combined_totals = {
             'net_sales': 0,
+            'product_sales': 0,
             'advertising_total': 0,
             'amazon_fee': 0,
             'cm2_profit': 0,
             'otherwplatform': 0,
             'taxncredit': 0,
             'cashflow': 0,
-            'rembursement_fee': 0
+            'rembursement_fee': 0,
+            'quantity_total': 0,
+            'selling_fees': 0,
+            'fba_fees': 0,
+            'promotional_rebates': 0
         }
 
+        # --- months_to_process ---
         months_to_process = []
+
         if period_type == 'monthly':
             months_to_process = [month_name]
-        elif period_type == 'quarterly':
-            month_lower = month_name.lower()
-            for quarter, months in quarter_months.items():
-                if month_lower in months:
-                    months_to_process = [m.capitalize() for m in months]
-                    break
-        elif period_type == 'yearly':
-            months_to_process = ["January", "February", "March", "April", "May", "June",
-                                 "July", "August", "September", "October", "November", "December"]
 
+        elif period_type == 'quarterly':
+            q = quarter_for_month(month_name)
+            if not q:
+                return combined_totals, [], {}
+            months_to_process = [m.capitalize() for m in quarter_months[q]]
+
+        elif period_type in quarter_months:
+            months_to_process = [m.capitalize() for m in quarter_months[period_type]]
+
+        elif period_type == 'yearly':
+            months_to_process = MONTHS
+
+        else:
+            # Unknown period_type
+            return combined_totals, [], {}
+
+        # --- find countries with data for given months ---
         countries_with_data = set()
         for process_month in months_to_process:
             if country:
                 upload_query = text("""
                     SELECT DISTINCT country 
                     FROM upload_history
-                    WHERE user_id = :user_id AND LOWER(month) = LOWER(:month) AND year = :year AND LOWER(country) = LOWER(:country)
+                    WHERE user_id = :user_id
+                      AND LOWER(month) = LOWER(:month)
+                      AND year = :year
+                      AND LOWER(country) = LOWER(:country)
                 """)
                 query_params = {
                     'user_id': user_id,
@@ -1086,7 +1370,9 @@ def cashflow():
                 upload_query = text("""
                     SELECT DISTINCT country 
                     FROM upload_history
-                    WHERE user_id = :user_id AND LOWER(month) = LOWER(:month) AND year = :year
+                    WHERE user_id = :user_id
+                      AND LOWER(month) = LOWER(:month)
+                      AND year = :year
                 """)
                 query_params = {
                     'user_id': user_id,
@@ -1098,14 +1384,20 @@ def cashflow():
             for result in upload_results:
                 countries_with_data.add(result[0])
 
+        # --- per country compute totals from table(s) ---
         for record_country in countries_with_data:
             total_otherwplatform = 0
             total_taxncredit_from_upload = 0
+
+            # accumulate otherwplatform/taxncredit across months from upload_history
             for process_month in months_to_process:
                 upload_values_query = text("""
                     SELECT otherwplatform, taxncredit 
                     FROM upload_history
-                    WHERE user_id = :user_id AND LOWER(month) = LOWER(:month) AND year = :year AND LOWER(country) = LOWER(:country)
+                    WHERE user_id = :user_id
+                      AND LOWER(month) = LOWER(:month)
+                      AND year = :year
+                      AND LOWER(country) = LOWER(:country)
                     LIMIT 1
                 """)
                 upload_values_params = {
@@ -1114,7 +1406,6 @@ def cashflow():
                     'year': year,
                     'country': record_country
                 }
-
                 upload_values_result = db_session.execute(upload_values_query, upload_values_params).fetchone()
                 if upload_values_result:
                     if upload_values_result[0]:
@@ -1122,121 +1413,182 @@ def cashflow():
                     if upload_values_result[1]:
                         total_taxncredit_from_upload += float(upload_values_result[1])
 
+            # table name
             table_name = ""
             if period_type == 'monthly':
                 suffix = f"{month_name.lower()}{year}"
-                table_name = f"skuwisemonthly_{user_id}_{record_country.lower()}_{suffix}_table" if record_country.lower().startswith("global") else f"skuwisemonthly_{user_id}_{record_country.lower()}_{suffix}"
+                table_name = (
+                    f"skuwisemonthly_{user_id}_{record_country.lower()}_{suffix}_table"
+                    if record_country.lower().startswith("global")
+                    else f"skuwisemonthly_{user_id}_{record_country.lower()}_{suffix}"
+                )
+
             elif period_type == 'quarterly':
-                month_lower = month_name.lower()
-                for quarter, months in quarter_months.items():
-                    if month_lower in months:
-                        table_name = f"{quarter}_{user_id}_{record_country.lower()}_{year}_table"
-                        break
+                q = quarter_for_month(month_name)
+                table_name = f"{q}_{user_id}_{record_country.lower()}_{year}_table" if q else ""
+
+            elif period_type in quarter_months:
+                table_name = f"{period_type}_{user_id}_{record_country.lower()}_{year}_table"
+
             elif period_type == 'yearly':
                 table_name = f"skuwiseyearly_{user_id}_{record_country.lower()}_{year}_table"
 
-            if inspector.has_table(table_name):
+            if not table_name or not inspector.has_table(table_name):
+                continue
+
+            try:
+                cashflow_df = pd.read_sql_table(table_name, engine)
+                if cashflow_df.empty:
+                    continue
+
+                numeric_cols = [
+                    'net_sales', 'product_sales',
+                    'advertising_total', 'amazon_fee', 'cm2_profit',
+                    'taxncredit', 'rembursement_fee',
+                    'quantity', 'selling_fees', 'fba_fees', 'promotional_rebates'
+                ]
+                for col in numeric_cols:
+                    if col in cashflow_df.columns:
+                        cashflow_df[col] = pd.to_numeric(cashflow_df[col], errors='coerce').fillna(0)
+
+                net_sales_total = advertising_total = amazon_fee_total = cm2_profit_total = rembursement_fee_total = 0
+                quantity_total = 0
+                selling_fees_total = 0
+                fba_fees_total = 0
+                product_sales_total = 0
+                promotional_rebates_total = 0
+                taxncredit_total = total_taxncredit_from_upload
+
+                def find_total_row(df):
+                    if 'product_name' not in df.columns:
+                        return None
+                    for variation in ['TOTAL', 'Total', 'total', 'TOTALS', 'Totals', 'totals']:
+                        total_row = df[df['product_name'] == variation]
+                        if not total_row.empty:
+                            return total_row
+                    return df[df['product_name'].str.contains('total', case=False, na=False)]
+
+                # totals from TOTAL row (preferred) else column sums
+                total_row = None
+                if 'product_name' in cashflow_df.columns:
+                    total_row = find_total_row(cashflow_df)
+
+                if total_row is not None and not total_row.empty:
+                    net_sales_total = float(total_row['net_sales'].iloc[0]) if 'net_sales' in total_row else 0
+                    product_sales_total = float(total_row['product_sales'].iloc[0]) if 'product_sales' in total_row else 0
+                    promotional_rebates_total = float(total_row['promotional_rebates'].iloc[0]) if 'promotional_rebates' in total_row else 0
+                    quantity_total = float(total_row['quantity'].iloc[0]) if 'quantity' in total_row else 0
+                    advertising_total = float(total_row['advertising_total'].iloc[0]) if 'advertising_total' in total_row else 0
+                    selling_fees_total = float(total_row['selling_fees'].iloc[0]) if 'selling_fees' in total_row else 0
+                    fba_fees_total = float(total_row['fba_fees'].iloc[0]) if 'fba_fees' in total_row else 0
+                    amazon_fee_total = float(total_row['amazon_fee'].iloc[0]) if 'amazon_fee' in total_row else 0
+                    cm2_profit_total = float(total_row['cm2_profit'].iloc[0]) if 'cm2_profit' in total_row else 0
+                    rembursement_fee_total = float(total_row['rembursement_fee'].iloc[0]) if 'rembursement_fee' in total_row else 0
+                else:
+                    net_sales_total = float(cashflow_df['net_sales'].sum()) if 'net_sales' in cashflow_df.columns else 0
+                    product_sales_total = float(cashflow_df['product_sales'].sum()) if 'product_sales' in cashflow_df.columns else 0
+                    promotional_rebates_total = float(cashflow_df['promotional_rebates'].sum()) if 'promotional_rebates' in cashflow_df.columns else 0
+                    quantity_total = float(cashflow_df['quantity'].sum()) if 'quantity' in cashflow_df.columns else 0
+                    advertising_total = float(cashflow_df['advertising_total'].sum()) if 'advertising_total' in cashflow_df.columns else 0
+                    selling_fees_total = float(cashflow_df['selling_fees'].sum()) if 'selling_fees' in cashflow_df.columns else 0
+                    fba_fees_total = float(cashflow_df['fba_fees'].sum()) if 'fba_fees' in cashflow_df.columns else 0
+                    amazon_fee_total = float(cashflow_df['amazon_fee'].sum()) if 'amazon_fee' in cashflow_df.columns else 0
+                    cm2_profit_total = float(cashflow_df['cm2_profit'].sum()) if 'cm2_profit' in cashflow_df.columns else 0
+                    rembursement_fee_total = float(cashflow_df['rembursement_fee'].sum()) if 'rembursement_fee' in cashflow_df.columns else 0
+
+                cashflow_total = net_sales_total - advertising_total - amazon_fee_total - total_otherwplatform + taxncredit_total
+
+                # accumulate
+                combined_totals['net_sales'] += net_sales_total
+                combined_totals['product_sales'] += product_sales_total
+                combined_totals['promotional_rebates'] += promotional_rebates_total
+                combined_totals['quantity_total'] += quantity_total
+                combined_totals['advertising_total'] += advertising_total
+                combined_totals['selling_fees'] += selling_fees_total
+                combined_totals['fba_fees'] += fba_fees_total
+                combined_totals['amazon_fee'] += amazon_fee_total
+                combined_totals['cm2_profit'] += cm2_profit_total
+                combined_totals['taxncredit'] += taxncredit_total
+                combined_totals['otherwplatform'] += total_otherwplatform
+                combined_totals['cashflow'] += cashflow_total
+                combined_totals['rembursement_fee'] += rembursement_fee_total
+
+                # clean df for payload
+                if 'date' in cashflow_df.columns:
+                    cashflow_df.drop('date', axis=1, inplace=True)
+
+                numeric_columns = cashflow_df.select_dtypes(include=['number']).columns
+                for col in numeric_columns:
+                    cashflow_df[col] = cashflow_df[col].astype(float).round(2)
+
                 try:
-                    cashflow_df = pd.read_sql_table(table_name, engine)
-                    if not cashflow_df.empty:
-                        numeric_cols = ['net_sales', 'advertising_total', 'amazon_fee', 'cm2_profit', 'taxncredit', 'rembursement_fee']
-                        for col in numeric_cols:
-                            if col in cashflow_df.columns:
-                                cashflow_df[col] = pd.to_numeric(cashflow_df[col], errors='coerce').fillna(0)
+                    data_records = cashflow_df.to_dict(orient='records')
+                    cleaned_records = []
+                    for record in data_records:
+                        clean_record = {}
+                        for key, value in record.items():
+                            try:
+                                if pd.isna(value) or value is None:
+                                    clean_record[key] = 0
+                                elif isinstance(value, str):
+                                    clean_record[key] = value
+                                else:
+                                    clean_record[key] = float(value)
+                            except (ValueError, TypeError):
+                                clean_record[key] = str(value) if value is not None else ""
+                        cleaned_records.append(clean_record)
+                    data_records = cleaned_records
+                except Exception:
+                    data_records = []
 
-                        net_sales_total = advertising_total = amazon_fee_total = cm2_profit_total = rembursement_fee_total =0
-                        taxncredit_total = total_taxncredit_from_upload
+                all_cashflow_data.append({
+                    'country': record_country,
+                    'table': table_name,
+                    'period_type': period_type,
+                    'month': month_name if period_type == 'monthly' else None,
+                    'net_sales': round(net_sales_total, 2),
+                    'product_sales': round(product_sales_total, 2),
+                    'promotional_rebates': round(promotional_rebates_total, 2),
+                    'quantity_total': round(quantity_total, 2),
+                    'advertising_total': round(advertising_total, 2),
+                    'selling_fees': round(selling_fees_total, 2),
+                    'fba_fees': round(fba_fees_total, 2),
+                    'amazon_fee': round(amazon_fee_total, 2),
+                    'cm2_profit': round(cm2_profit_total, 2),
+                    'taxncredit': round(taxncredit_total, 2),
+                    'otherwplatform': round(total_otherwplatform, 2),
+                    'cashflow': round(cashflow_total, 2),
+                    'rembursement_fee': round(rembursement_fee_total, 2),
+                    'data': data_records
+                })
 
-                        def find_total_row(df):
-                            if 'product_name' not in df.columns:
-                                return None
-                            for variation in ['TOTAL', 'Total', 'total', 'TOTALS', 'Totals', 'totals']:
-                                total_row = df[df['product_name'] == variation]
-                                if not total_row.empty:
-                                    return total_row
-                            return df[df['product_name'].str.contains('total', case=False, na=False)]
+            except Exception:
+                # Skip problematic table but keep endpoint alive
+                continue
 
-                        if 'product_name' in cashflow_df.columns:
-                            total_row = find_total_row(cashflow_df)
-                            if total_row is not None and not total_row.empty:
-                                net_sales_total = float(total_row['net_sales'].iloc[0]) if 'net_sales' in total_row else 0
-                                advertising_total = float(total_row['advertising_total'].iloc[0]) if 'advertising_total' in total_row else 0
-                                amazon_fee_total = float(total_row['amazon_fee'].iloc[0]) if 'amazon_fee' in total_row else 0
-                                cm2_profit_total = float(total_row['cm2_profit'].iloc[0]) if 'cm2_profit' in total_row else 0
-                                rembursement_fee_total = float(total_row['rembursement_fee'].iloc[0]) if 'rembursement_fee' in total_row else 0
-                            else:
-                                net_sales_total = float(cashflow_df['net_sales'].sum()) if 'net_sales' in cashflow_df.columns else 0
-                                advertising_total = float(cashflow_df['advertising_total'].sum()) if 'advertising_total' in cashflow_df.columns else 0
-                                amazon_fee_total = float(cashflow_df['amazon_fee'].sum()) if 'amazon_fee' in cashflow_df.columns else 0
-                                cm2_profit_total = float(cashflow_df['cm2_profit'].sum()) if 'cm2_profit' in cashflow_df.columns else 0
-                                rembursement_fee_total = float(cashflow_df['rembursement_fee'].sum()) if 'rembursement_fee' in cashflow_df.columns else 0
-                        else:
-                            net_sales_total = float(cashflow_df['net_sales'].sum()) if 'net_sales' in cashflow_df.columns else 0
-                            advertising_total = float(cashflow_df['advertising_total'].sum()) if 'advertising_total' in cashflow_df.columns else 0
-                            amazon_fee_total = float(cashflow_df['amazon_fee'].sum()) if 'amazon_fee' in cashflow_df.columns else 0
-                            cm2_profit_total = float(cashflow_df['cm2_profit'].sum()) if 'cm2_profit' in cashflow_df.columns else 0
-                            rembursement_fee_total = float(cashflow_df['rembursement_fee'].sum()) if 'rembursement_fee' in cashflow_df.columns else 0
+        # round totals
+        for k in combined_totals:
+            combined_totals[k] = round(combined_totals[k], 2)
 
-                        cashflow_total = net_sales_total - advertising_total - amazon_fee_total - total_otherwplatform + taxncredit_total
+        meta = {}
+        if period_type == 'monthly':
+            meta['month'] = month_name
+        elif period_type == 'quarterly' or period_type in quarter_months:
+            meta['quarter_months'] = months_to_process
+        elif period_type == 'yearly':
+            meta['year_months'] = months_to_process
 
-                        combined_totals['net_sales'] += net_sales_total
-                        combined_totals['advertising_total'] += advertising_total
-                        combined_totals['amazon_fee'] += amazon_fee_total
-                        combined_totals['cm2_profit'] += cm2_profit_total
-                        combined_totals['taxncredit'] += taxncredit_total
-                        combined_totals['otherwplatform'] += total_otherwplatform
-                        combined_totals['cashflow'] += cashflow_total
-                        combined_totals ['rembursement_fee'] += rembursement_fee_total
+        return combined_totals, all_cashflow_data, meta
 
-                        if 'date' in cashflow_df.columns:
-                            cashflow_df.drop('date', axis=1, inplace=True)
-
-                        numeric_columns = cashflow_df.select_dtypes(include=['number']).columns
-                        for col in numeric_columns:
-                            cashflow_df[col] = cashflow_df[col].astype(float).round(2)
-
-                        try:
-                            data_records = cashflow_df.to_dict(orient='records')
-                            cleaned_records = []
-                            for record in data_records:
-                                clean_record = {}
-                                for key, value in record.items():
-                                    try:
-                                        if pd.isna(value) or value is None:
-                                            clean_record[key] = 0
-                                        elif isinstance(value, str):
-                                            clean_record[key] = value
-                                        else:
-                                            clean_record[key] = float(value)
-                                    except (ValueError, TypeError):
-                                        clean_record[key] = str(value) if value is not None else ""
-                                cleaned_records.append(clean_record)
-                            data_records = cleaned_records
-                        except Exception:
-                            data_records = []
-
-                        all_cashflow_data.append({
-                            'country': record_country,
-                            'table': table_name,
-                            'period_type': period_type,
-                            'month': month_name if period_type == 'monthly' else None,
-                            'net_sales': round(net_sales_total, 2),
-                            'advertising_total': round(advertising_total, 2),
-                            'amazon_fee': round(amazon_fee_total, 2),
-                            'cm2_profit': round(cm2_profit_total, 2),
-                            'taxncredit': round(taxncredit_total, 2),
-                            'otherwplatform': round(total_otherwplatform, 2),
-                            'cashflow': round(cashflow_total, 2),
-                            'rembursement_fee': round(rembursement_fee_total, 2),
-                            'data': data_records
-                        })
-                except Exception as e:
-                    all_cashflow_data.append({
-                        'country': record_country,
-                        'table': table_name,
-                        'period_type': period_type,
-                        'error': f"Error processing table {table_name}: {str(e)}"
-                    })
+    try:
+        # --- Current period ---
+        combined_totals, all_cashflow_data, meta = compute_cashflow_summary(
+            user_id=user_id,
+            year=year,
+            country=country,
+            period_type=period_type,
+            month_name=month_name
+        )
 
         if not all_cashflow_data:
             all_data_query = text("""
@@ -1246,37 +1598,71 @@ def cashflow():
                 ORDER BY year DESC, month DESC
             """)
             all_data = db_session.execute(all_data_query, {'user_id': user_id}).fetchall()
-            available_data = [{'country': record[0], 'month': record[1], 'year': record[2]} for record in all_data]
+            available_data = [{'country': r[0], 'month': r[1], 'year': r[2]} for r in all_data]
 
             return jsonify({
                 'error': 'No data found for the specified parameters',
                 'searched_for': {
                     'user_id': user_id,
-                    'months': months_to_process,
                     'year': year,
                     'country': country,
-                    'period_type': period_type
+                    'period_type': period_type,
+                    'month': month_name
                 },
                 'available_data': available_data[:10]
             }), 404
 
-        for key in combined_totals:
-            combined_totals[key] = round(combined_totals[key], 2)
+        # --- Previous period params ---
+        prev_year = year
+        prev_period_type = period_type
+        prev_month_name = month_name
+
+        if period_type == 'monthly':
+            prev_month_name, prev_year = prev_month_year(month_name, year)
+
+        elif period_type == 'quarterly':
+            current_q = quarter_for_month(month_name)
+            if current_q:
+                prev_q, y_delta = prev_quarter(current_q)
+                prev_period_type = prev_q
+                prev_year = year + y_delta
+                prev_month_name = None
+
+        elif period_type in quarter_months:
+            prev_q, y_delta = prev_quarter(period_type)
+            prev_period_type = prev_q
+            prev_year = year + y_delta
+            prev_month_name = None
+
+        elif period_type == 'yearly':
+            prev_year = year - 1
+            prev_month_name = None
+
+        # --- Previous summary (only) ---
+        previous_summary = None
+        try:
+            prev_totals, _, _ = compute_cashflow_summary(
+                user_id=user_id,
+                year=prev_year,
+                country=country,
+                period_type=prev_period_type,
+                month_name=prev_month_name
+            )
+            previous_summary = prev_totals
+        except Exception:
+            previous_summary = None
 
         response_data = {
             'period_type': period_type,
             'year': year,
             'summary': combined_totals,
+            'previous_summary': previous_summary,
             'detailed_data': all_cashflow_data,
-            'total_records': len(all_cashflow_data)
+            'total_records': len(all_cashflow_data),
         }
 
-        if period_type == 'monthly':
-            response_data['month'] = month_name
-        elif period_type == 'quarterly':
-            response_data['quarter_months'] = months_to_process
-        elif period_type == 'yearly':
-            response_data['year_months'] = months_to_process
+        # attach meta fields for current period
+        response_data.update(meta)
 
         return jsonify(response_data), 200
 

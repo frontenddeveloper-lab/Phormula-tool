@@ -1847,12 +1847,12 @@ useEffect(() => {
   > = {
     Sales: "#2CA9E0",
     COGS: "#AB64B5",
-    "Amazon Fees": "#ff5c5c",
+    "Amazon Fees": "#FFBE25",
     "Advertising Cost": "#F47A00",
-    Other: "#00627D",
-    "Taxes & Credits": "#FFBE26",
+    Other: "#01627F",
+    "Taxes & Credits": "#C03030",
     "CM1 Profit": "#87AD12",
-    "CM2 Profit": "#5EA49B",
+    "CM2 Profit": "#2DA49A",
   };
 
   const preferredOrder = [

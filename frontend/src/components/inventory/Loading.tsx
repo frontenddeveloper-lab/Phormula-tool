@@ -1,9 +1,25 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { FaCogs, FaChartLine, FaCalculator } from 'react-icons/fa';
 import Loader from './Loader';
 
 export default function Loading() {
+  const [progress, setProgress] = useState(0);
+
+  // 🔥 Simulated smooth progress
+  useEffect(() => {
+    let value = 0;
+
+    const timer = setInterval(() => {
+      value += Math.random() * 6; // smooth increment
+      if (value >= 95) value = 95; // stop at 95%
+      setProgress(Math.floor(value));
+    }, 700);
+
+    return () => clearInterval(timer);
+  }, []);
+
   const openExploreTab = () => {
     window.open('/', '_blank', 'noopener,noreferrer');
   };
@@ -14,47 +30,66 @@ export default function Loading() {
 
         {/* Animated Logo */}
         <Loader
-  src="/loader/infinity-unscreen.gif"
-  size={100}
-  label="Loading animation"
-  transparent
-/>
+          src="/loader/infinity-unscreen.gif"
+          size={100}
+          label="Loading animation"
+          transparent
+        />
 
         {/* Animated Dots */}
         <div className="flex justify-center my-3">
-  <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[0ms]"></span>
-  <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[200ms]"></span>
-  <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[400ms]"></span>
-  <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[600ms]"></span>
-  <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[800ms]"></span>
-</div>
+          <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[0ms]"></span>
+          <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[200ms]"></span>
+          <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[400ms]"></span>
+          <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[600ms]"></span>
+          <span className="w-2 h-2 mx-1 rounded-full bg-[#5EA68E] animate-dot delay-[800ms]"></span>
+        </div>
 
-        <h2 className="text-[#414042] text-2xl mt-2">Processing your data</h2>
-        <p className="text-[#414042] text-sm mb-3">Analyzing financial information securely</p>
+        {/* 🔥 Progress Bar (added, layout unchanged) */}
+        <div className="mt-4">
+          <div className="h-2 w-full bg-[#E5E7EB] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#5EA68E] transition-all duration-700"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="text-xs text-[#414042] mt-1 font-semibold">
+            {progress}% completed
+          </div>
+        </div>
 
-        <div className="bg-[#F47A0026] rounded-md p-3 flex items-center justify-center text-[#414042] border border-[#F47A00] text-sm my-2">
+        <h2 className="text-[#414042] text-2xl mt-3">
+          Processing your data
+        </h2>
+        <p className="text-[#414042] text-sm mb-3">
+          Analyzing financial information securely
+        </p>
+
+        <div className="bg-[#D9D9D926] rounded-md p-3 flex items-center justify-center text-[#414042] border border-[#D9D9D9] text-sm my-2">
           <FaCogs className="mr-2" /> Optimizing results for accuracy
         </div>
 
-        <div className="bg-[#87AD1226] rounded-md p-3 flex items-center justify-center text-[#414042]  border border-[#F47A00] text-sm my-2">
+        <div className="bg-[#D9D9D926] rounded-md p-3 flex items-center justify-center text-[#414042] border border-[#D9D9D9] text-sm my-2">
           <FaChartLine className="mr-2" /> Processing market data and trends
         </div>
 
-        <div className="bg-[#FFBE2526] rounded-md p-3 flex items-center justify-center text-[#414042]  border border-[#FFBE25] text-sm my-2">
+        <div className="bg-[#D9D9D926] rounded-md p-3 flex items-center justify-center text-[#414042] border border-[#D9D9D9] text-sm my-2">
           <FaCalculator className="mr-2" /> Running calculations and data analysis
         </div>
 
-        <p className="text-[#414042] text-sm mt-4">Results will be available shortly.</p>
+        <p className="text-[#414042] text-sm mt-4">
+          Results will be available shortly.
+        </p>
 
         {/* Buttons */}
         <div className="flex justify-center gap-4 mt-5">
           <button
             onClick={() => alert('You will be notified.')}
-            className="bg-[#37455F] text-[#f8edcf] px-4 py-2 rounded-md text-sm font-semibold hover:bg-[#34495e] shadow-[0px_4px_4px_0px_#00000040]
-"
+            className="bg-[#37455F] text-[#f8edcf] px-4 py-2 rounded-md text-sm font-semibold hover:bg-[#34495e] shadow-[0px_4px_4px_0px_#00000040]"
           >
             Notify me
           </button>
+
           <button
             onClick={openExploreTab}
             className="bg-[#37455F] text-[#f8edcf] px-4 py-2 rounded-md text-sm font-semibold hover:bg-[#34495e] shadow-[0px_4px_4px_0px_#00000040]"
@@ -62,6 +97,28 @@ export default function Loading() {
             Till then explore tab
           </button>
         </div>
+
+        {/* 🔥 Dot animation CSS (safe to keep here or move to globals.css) */}
+        <style jsx>{`
+          @keyframes dotFlow {
+            0% {
+              opacity: 0.3;
+              transform: translateY(0);
+            }
+            50% {
+              opacity: 1;
+              transform: translateY(-4px);
+            }
+            100% {
+              opacity: 0.3;
+              transform: translateY(0);
+            }
+          }
+
+          .animate-dot {
+            animation: dotFlow 1.4s infinite ease-in-out both;
+          }
+        `}</style>
       </div>
     </div>
   );

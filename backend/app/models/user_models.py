@@ -6,6 +6,7 @@ from sqlalchemy import Text
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy import Numeric
 
 
 # ------------------------------------------------- SuperAdmin Models -------------------------------------------------
@@ -52,10 +53,11 @@ class User(db.Model):
     email = db.Column(db.String(150), unique=True, nullable=False)
     phone_number = db.Column(db.String(20), nullable=False)
     annual_sales_range = db.Column(db.String(50), nullable=True)   
-    company_name = db.Column(db.String(50), nullable=True)   
+    company_name = db.Column(db.String(50), nullable=True)
+    target_sales = db.Column(Numeric(12, 2), nullable=True)  # ✅ FIXED   
     brand_name = db.Column(db.String(50), nullable=True)       
-    country = db.Column(db.String(50), nullable=True)   
-    platform = db.Column(db.String(50), nullable=True)   
+    country = db.Column(db.String(50), nullable=True)    
+    marketplace_id = db.Column(db.String(200), nullable=True)
     is_google_user = db.Column(db.Boolean, default=False)
     is_verified = db.Column(db.Boolean, default=False)
     homeCurrency = db.Column(db.String(50), nullable=True)
@@ -103,6 +105,7 @@ class UploadHistory(db.Model):
     ytd_pie_chart = Column(db.Text)
     profit_chart_img = Column(db.Text)
     total_sales = Column(Float)
+    total_product_sales = Column(Float)
     total_profit = Column(Float)
     otherwplatform = Column(Float)
     taxncredit = Column(Float, nullable=True)
@@ -121,6 +124,20 @@ class UploadHistory(db.Model):
     total_amazon_fee = Column(Float, nullable=True)
     pnl_email_sent = db.Column(db.Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class Email(db.Model):
+    __tablename__ = "email"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    country = Column(String(255), nullable=False, index=True)
+
+    # last time BI email was sent
+    sent_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "country", name="uq_email_user_country"),
+    )
 
 
 # -----------------------------  Chat History -----------------------------
@@ -632,7 +649,6 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer)
 
-    # Make sure both are NOT NULL for the unique to behave properly
     sku = db.Column(db.String(255), nullable=False, index=True)
     asin = db.Column(db.String(255), index=True)
 
@@ -645,6 +661,9 @@ class Product(db.Model):
     category = db.Column(db.String(255))
     product_data = db.Column(JSONB)
 
+    # 🔥 Amazon listing creation date
+    open_date = db.Column(db.DateTime, index=True)
+
     synced_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -652,5 +671,4 @@ class Product(db.Model):
     __table_args__ = (
         UniqueConstraint('sku', 'marketplace_id', name='uq_products_sku_mkt'),
     )
-
 

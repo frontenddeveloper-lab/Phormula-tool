@@ -1,117 +1,151 @@
-// "use client";
+// // "use client";
 
-// import React from "react";
+// // import React from "react";
+// // import { FaAngleDown } from "react-icons/fa";
 
-// type ValueMode = "lower" | "preserve";
+// // type ValueMode = "lower" | "preserve";
 
-// export interface MonthYearPickerTableProps {
-//   month: string;                          // current month value (string)
-//   year: string | number;                  // current year value
-//   yearOptions: (string | number)[];       // list of year options
-//   onMonthChange: (value: string) => void; // emitted month value
-//   onYearChange: (value: string) => void;  // emitted year value
-//   valueMode?: ValueMode;                  // 'lower' = emit lowercase months (default: 'preserve')
-//   className?: string;                     // extra class if needed
-//   monthsOverride?: string[];              // optionally pass your own months list
-// }
+// // export interface MonthYearPickerTableProps {
+// //   month: string;
+// //   year: string | number;
+// //   yearOptions: (string | number)[];
+// //   onMonthChange: (value: string) => void;
+// //   onYearChange: (value: string) => void;
+// //   valueMode?: ValueMode;
+// //   className?: string;
+// //   monthsOverride?: string[];
+// // }
 
-// /**
-//  * A compact Month/Year dropdown rendered as a table with sticky headers,
-//  * matching your referral fees dropdown styling.
-//  */
-// const MonthYearPickerTable: React.FC<MonthYearPickerTableProps> = ({
-//   month,
-//   year,
-//   yearOptions,
-//   onMonthChange,
-//   onYearChange,
-//   valueMode = "preserve",
-//   className = "",
-//   monthsOverride,
-// }) => {
-//   // Default months (capitalized for display). Values emitted depend on valueMode.
-//   const DEFAULT_MONTHS = [
-//     "January","February","March","April","May","June",
-//     "July","August","September","October","November","December",
-//   ];
+// // const MonthYearPickerTable: React.FC<MonthYearPickerTableProps> = ({
+// //   month,
+// //   year,
+// //   yearOptions,
+// //   onMonthChange,
+// //   onYearChange,
+// //   valueMode = "preserve",
+// //   className = "",
+// //   monthsOverride,
+// // }) => {
+// //   const DEFAULT_MONTHS = [
+// //     "January",
+// //     "February",
+// //     "March",
+// //     "April",
+// //     "May",
+// //     "June",
+// //     "July",
+// //     "August",
+// //     "September",
+// //     "October",
+// //     "November",
+// //     "December",
+// //   ];
 
-//   const months = monthsOverride && monthsOverride.length ? monthsOverride : DEFAULT_MONTHS;
+// //   const months =
+// //     monthsOverride && monthsOverride.length ? monthsOverride : DEFAULT_MONTHS;
 
-//   // Determine <select> value shown. If caller passes a lowercase like "january",
-//   // we still want the select to show it correctly by matching (case-insensitively).
-//   const normalizeForSelect = (m: string) => {
-//     if (!m) return "";
-//     const idx = months.findIndex((x) => x.toLowerCase() === m.toLowerCase());
-//     return idx >= 0 ? months[idx] : m; // fall back to whatever came
-//   };
+// //   const normalizeForSelect = (m: string) => {
+// //     if (!m) return "";
+// //     const idx = months.findIndex((x) => x.toLowerCase() === m.toLowerCase());
+// //     return idx >= 0 ? months[idx] : m;
+// //   };
 
-//   const selectMonthValue = normalizeForSelect(month);
+// //   const selectMonthValue = normalizeForSelect(month);
 
-//   const emitMonth = (raw: string) => {
-//     if (!raw) {
-//       onMonthChange("");
-//       return;
-//     }
-//     const emitted = valueMode === "lower" ? raw.toLowerCase() : raw;
-//     onMonthChange(emitted);
-//   };
+// //   const emitMonth = (raw: string) => {
+// //     if (!raw) {
+// //       onMonthChange("");
+// //       return;
+// //     }
+// //     const emitted = valueMode === "lower" ? raw.toLowerCase() : raw;
+// //     onMonthChange(emitted);
+// //   };
 
-//   return (
-//     <div
-//       className={[
-//         "border-collapse rounded w-auto min-w-[80px] max-w-[100px]",
-//         className,
-//       ].join(" ")}
-//     >
-//       <table className="border-collapse rounded w-auto min-w-[80px] max-w-[100px]">
-//         <thead>
-//           <tr className="bg-white text-[#5EA68E] border border-[#414042]">
-//             <th className="px-3 py-2 text-center border border-[#414042] text-xs">Month</th>
-//             <th className="px-3 py-2 text-center border border-[#414042] text-xs">Year</th>
-//           </tr>
-//         </thead>
-//         <tbody>
-//           <tr>
-//             <td className="px-3 py-2 text-center border border-[#414042]">
-//               <select
-//                 className="text-center text-xs outline-none"
-//                 value={selectMonthValue}
-//                 onChange={(e) => emitMonth(e.target.value)}
-//               >
-//                 <option value="" disabled>
-//                   Select
-//                 </option>
-//                 {months.map((m) => (
-//                   <option key={m} value={m}>
-//                     {m}
-//                   </option>
-//                 ))}
-//               </select>
-//             </td>
-//             <td className="px-3 py-2 text-center border border-[#414042]">
-//               <select
-//                 className="text-center text-xs outline-none"
-//                 value={String(year ?? "")}
-//                 onChange={(e) => onYearChange(e.target.value)}
-//               >
-//                 <option value="" disabled>
-//                   Select
-//                 </option>
-//                 {yearOptions.map((y) => (
-//                   <option key={y} value={y}>
-//                     {y}
-//                   </option>
-//                 ))}
-//               </select>
-//             </td>
-//           </tr>
-//         </tbody>
-//       </table>
-//     </div>
-//   );
-// };
+// //   // Current month/year (client)
+// //   const now = new Date();
+// //   const currentYear = now.getFullYear();
+// //   const currentMonthLabel = months[now.getMonth()] ?? "";
 
-// export default MonthYearPickerTable;
+// //   // ✅ Same classes as PeriodFiltersTable
+// //   const wrapCls =
+// //     "relative inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs sm:text-sm shadow-sm";
+// //   const selectCls =
+// //     "appearance-none bg-transparent px-2 py-1 pr-6 text-center text-xs sm:text-sm text-[#414042] focus:outline-none cursor-pointer leading-tight";
+
+// //   return (
+// //     <div className={`flex items-center gap-2 sm:gap-3 ${className}`}>
+// //       {/* MONTH */}
+// //       <div className={wrapCls}>
+// //         <select
+// //           value={selectMonthValue || ""}
+// //           onChange={(e) => emitMonth(e.target.value)}
+// //           className={selectCls}
+// //         >
+// //           <option value="">Month</option>
+
+// //           {months.map((m) => {
+// //             const isCurrentMonthAndYear =
+// //               m === currentMonthLabel && String(year) === String(currentYear);
+
+// //             // disable current month for current year (unless already selected)
+// //             const shouldDisableMonth =
+// //               isCurrentMonthAndYear && selectMonthValue !== m;
+
+// //             return (
+// //               <option key={m} value={m} disabled={shouldDisableMonth}>
+// //                 {m}
+// //               </option>
+// //             );
+// //           })}
+// //         </select>
+
+// //         <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
+// //           <FaAngleDown />
+// //         </span>
+// //       </div>
+
+// //       {/* YEAR */}
+// //       <div className={wrapCls}>
+// //         <select
+// //           value={year ? String(year) : ""}
+// //           onChange={(e) => onYearChange(e.target.value)}
+// //           className={selectCls}
+// //         >
+// //           <option value="">Year</option>
+
+// //           {yearOptions.map((y) => {
+// //             const isCurrentYearAndMonth =
+// //               String(y) === String(currentYear) &&
+// //               selectMonthValue === currentMonthLabel;
+
+// //             // disable current year when current month selected (unless already selected year)
+// //             const shouldDisableYear =
+// //               isCurrentYearAndMonth && String(year) !== String(currentYear);
+
+// //             return (
+// //               <option key={y} value={y} disabled={shouldDisableYear}>
+// //                 {y}
+// //               </option>
+// //             );
+// //           })}
+// //         </select>
+
+// //         <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
+// //           <FaAngleDown />
+// //         </span>
+// //       </div>
+// //     </div>
+// //   );
+// // };
+
+// // export default MonthYearPickerTable;
+
+
+
+
+
+
+
 
 
 
@@ -137,7 +171,7 @@
 // export interface MonthYearPickerTableProps {
 //   month: string;
 //   year: string | number;
-//   yearOptions: (string | number)[];
+//   yearOptions: (string | number)[]; // kept for compatibility, not used to build list
 //   onMonthChange: (value: string) => void;
 //   onYearChange: (value: string) => void;
 //   valueMode?: ValueMode;
@@ -145,10 +179,12 @@
 //   monthsOverride?: string[];
 // }
 
+// const MIN_YEAR = 2024;
+
 // const MonthYearPickerTable: React.FC<MonthYearPickerTableProps> = ({
 //   month,
 //   year,
-//   yearOptions,
+//   yearOptions, // intentionally unused for generating year list
 //   onMonthChange,
 //   onYearChange,
 //   valueMode = "preserve",
@@ -175,9 +211,7 @@
 
 //   const normalizeForSelect = (m: string) => {
 //     if (!m) return "";
-//     const idx = months.findIndex(
-//       (x) => x.toLowerCase() === m.toLowerCase()
-//     );
+//     const idx = months.findIndex((x) => x.toLowerCase() === m.toLowerCase());
 //     return idx >= 0 ? months[idx] : m;
 //   };
 
@@ -192,54 +226,80 @@
 //     onMonthChange(emitted);
 //   };
 
+//   // Current month/year (client)
+//   const now = new Date();
+//   const currentYear = now.getFullYear();
+//   const currentMonthIndex = now.getMonth(); // 0..11
+//   const currentMonthLabel = months[currentMonthIndex] ?? "";
+
+//   // Year list: 2024 → currentYear
+//   const yearList = Array.from(
+//     { length: currentYear - MIN_YEAR + 1 },
+//     (_, i) => MIN_YEAR + i
+//   );
+
+//   const selectedYearNum = Number(year);
+
+//   // Disable current month and future months for current year
+//   const isMonthDisabled = (m: string) => {
+//     // If selected year isn't current year, allow all months (within allowed years)
+//     if (selectedYearNum !== currentYear) return false;
+
+//     const idx = months.findIndex((x) => x.toLowerCase() === m.toLowerCase());
+//     if (idx === -1) return false;
+
+//     // Disable current month and onwards (>= current month)
+//     return idx >= currentMonthIndex;
+//   };
+
+//   // ✅ Same classes as PeriodFiltersTable
+//   const wrapCls =
+//     "relative inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs sm:text-sm shadow-sm";
+//   const selectCls =
+//     "appearance-none bg-transparent px-2 py-1 pr-6 text-center text-xs sm:text-sm text-[#414042] focus:outline-none cursor-pointer leading-tight";
+
 //   return (
-//     // <div
-//     //   className={[
-//     //     "inline-flex rounded-md border border-[#414042] bg-white",
-//     //     "text-[clamp(12px,0.729vw,16px)] font-[Lato] overflow-hidden",
-//     //     className,
-//     //   ].join(" ")}
-//     // >
-//     <div className="inline-flex rounded-md border border-[#414042] bg-white text-[clamp(12px,0.729vw,16px)] font-[Lato] overflow-hidden">
-//       {/* MONTH SELECT */}
-//       <div className="relative flex items-center">
+//     <div className={`flex items-center gap-2 sm:gap-3 ${className}`}>
+//       {/* MONTH */}
+//       <div className={wrapCls}>
 //         <select
 //           value={selectMonthValue || ""}
 //           onChange={(e) => emitMonth(e.target.value)}
-//           // className="appearance-none pl-3 pr-4 py-1.5 text-center bg-white focus:outline-none leading-tight"
-//           className="appearance-none px-3 pr-8 py-2 text-center bg-white focus:outline-none"
+//           className={selectCls}
+//           disabled={!year} // optional: prevents month picking before year
 //         >
-//           <option value="" disabled>
-//             Month
-//           </option>
+//           <option value="">Month</option>
+
 //           {months.map((m) => (
-//             <option key={m} value={m}>
+//             <option key={m} value={m} disabled={isMonthDisabled(m)}>
 //               {m}
 //             </option>
 //           ))}
 //         </select>
-//        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-[#414042]">
-//            <FaAngleDown />
+
+//         <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
+//           <FaAngleDown />
 //         </span>
 //       </div>
 
-//       {/* YEAR SELECT */}
-//       <div className="relative flex items-center border-l border-[#414042]">
+//       {/* YEAR */}
+//       <div className={wrapCls}>
 //         <select
 //           value={year ? String(year) : ""}
 //           onChange={(e) => onYearChange(e.target.value)}
-//           // className="appearance-none pl-3 pr-4 py-1.5 text-center bg-white focus:outline-none leading-tight"
-//            className="appearance-none px-3 pr-8 py-2 text-center bg-white focus:outline-none"
+//           className={selectCls}
 //         >
 //           <option value="">Year</option>
-//           {yearOptions.map((y) => (
+
+//           {yearList.map((y) => (
 //             <option key={y} value={y}>
 //               {y}
 //             </option>
 //           ))}
 //         </select>
-//         <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-[#414042]">
-//            <FaAngleDown />
+
+//         <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
+//           <FaAngleDown />
 //         </span>
 //       </div>
 //     </div>
@@ -247,6 +307,23 @@
 // };
 
 // export default MonthYearPickerTable;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -265,7 +342,7 @@ type ValueMode = "lower" | "preserve";
 export interface MonthYearPickerTableProps {
   month: string;
   year: string | number;
-  yearOptions: (string | number)[];
+  yearOptions: (string | number)[]; // kept for compatibility, not used to build list
   onMonthChange: (value: string) => void;
   onYearChange: (value: string) => void;
   valueMode?: ValueMode;
@@ -273,10 +350,14 @@ export interface MonthYearPickerTableProps {
   monthsOverride?: string[];
 }
 
+type LatestPeriod = { month?: string; year?: string };
+
+const MIN_YEAR = 2024;
+
 const MonthYearPickerTable: React.FC<MonthYearPickerTableProps> = ({
   month,
   year,
-  yearOptions,
+  yearOptions, // intentionally unused for generating year list
   onMonthChange,
   onYearChange,
   valueMode = "preserve",
@@ -303,9 +384,7 @@ const MonthYearPickerTable: React.FC<MonthYearPickerTableProps> = ({
 
   const normalizeForSelect = (m: string) => {
     if (!m) return "";
-    const idx = months.findIndex(
-      (x) => x.toLowerCase() === m.toLowerCase()
-    );
+    const idx = months.findIndex((x) => x.toLowerCase() === m.toLowerCase());
     return idx >= 0 ? months[idx] : m;
   };
 
@@ -320,70 +399,122 @@ const MonthYearPickerTable: React.FC<MonthYearPickerTableProps> = ({
     onMonthChange(emitted);
   };
 
-  // === Current month & year on client ===
+  // Current month/year (client)
   const now = new Date();
   const currentYear = now.getFullYear();
-  const currentMonthLabel = months[now.getMonth()] ?? ""; // e.g. "December"
+  const currentMonthIndex = now.getMonth(); // 0..11
+
+  // Year list: 2024 → currentYear
+  const yearList = Array.from(
+    { length: currentYear - MIN_YEAR + 1 },
+    (_, i) => MIN_YEAR + i
+  );
+
+  const selectedYearNum = Number(year);
+
+  // Disable current month and future months for current year
+  const isMonthDisabled = (m: string) => {
+    if (selectedYearNum !== currentYear) return false;
+
+    const idx = months.findIndex((x) => x.toLowerCase() === m.toLowerCase());
+    if (idx === -1) return false;
+
+    return idx >= currentMonthIndex; // disable current month and onwards
+  };
+
+  /* =========================
+     ✅ NEW: Seed from latestFetchedPeriod ONCE
+     ========================= */
+  const getLatestPeriod = (): LatestPeriod | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("latestFetchedPeriod");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as LatestPeriod;
+      if (!parsed.year || !parsed.month) return null;
+      return { year: String(parsed.year), month: String(parsed.month) };
+    } catch {
+      return null;
+    }
+  };
+
+  const initializedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    const latest = getLatestPeriod();
+    if (!latest) return;
+
+    const y = Number(latest.year);
+    if (Number.isNaN(y)) return;
+
+    const clampedYear = Math.min(Math.max(y, MIN_YEAR), currentYear);
+
+    // ✅ Force year to last fetched (only once)
+    if (String(year) !== String(clampedYear)) {
+      onYearChange(String(clampedYear));
+    }
+
+    // ✅ Force month to last fetched (only once) if empty or different
+    const latestMonthNormalized = normalizeForSelect(latest.month);
+    if (latestMonthNormalized && selectMonthValue !== latestMonthNormalized) {
+      // emitMonth uses valueMode, so call that to preserve behavior
+      emitMonth(latestMonthNormalized);
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /* ========================= */
+
+  // ✅ Same classes as PeriodFiltersTable
+  const wrapCls =
+    "relative inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs sm:text-sm shadow-sm";
+  const selectCls =
+    "appearance-none bg-transparent px-2 py-1 pr-6 text-center text-xs sm:text-sm text-[#414042] focus:outline-none cursor-pointer leading-tight";
 
   return (
-    <div className="inline-flex rounded-md border border-[#414042] bg-white text-[clamp(12px,0.729vw,16px)] font-[Lato] overflow-hidden">
-      {/* MONTH SELECT */}
-      <div className="relative flex items-center">
+    <div className={`flex items-center gap-2 sm:gap-3 ${className}`}>
+      {/* MONTH */}
+      <div className={wrapCls}>
         <select
           value={selectMonthValue || ""}
           onChange={(e) => emitMonth(e.target.value)}
-          className="appearance-none px-3 pr-8 py-2 text-center bg-white focus:outline-none"
+          className={selectCls}
+          disabled={!year} // optional
         >
-          <option value="" disabled>
-            Month
-          </option>
-          {months.map((m) => {
-            const isCurrentMonthAndYear =
-              m === currentMonthLabel && String(year) === String(currentYear);
+          <option value="">Month</option>
 
-            // Disable current month for current year,
-            // but DON'T disable if it's already the selected month
-            const shouldDisableMonth =
-              isCurrentMonthAndYear && selectMonthValue !== m;
-
-            return (
-              <option key={m} value={m} disabled={shouldDisableMonth}>
-                {m}
-              </option>
-            );
-          })}
+          {months.map((m) => (
+            <option key={m} value={m} disabled={isMonthDisabled(m)}>
+              {m}
+            </option>
+          ))}
         </select>
-        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-[#414042]">
+
+        <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
           <FaAngleDown />
         </span>
       </div>
 
-      {/* YEAR SELECT */}
-      <div className="relative flex items-center border-l border-[#414042]">
+      {/* YEAR */}
+      <div className={wrapCls}>
         <select
           value={year ? String(year) : ""}
           onChange={(e) => onYearChange(e.target.value)}
-          className="appearance-none px-3 pr-8 py-2 text-center bg-white focus:outline-none"
+          className={selectCls}
         >
           <option value="">Year</option>
-          {yearOptions.map((y) => {
-            const isCurrentYearAndMonth =
-              String(y) === String(currentYear) &&
-              selectMonthValue === currentMonthLabel;
 
-            // Disable current year when current month is selected,
-            // but DON'T disable if it's already the selected year
-            const shouldDisableYear =
-              isCurrentYearAndMonth && String(year) !== String(currentYear);
-
-            return (
-              <option key={y} value={y} disabled={shouldDisableYear}>
-                {y}
-              </option>
-            );
-          })}
+          {yearList.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
         </select>
-        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-[#414042]">
+
+        <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
           <FaAngleDown />
         </span>
       </div>

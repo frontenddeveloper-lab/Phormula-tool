@@ -45,14 +45,23 @@ interface ApiResponse {
 
 interface ProductinfoinpopupProps {
   productname?: string;
+  countryName?: string;
   onClose?: () => void;
 }
 
-const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "Menthol", onClose }) => {
+const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({
+  productname = "Menthol",
+  countryName = "global",
+  onClose
+}) => {
   const params = useParams();
   const pathname = usePathname();
   const router = useRouter();
-  const { countryName, month, quarter, year } = params as { countryName?: string; month?: string; quarter?: string; year?: string };
+ const { month, quarter, year } = params as {
+  month?: string;
+  quarter?: string;
+  year?: string;
+};
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
@@ -144,7 +153,8 @@ const Productinfoinpopup: React.FC<ProductinfoinpopupProps> = ({ productname = "
 
   // Currency for chart: follow the same behavior as TrendChartSection/ProductwisePerformance.
   // If the page scope is UK, show GBP; otherwise default to USD.
-  const pageScope = (countryName || "global").toLowerCase();
+const pageScope = (countryName || "global").toLowerCase();
+
   const baseCurrency: "GBP" | "USD" = pageScope === "uk" ? "GBP" : "USD";
 
   const currencySymbol = baseCurrency === "GBP" ? "£" : "$";
@@ -307,20 +317,25 @@ const ukRaw = getMetric("uk", month);
 const usRaw = getMetric("us", month);
 const rawGlobal = getMetric("global", month);
 
-const sumSelected =
-  (selectedCountries.uk ? ukRaw : 0) +
-  (selectedCountries.us ? usRaw : 0);
+// 🔑 PAGE SCOPE CHECK
+const pageScope = (countryName || "global").toLowerCase();
 
-// ProductwisePerformance behavior:
-// agar selected countries ka sum available hai to wahi GLOBAL dikhao,
-// warna backend ka rawGlobal fallback
-const globalShown = sumSelected !== 0 ? sumSelected : rawGlobal;
+// UK page par GLOBAL ko forcefully band
+let globalShown = rawGlobal;
+
+if (pageScope === "uk") {
+  globalShown = 0;
+}
 
 const point: Record<string, any> = { month };
 
 if (selectedCountries.uk) point.uk = ukRaw;
 if (selectedCountries.us) point.us = usRaw;
-if (selectedCountries.global) point.global = globalShown;
+
+// ❗ UK page par GLOBAL bilkul mat add karo
+if (selectedCountries.global && pageScope !== "uk") {
+  point.global = globalShown;
+}
 
 return point;
   });
@@ -368,7 +383,8 @@ return point;
         data: raw.map(item => item[country] || 0),
         borderColor: getCountryColor(country),
         backgroundColor: getCountryColor(country),
-        tension: 0.1,
+        
+tension: 0.35,
         pointRadius: 3,
         // pointHoverRadius: 5,
         fill: false,

@@ -366,11 +366,7 @@ export default function SignInForm() {
 
   // If already authenticated and user manually hits /signin,
   // bounce them away (but NOT right after a fresh login)
-  useEffect(() => {
-    if (!token) return;
-    if (hasJustLoggedIn) return; // <-- don't override first-time redirect
-    router.replace(redirect);
-  }, [token, redirect, router, hasJustLoggedIn]);
+ 
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -403,43 +399,32 @@ export default function SignInForm() {
 
       if (me) dispatch(setUser(me));
 
-      const onboardingComplete = me?.onboarding_complete === true;
+      const hasMarketplace =
+  typeof me?.marketplace_id === "string" &&
+  me.marketplace_id.trim().length > 0;
 
-      const hasBrand =
-        typeof me?.brand_name === "string" &&
-        me.brand_name.trim().length > 0;
+if (!hasMarketplace) {
+  router.replace("/choose-country?onboard=1");
+  return;
+}
 
-      // Has this browser already done the first-time redirect?
-      const hasSeenFirstTimeRoute =
-        typeof window !== "undefined" &&
-        localStorage.getItem("hasSeenFirstTimeRoute") === "true";
+// build country-based route
+const countryFromBackend =
+  typeof me?.country === "string" && me.country.trim().length > 0
+    ? me.country.split(",")[0]
+    : "global";
 
-      // 👇 Adjust these to match your backend fields
-      const ranged = me?.ranged;
-      const countryName = me?.countryName || me?.country_name;
-      const month = me?.month;
-      const year = me?.year;
+const now = new Date();
+const currentMonth = now.toLocaleString("en-US", { month: "long" });
+const currentYear = String(now.getFullYear());
 
-      const firstTimePath =
-        ranged && countryName && month && year
-          ? `/country/${ranged}/${countryName}/${month}/${year}`
-          : redirect; // fallback if any value is missing
+const profitPath = `/country/QTD/${countryFromBackend}/${currentMonth}/${currentYear}`;
 
-      if (!onboardingComplete && !hasBrand) {
-        // Truly new user → start onboarding
-        setHasJustLoggedIn(true);
-        router.push("/choose-country?onboard=1");
-      } else if (!hasSeenFirstTimeRoute && firstTimePath !== redirect) {
-        // ✅ First login AFTER onboarding is complete → Profit screen
-        localStorage.setItem("hasSeenFirstTimeRoute", "true");
-        setHasJustLoggedIn(true);
-        router.push(firstTimePath);
-      } else {
-        // All subsequent logins
-        setHasJustLoggedIn(true);
-        router.push(redirect); // usually "/"
-      }
-    } catch (err: any) {
+router.replace(profitPath);
+
+
+}
+     catch (err: any) {
       const msg =
         err?.status === 403
           ? "Please verify your email first."
@@ -508,7 +493,7 @@ export default function SignInForm() {
               <div className="flex items-center justify-between">
                 <label className="inline-flex items-center gap-3 cursor-pointer">
                   <Checkbox checked={isChecked} onChange={setIsChecked} />
-                  <span className="block font-normal text-gray-700 text-theme-base dark:text-gray-400">
+                  <span className="block font-normal text-gray-700 text-theme-sm dark:text-gray-400">
                     Keep me logged in
                   </span>
                 </label>

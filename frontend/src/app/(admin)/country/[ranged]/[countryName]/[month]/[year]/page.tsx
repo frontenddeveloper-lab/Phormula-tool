@@ -1,55 +1,18 @@
-// // // app/country/[ranged]/[countryName]/[month]/[year]/page.tsx
-// // "use client";
-
-// // import React from "react";
-// // import CountryDashboard from "@/components/dashboard/CountryDashboard";
-
-// // type Props = {
-// //   params: {
-// //     ranged: string;        
-// //     countryName: string;   
-// //     month: string;         
-// //     year: string;         
-// //   };
-// // };
-
-// // export default function Page({ params }: Props) {
-// //   const { ranged, countryName, month, year } = params;
-
-// //   return (
-// //     <CountryDashboard
-// //       key={`${ranged}-${countryName}-${month}-${year}`} // ✅ ensures re-render when params change
-// //       initialRanged={ranged}
-// //       initialCountryName={countryName}
-// //       initialMonth={month}
-// //       initialYear={year}
-// //     />
-// //   );
-// // }
-
-
-
-
-
-
-
-
-
 // // app/country/[ranged]/[countryName]/[month]/[year]/page.tsx
 // "use client";
 
+// import Dropdowns from "@/components/dropdowns/Dropdowns";
 // import React from "react";
-// import CountryDashboard from "@/components/dashboard/CountryDashboard";
 
 // export default function Page({
 //   params,
 // }: {
-//   params: { ranged: string; countryName: string; month: string; year: string };
+//   params: Promise <{ ranged: string; countryName: string; month: string; year: string }>;
 // }) {
-//   const { ranged, countryName, month, year } = params;
+//   const { ranged, countryName, month, year } = React.use(params) ;
 
 //   return (
-//     <CountryDashboard
+//     <Dropdowns
 //       key={`${ranged}-${countryName}-${month}-${year}`}
 //       initialRanged={ranged}
 //       initialCountryName={countryName}
@@ -65,27 +28,33 @@
 
 
 
+import type { Metadata } from "next";
+import CountryClient from "./CountryClient";
 
-// app/country/[ranged]/[countryName]/[month]/[year]/page.tsx
-"use client";
+type Params = {
+  ranged: string;
+  countryName: string;
+  month: string;
+  year: string;
+};
 
-import Dropdowns from "@/components/dropdowns/Dropdowns";
-import React from "react";
+export function generateMetadata({ params }: { params: Params }): Metadata {
+  const title = `${params.countryName.toUpperCase()}`;
 
-export default function Page({
-  params,
-}: {
-  params: Promise <{ ranged: string; countryName: string; month: string; year: string }>;
-}) {
-  const { ranged, countryName, month, year } = React.use(params) ;
+  return {
+    title: `${title} Profit Dashboard`,
+    description: `Sales dashboard for ${params.countryName.toUpperCase()} (${params.ranged.toUpperCase()}) in ${params.month.toUpperCase()} ${params.year}.`,
+    robots: { index: false, follow: false },
+  };
+}
 
+export default function Page({ params }: { params: Params }) {
   return (
-    <Dropdowns
-      key={`${ranged}-${countryName}-${month}-${year}`}
-      initialRanged={ranged}
-      initialCountryName={countryName}
-      initialMonth={month}
-      initialYear={year}
+    <CountryClient
+      ranged={params.ranged}
+      countryName={params.countryName}
+      month={params.month}
+      year={params.year}
     />
   );
 }

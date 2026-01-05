@@ -161,7 +161,6 @@ def send_pnlforecast_email(user_id, file_name, month, year):
 def get_previous_month_year(month, year):
     """Calculate the previous month and year."""
 
-    print(f" Previous_Month1: {month}, Previous Year: {year}")
     year = int(year)
     prev_month_num = MONTHS_MAP[month] - 1
     if prev_month_num == 0:
@@ -169,99 +168,6 @@ def get_previous_month_year(month, year):
         year -= 1
     prev_month = MONTHS_REVERSE_MAP[prev_month_num]
 
-    print(f"Previous Month: {prev_month}, Previous Year: {year}")
-   
-
     return prev_month, year
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def forecast_next_two_months_with_append(sku_id, data):  
-#     try:
-#         from pmdarima import auto_arima
-#         import pandas as pd
-#         import numpy as np
-
-#         sku_data = data[data['sku'] == sku_id].copy()
-#         if sku_data.empty:
-#             print(f"No data found for SKU: {sku_id}")
-#             return None
-
-#         sku_name = sku_data['sku'].iloc[0]
-#         sku_data = sku_data.drop(columns=['sku'])
-#         sku_data.index = pd.to_datetime(sku_data.index)
-#         sku_data = sku_data.resample('D').sum()
-#         sku_data['quantity'] = sku_data['quantity'].interpolate(method='linear').fillna(0)
-
-#         print(f"Fitting ARIMA model for SKU: {sku_name}")
-#         auto_model = auto_arima(
-#             sku_data['quantity'], 
-#             seasonal=True, 
-#             trace=False,
-#             suppress_warnings=True, 
-#             stepwise=True
-#         )
-#         model = auto_model.fit(sku_data['quantity'])
-
-#         forecast_steps = 90  
-#         full_forecast = []
-#         current_data = sku_data['quantity'].copy()
-
-#         for step in range(forecast_steps):
-#             forecast, conf_int = model.predict(n_periods=1, return_conf_int=True, alpha=0.5)
-
-#             next_forecast = max(forecast[0], 0)
-#             lower = max(conf_int[0][0], 0)
-#             upper = max(conf_int[0][1], 0)
-
-#             forecast_date = current_data.index[-1] + pd.Timedelta(days=1)
-#             current_data.loc[forecast_date] = next_forecast
-#             full_forecast.append((forecast_date, next_forecast, lower, upper))
-
-#             model = auto_arima(
-#                 current_data,
-#                 seasonal=True,
-#                 trace=False,
-#                 error_action='ignore',
-#                 suppress_warnings=True,
-#                 stepwise=True
-#             ).fit(current_data)
-
-#         # Build forecast DataFrame
-#         forecast_df = pd.DataFrame(full_forecast, columns=['Date', 'Forecast', 'Lower95', 'Upper95'])
-#         forecast_df = forecast_df.set_index('Date')
-
-#         # Monthly summary
-#         monthly_summary = forecast_df.resample('M').agg({
-#             'Forecast': 'sum',
-#             'Lower95': 'sum',
-#             'Upper95': 'sum'
-#         }).iloc[:3].reset_index()
-
-#         # Rename index for clarity
-#         monthly_summary.rename(columns={'Date': 'Month'}, inplace=True)
-
-#         # Add SKU column
-#         monthly_summary['sku'] = sku_id
-
-#         print(f"\nMonthly Forecast for SKU {sku_name} (Next 3 Months):")
-#         print(monthly_summary)
-
-#         return sku_id, monthly_summary
-
-#     except Exception as e:
-#         print(f"Error occurred for SKU {sku_id}: {e}")
-#         return None

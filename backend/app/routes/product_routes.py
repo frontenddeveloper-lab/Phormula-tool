@@ -94,56 +94,6 @@ def get_conversion_rate():
         return jsonify({"error": "Internal server error"}), 500
 
 
-# @product_bp.route('/YearlySKU', methods=['GET'])
-# def YearlySKU():
-#     country = request.args.get('country')
-#     year = request.args.get('year')
-#     year = request.args.get('year')
-
-#     # Validate the query parameters
-#     if not country or not year:
-#         return jsonify({'error': 'Country, and year are required'}), 400
-
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-
-#     try:
-#         # Create the engine for the user-specific database
-#         user_engine = create_engine(db_url)
-        
-#         # Create metadata object and load the table dynamically based on quarter, country, and year
-#         metadata = MetaData()
-#         table_name = f"skuwiseyearly_{user_id}_{country.lower()}_{year}_table"
-#         user_specific_table = Table(table_name, metadata, autoload_with=user_engine)
-
-#         # Fetch data from the table
-#         with user_engine.connect() as conn:
-#             query = user_specific_table.select()
-#             results = conn.execute(query).mappings().all()  # Use .mappings() to get a dictionary-like result
-        
-#         # Convert RowMapping to plain dictionaries
-#         result_dicts = [dict(row) for row in results]
-        
-#         # Return the results with a 200 OK status
-#         return jsonify(result_dicts), 200  # Explicitly return 200 status code
-
-#     except SQLAlchemyError as e:
-#         print(f"Database error: {str(e)}")
-#         return jsonify({'error': 'Error accessing the database'}), 500
-#     except Exception as e:
-#         print(f"Unexpected error: {str(e)}")
-#         return jsonify({'error': 'An error occurred while fetching table data'}), 500
-
 def resolve_country(country, currency):
     country = (country or "").lower()
     currency = (currency or "").lower()
@@ -223,47 +173,6 @@ def YearlySKU():
         return jsonify({'error': 'An error occurred while fetching table data'}), 500
  
     
-# @product_bp.route('/quarterlyskutable', methods=['GET'])
-# def quarterlyskutable():
-#     # Extract query parameters from the URL
-#     quarter = request.args.get('quarter')
-#     country = request.args.get('country')
-#     year = request.args.get('year')
-
-#     # Validate the query parameters
-#     if not quarter or not country or not year:
-#         return jsonify({'error': 'Quarter, country, and year are required'}), 400
-
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-
-#     try:
-#         table_name = f"{quarter}_{user_id}_{country}_{year}_table"
-#         engine = create_engine(db_url)
-#         metadata = MetaData(schema='public')
-
-#         try:
-#             user_specific_table = Table(table_name, metadata, autoload_with=engine)
-#             with engine.connect() as conn:
-#                 query = select(*user_specific_table.columns)
-#                 results = conn.execute(query).mappings().all()
-#             return jsonify([dict(row) for row in results])
-#         except:
-#             return jsonify({'error': f"Table '{table_name}' not found for user {user_id}"}), 404
-
-#     except:
-#         return jsonify({'error': 'An unexpected error occurred'}), 500
-
 def resolve_country(country, currency):
     country = (country or "").lower()
     currency = (currency or "").lower()   # '' if missing
@@ -348,47 +257,91 @@ def get_currency_rates():
     token = auth_header.split(' ')[1]
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
+        _user_id = payload.get('user_id')  # not used, but keeps auth consistent
     except jwt.ExpiredSignatureError:
         return jsonify({'error': 'Token has expired'}), 401
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
     try:
-        # Connect to the admin database where currency_conversion table is located
-        admin_engine = create_engine(db_url1)  # Using admin database
-        
-        # Query the currency_conversion table
+        admin_engine = create_engine(db_url1)
+
         with admin_engine.connect() as conn:
-            # Get the most recent currency rates for each currency-country combination
             query = text("""
-                SELECT DISTINCT ON (user_currency, country) 
+                SELECT DISTINCT ON (user_currency, country)
                     user_currency, country, selected_currency, conversion_rate, month, year
-                FROM currency_conversion 
-                ORDER BY user_currency, country, year DESC, 
-                    CASE month 
-                        WHEN 'january' THEN 1 WHEN 'february' THEN 2 WHEN 'march' THEN 3 
-                        WHEN 'april' THEN 4 WHEN 'may' THEN 5 WHEN 'june' THEN 6 
-                        WHEN 'july' THEN 7 WHEN 'august' THEN 8 WHEN 'september' THEN 9 
-                        WHEN 'october' THEN 10 WHEN 'november' THEN 11 WHEN 'december' THEN 12 
+                FROM currency_conversion
+                ORDER BY user_currency, country, year DESC,
+                    CASE month
+                        WHEN 'january' THEN 1 WHEN 'february' THEN 2 WHEN 'march' THEN 3
+                        WHEN 'april' THEN 4 WHEN 'may' THEN 5 WHEN 'june' THEN 6
+                        WHEN 'july' THEN 7 WHEN 'august' THEN 8 WHEN 'september' THEN 9
+                        WHEN 'october' THEN 10 WHEN 'november' THEN 11 WHEN 'december' THEN 12
                     END DESC
             """)
             results = conn.execute(query).mappings().all()
 
-        # Convert to list of dictionaries
-        currency_rates = [dict(row) for row in results]
+        currency_rates = []
+        for row in results:
+            d = dict(row)
+            # normalize for frontend matching
+            d["user_currency"] = str(d.get("user_currency", "")).strip().lower()
+            d["country"] = str(d.get("country", "")).strip().lower()
+            d["selected_currency"] = str(d.get("selected_currency", "")).strip().lower()
+            currency_rates.append(d)
+
         return jsonify(currency_rates), 200
 
     except SQLAlchemyError as e:
-        print(f"SQLAlchemy Error: {str(e)}")
         return jsonify({'error': 'Database error', 'message': str(e)}), 500
     except Exception as e:
-        print(f"Unexpected Error: {str(e)}")
         return jsonify({'error': 'An error occurred while fetching currency rates', 'message': str(e)}), 500
 
 
+
+MONTHS = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december"
+]
+
+def get_previous_month(month: str, year: str):
+    m = month.strip().lower()
+    y = int(year)
+
+    if m not in MONTHS:
+        return None, None
+
+    idx = MONTHS.index(m)
+    if idx == 0:
+        return "december", str(y - 1)
+    return MONTHS[idx - 1], str(y)
+
+def is_valid_product_name(name):
+    if name is None:
+        return False
+    s = str(name).strip().lower()
+    return s not in ("", "nan", "none", "null", "total")
+
+def build_table_candidates(user_id, country, month, year):
+    """Return [requested_table, fallback_prev_month_table] (fallback may be None)."""
+    requested = f"skuwisemonthly_{user_id}_{country}_{month}{year}"
+    pm, py = get_previous_month(month, year)
+    fallback = f"skuwisemonthly_{user_id}_{country}_{pm}{py}" if pm and py else None
+    return requested, fallback
+
+def select_asp_query(asp_table):
+    """Return a SQLAlchemy select query based on available ASP-like columns."""
+    if hasattr(asp_table.c, 'asp'):
+        return select(asp_table.c.product_name, asp_table.c.asp)
+    if hasattr(asp_table.c, 'net_credits'):
+        return select(asp_table.c.product_name, asp_table.c.net_credits.label('asp'))
+    if hasattr(asp_table.c, 'average_selling_price'):
+        return select(asp_table.c.product_name, asp_table.c.average_selling_price.label('asp'))
+    return None
+
 @product_bp.route('/asp-data', methods=['GET'])
 def get_asp_data():
+    # ---------- AUTH ----------
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
@@ -402,138 +355,103 @@ def get_asp_data():
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
 
-    # Get query parameters
-    country = request.args.get('country', '')
-    month = request.args.get('month', '')
-    year = request.args.get('year', '')
+    # ---------- PARAMS ----------
+    country = request.args.get('country', '').strip().lower()
+    month = request.args.get('month', '').strip().lower()
+    year = request.args.get('year', '').strip()
 
     if not all([country, month, year]):
         return jsonify({'error': 'Country, month, and year parameters are required'}), 400
 
+    if month not in MONTHS:
+        return jsonify({'error': 'Invalid month', 'allowed': MONTHS}), 400
+
     try:
-        # Connect to PostgreSQL
-        user_engine = create_engine(db_url)
-        inspector = inspect(user_engine)
-        
-        # Handle global country case - check multiple tables
-        if country.lower() == 'global':
-            # Try different country combinations for global
-            countries_to_try = ['uk', 'us', 'canada']
+        engine = create_engine(db_url)
+        inspector = inspect(engine)
+        all_tables = set(inspector.get_table_names())
+
+        # ---------- GLOBAL ----------
+        if country == 'global':
             asp_data = []
-            
-            for try_country in countries_to_try:
-                table_name = f"skuwisemonthly_{user_id}_{try_country}_{month}{year}"
-                
-                if table_name in inspector.get_table_names():
-                    try:
-                        metadata = MetaData()
-                        asp_table = Table(table_name, metadata, autoload_with=user_engine)
-                        
-                        with user_engine.connect() as conn:
-                            # Check for ASP column variants
-                            if hasattr(asp_table.c, 'asp'):
-                                query = select(asp_table.c.product_name, asp_table.c.asp)
-                            elif hasattr(asp_table.c, 'net_credits'):
-                                query = select(
-                                    asp_table.c.product_name,
-                                    asp_table.c.net_credits.label('asp')
-                                )
-                            elif hasattr(asp_table.c, 'average_selling_price'):
-                                query = select(
-                                    asp_table.c.product_name,
-                                    asp_table.c.average_selling_price.label('asp')
-                                )
-                            else:
-                                logger.warning(f"No ASP column found in table {table_name}")
-                                continue
-                                
-                            results = conn.execute(query).mappings().all()
-                            
-                            # Add country info to distinguish data
-                            for row in results:
-                                row_dict = dict(row)
-                                row_dict['source_country'] = try_country
-                                asp_data.append(row_dict)
-                                
-                    except Exception as e:
-                        logger.error(f"Error querying table {table_name}: {str(e)}")
+            countries_to_try = ['uk', 'us', 'canada']
+
+            for c in countries_to_try:
+                requested, fallback = build_table_candidates(user_id, c, month, year)
+
+                table_to_use = None
+                if requested in all_tables:
+                    table_to_use = requested
+                elif fallback and fallback in all_tables:
+                    table_to_use = fallback
+                else:
+                    continue
+
+                metadata = MetaData()
+                asp_table = Table(table_to_use, metadata, autoload_with=engine)
+
+                query = select_asp_query(asp_table)
+                if query is None:
+                    continue
+
+                with engine.connect() as conn:
+                    results = conn.execute(query).mappings().all()
+
+                for row in results:
+                    row_dict = dict(row)
+                    if not is_valid_product_name(row_dict.get("product_name")):
                         continue
-            
+                    row_dict['source_country'] = c
+                    asp_data.append(row_dict)
+
             if not asp_data:
-                logger.info(f"No ASP data found for global view - {month}{year}")
                 return jsonify({
                     'error': 'No ASP data found for global view',
-                    'details': f'No data available for {month} {year}',
-                    'suggestion': 'Try a previous month or check if data has been uploaded'
+                    'details': f'No data available for {month} {year}'
                 }), 404
-                
-            logger.info(f"Successfully retrieved ASP data for global view - {month}{year}")
+
             return jsonify(asp_data), 200
-        
+
+        # ---------- SINGLE COUNTRY ----------
+        requested, fallback = build_table_candidates(user_id, country, month, year)
+
+        if requested in all_tables:
+            table_to_use = requested
+        elif fallback and fallback in all_tables:
+            table_to_use = fallback
         else:
-            # Single country case
-            table_name = f"skuwisemonthly_{user_id}_{country}_{month}{year}"
-            
-            # Check if the table exists
-            if table_name not in inspector.get_table_names():
-                logger.warning(f"ASP data table {table_name} not found")
-                return jsonify({
-                    'error': f'ASP data table "{table_name}" not found',
-                    'details': f'No ASP data available for {country.upper()} in {month.capitalize()} {year}',
-                    'suggestion': 'Try a previous month or check if data has been uploaded'
-                }), 404
+            return jsonify({
+                'error': f'ASP data table "{requested}" not found',
+                'details': f'Also checked fallback "{fallback}"'
+            }), 404
 
-            # Load table metadata
-            metadata = MetaData()
-            asp_table = Table(table_name, metadata, autoload_with=user_engine)
+        metadata = MetaData()
+        asp_table = Table(table_to_use, metadata, autoload_with=engine)
 
-            # Query the table for ASP data
-            with user_engine.connect() as conn:
-                # Check for different possible ASP column names
-                if hasattr(asp_table.c, 'asp'):
-                    query = select(asp_table.c.product_name, asp_table.c.asp)
-                elif hasattr(asp_table.c, 'net_credits'):
-                    query = select(
-                        asp_table.c.product_name,
-                        asp_table.c.net_credits.label('asp')
-                    )
-                elif hasattr(asp_table.c, 'average_selling_price'):
-                    query = select(
-                        asp_table.c.product_name,
-                        asp_table.c.average_selling_price.label('asp')
-                    )
-                else:
-                    # Return available columns for debugging
-                    available_columns = [col.name for col in asp_table.columns]
-                    logger.error(f"Cannot determine ASP column in {table_name}. Available columns: {available_columns}")
-                    return jsonify({
-                        'error': 'Cannot determine ASP column',
-                        'available_columns': available_columns,
-                        'table_name': table_name,
-                        'suggestion': 'Check column names in the uploaded data'
-                    }), 404
-                    
-                results = conn.execute(query).mappings().all()
+        query = select_asp_query(asp_table)
+        if query is None:
+            return jsonify({
+                'error': 'Cannot determine ASP column',
+                'available_columns': [c.name for c in asp_table.columns],
+                'table_name': table_to_use
+            }), 404
 
-            # Convert to list of dictionaries
-            asp_data = [dict(row) for row in results]
-            logger.info(f"Successfully retrieved ASP data for {country} - {month}{year}")
-            return jsonify(asp_data), 200
+        with engine.connect() as conn:
+            results = conn.execute(query).mappings().all()
+
+        asp_data = []
+        for r in results:
+            d = dict(r)
+            if not is_valid_product_name(d.get("product_name")):
+                continue
+            asp_data.append(d)
+
+        return jsonify(asp_data), 200
 
     except SQLAlchemyError as e:
-        logger.error(f"SQLAlchemy Error in get_asp_data: {str(e)}")
-        return jsonify({
-            'error': 'Database error', 
-            'message': str(e),
-            'suggestion': 'Contact support if this persists'
-        }), 500
+        return jsonify({'error': 'Database error', 'message': str(e)}), 500
     except Exception as e:
-        logger.error(f"Unexpected Error in get_asp_data: {str(e)}")
-        return jsonify({
-            'error': 'An error occurred while fetching ASP data', 
-            'message': str(e),
-            'suggestion': 'Contact support if this persists'
-        }), 500
+        return jsonify({'error': 'Unexpected error', 'message': str(e)}), 500
 
     
 @product_bp.route('/skup', methods=['POST'])
@@ -737,744 +655,272 @@ def get_error_file(country, month, year):
 
 # @product_bp.route('/get_table_data/<string:file_name>', methods=['GET'])
 # def get_table_data(file_name):
-#     # --- Authorization ---
+#     # --- Auth ---
 #     auth_header = request.headers.get('Authorization')
 #     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
+#         return jsonify({'error': 'Authorization token missing'}), 401
 
 #     token = auth_header.split(' ')[1]
 #     try:
 #         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
 #         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
+#     except:
+#         return jsonify({'error': 'Invalid or expired token'}), 401
 
-#     try:
-#         # Connect to database
-#         user_engine = create_engine(db_url)
-#         connection = user_engine.connect()
-        
-#         print(f"Attempting to access table: {file_name}")
-        
-#         # Check if table exists
-#         inspector = inspect(user_engine)
-#         available_tables = inspector.get_table_names()
-        
-#         print(f"Available tables: {available_tables}")
-        
-#         if file_name not in available_tables:
-#             return jsonify({'error': f'Table "{file_name}" does not exist', 'available_tables': available_tables}), 404
-        
-#         # Use text SQL to be more explicit and avoid SQLAlchemy object handling issues
-#         from sqlalchemy import text
-#         query = text(f'SELECT * FROM "{file_name}"')
-        
-#         # Execute query
-#         result = connection.execute(query)
-        
-#         # Convert to list of dicts - using a safer method
-#         rows = result.fetchall()
-#         columns = result.keys()
-        
-#         # Build dictionary row by row
-#         result_dicts = []
-#         for row in rows:
-#             row_dict = {}
-#             for i, column in enumerate(columns):
-#                 row_dict[column] = row[i]
-#             result_dicts.append(row_dict)
-            
-#         connection.close()
-        
-#         return jsonify(result_dicts), 200
-
-#     except SQLAlchemyError as e:
-#         print(f"SQLAlchemy error: {str(e)}")
-#         return jsonify({'error': 'Database error', 'message': str(e)}), 500
-
-#     except Exception as e:
-#         print(f"Unexpected error: {str(e)}")
-#         import traceback
-#         traceback.print_exc()  # Print full traceback for debugging
-#         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
-
-
-# @product_bp.route('/get_table_data/<string:file_name>', methods=['GET'])
-# def get_table_data(file_name):
-#     # --- Authorization ---
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-
-#     try:
-#         user_engine = create_engine(db_url)
-#         connection = user_engine.connect()
-
-#         print(f"\n🔍 Reading table: {file_name}")
-
-#         inspector = inspect(user_engine)
-#         available_tables = inspector.get_table_names()
-
-#         if file_name not in available_tables:
-#             return jsonify({'error': f'Table "{file_name}" does not exist'}), 404
-
-#         query = text(f'SELECT * FROM "{file_name}"')
-#         result = connection.execute(query)
-
-#         rows = result.fetchall()
-#         columns = list(result.keys())  # ✅ RMKeyView fix – convert to list
-
-#         result_dicts = []
-#         for row in rows:
-#             row_dict = {columns[i]: row[i] for i in range(len(columns))}
-#             result_dicts.append(row_dict)
-
-#         ### ✅ Now Calculate Required Stats
-
-#         def clean(v):
-#             return str(v).strip().replace('"', '').lower()
-
-#         total_cases = len(result_dicts)
-
-#         # error / NoReferralFee / cases to be inquired
-#         error_cases = sum(
-#             1 for r in result_dicts
-#             if clean(r.get("errorstatus")) in ["error", "noreferralfee", "cases to be inquired"]
-#         )
-
-#         # OK cases (CASE INSENSITIVE & REMOVE QUOTES / SPACES)
-#         no_error_cases = sum(
-#             1 for r in result_dicts
-#             if clean(r.get("errorstatus")) == "ok"
-#         )
-
-#         # fees charged high (positive difference)
-#         fees_high_cases = sum(
-#             1 for r in result_dicts
-#             if r.get("difference") not in [None, "", 0]
-#             and float(r.get("difference")) > 0
-#             and clean(r.get("errorstatus")) in ["error", "noreferralfee", "cases to be inquired"]
-#         )
-
-#         # fees charged low (negative difference)
-#         fees_low_cases = sum(
-#             1 for r in result_dicts
-#             if r.get("difference") not in [None, "", 0]
-#             and float(r.get("difference")) < 0
-#             and clean(r.get("errorstatus")) in ["error", "noreferralfee", "cases to be inquired"]
-#         )
-
-#         ### ✅ Print values on terminal
-#         print("\n=== STATISTICS FROM TABLE ===")
-#         print(f"➡ Cases to be analyzed: {total_cases}")
-#         print(f"➡ How many errors: {error_cases}")
-#         print(f"➡ No error cases: {no_error_cases}")
-#         print(f"➡ Cases where fees charged high (+ diff): {fees_high_cases}")
-#         print(f"➡ Cases where fees charged low (- diff): {fees_low_cases}")
-#         print("=================================\n")
-
-
-        
-
-#         # Convert DB rows into DataFrame
-#         df = pd.DataFrame(result_dicts)
-
-#         # Ensure numeric
-#         # Keep only rows where sku is NOT blank / NOT null / NOT "0"
-#         df_valid = df[
-#             df["sku"].astype(str).str.strip().ne("") & 
-#             df["sku"].astype(str).str.strip().ne("0")
-#         ].copy()
-
-#         # Convert required numeric columns
-#         df_valid["sku"] = df_valid["sku"].astype(str).str.strip()
-   
-#         df_valid["difference"] = pd.to_numeric(df_valid["difference"], errors="coerce").fillna(0)
-#         df_valid["applicable_fee"] = pd.to_numeric(df_valid["answer"], errors="coerce").fillna(0)
-#         df_valid["charged_fee"] = pd.to_numeric(df_valid["selling_fees"], errors="coerce").fillna(0)
-#         df_valid["product_sales"] = pd.to_numeric(df_valid["product_sales"], errors="coerce").fillna(0)
-#         df_valid["promotional_rebates"] = pd.to_numeric(df_valid["promotional_rebates"], errors="coerce").fillna(0)
-#         df_valid["other"] = pd.to_numeric(df_valid["other"], errors="coerce").fillna(0)
-
-#         df_valid["Net Sales"] = (
-#             df_valid["product_sales"]
-#             + df_valid["promotional_rebates"]
-#             + df_valid["other"]
-#         )
-#         # df_valid["Net Sales"] = pd.to_numeric(df_valid["product_sales"], errors="coerce").fillna(0)
-#         # df_valid["Units"] = pd.to_numeric(df_valid["quantity"], errors="coerce").fillna(0)
-#         # Clean columns inside df_valid
-#         df_valid["sku"] = df_valid["sku"].astype(str).str.strip()
-#         df_valid["type_norm"] = df_valid["type"].astype(str).str.strip().str.lower()
-#         df_valid["quantity"] = pd.to_numeric(df_valid["quantity"], errors="coerce").fillna(0)
-
-#         # Select only rows where type is order/shipment
-#         mask = df_valid["type_norm"].isin(["order", "shipment"])
-
-#         # Group by SKU and sum quantity for valid rows only
-#         quantity_df = (
-#             df_valid[mask]
-#             .groupby("sku", as_index=False)["quantity"]
-#             .sum()
-#             .rename(columns={"quantity": "Units"})
-#         )
-
-#         df_valid = df_valid.merge(quantity_df, on="sku", how="left")
-#         df_valid["Units"] = df_valid["Units"].fillna(0)
-
-        
-
-
-
-
-
-#         # Assign category based on difference
-#         df_valid["Ref_Fee_Category"] = df_valid["difference"].apply(
-#             lambda x: "Accurate" if x == 0 else ("Undercharged" if x < 0 else "Overcharged")
-#         )
-
-#         # Create summary table
-#         summary = df_valid.groupby("Ref_Fee_Category").agg({
-#             "Units": "sum",
-#             "Net Sales": "sum",
-#             "applicable_fee": "sum",
-#             "charged_fee": "sum",
-#             "difference": "sum"
-#         }).reset_index()
-
-#         # Rename columns for frontend
-#         summary.columns = ["Ref Fees", "Units", "Sales", "Ref Fees Applicable", "Ref Fees Charged", "Overcharged"]
-
-#         # Add total row
-#         total_row = pd.DataFrame([{
-#             "Ref Fees": "Total",
-#             "Units": summary["Units"].sum(),
-#             "Sales": summary["Sales"].sum(),
-#             "Ref Fees Applicable": summary["Ref Fees Applicable"].sum(),
-#             "Ref Fees Charged": summary["Ref Fees Charged"].sum(),
-#             "Overcharged": summary["Overcharged"].sum()
-#         }])
-
-#         summary = pd.concat([summary, total_row], ignore_index=True)
-
-#         print("\n✅ FINAL SUMMARY TABLE (SKU ≠ 0 & NOT BLANK):")
-#         print(summary)
-
-
-#         # table_name = f"referralfee_{user_id}_{country}_{month}_{year}_table"
-
-#         # summary.to_sql(table_name, con=user_engine, index=False, if_exists="replace")
-
-#         # print(f"\n✅ Saved to database → {table_name}")
-
-
-
-#         connection.close()
-
-
-
-#         ### ✅ Return both (table data + stats) to frontend
-#         return jsonify({
-#             "table_data": result_dicts,
-#             "summary_table": summary.to_dict(orient="records"),
-#             "stats": {
-#                 "cases_to_be_analyzed": total_cases,
-#                 "how_many_error": error_cases,
-#                 "no_error": no_error_cases,
-#                 "fees_charged_high": fees_high_cases,
-#                 "fees_charged_low": fees_low_cases
-#             }
-#         }), 200
-
-#     except SQLAlchemyError as e:
-#         print(f"SQLAlchemy error: {str(e)}")
-#         return jsonify({'error': 'Database error', 'message': str(e)}), 500
-
-#     except Exception as e:
-#         print(f"Unexpected error: {str(e)}")
-#         import traceback
-#         traceback.print_exc()
-#         return jsonify({'error': 'Unexpected error occurred', 'message': str(e)}), 500
-
-
-# @product_bp.route('/get_table_data/<string:file_name>', methods=['GET'])
-# def get_table_data(file_name):
-#     # --- Authorization ---
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-    
-
-#      # 🔹 Read country / month / year from query params
 #     country = request.args.get('country')
 #     month = request.args.get('month')
 #     year = request.args.get('year')
 
-
-#     print(f"\n🌍 Query params -> country={country}, month={month}, year={year}")
-#     print(f"📁 File name from URL -> {file_name}\n")
+#     print("\n============================")
+#     print("🔍 DEBUG: Request Received")
+#     print("file_name:", file_name)
+#     print("country:", country)
+#     print("month:", month)
+#     print("year:", year)
+#     print("============================\n")
 
 #     try:
-#         user_engine = create_engine(db_url)
-#         connection = user_engine.connect()
+#         engine = create_engine(db_url)
+#         conn = engine.connect()
 
-#         print(f"\n🔍 Reading table: {file_name}")
+#         inspector = inspect(engine)
+#         tables = inspector.get_table_names()
 
-#         inspector = inspect(user_engine)
-#         available_tables = inspector.get_table_names()
+#         print("🔍 DEBUG: Existing tables in DB:", tables)
 
-#         if file_name not in available_tables:
-#             return jsonify({'error': f'Table "{file_name}" does not exist'}), 404
+#         if file_name not in tables:
+#             print("❌ Table does NOT exist in DB:", file_name)
+#             return jsonify({'error': f'Table {file_name} not found'}), 404
 
-#         query = text(f'SELECT * FROM "{file_name}"')
-#         result = connection.execute(query)
+#         print("🔍 DEBUG: Reading table:", file_name)
+#         raw_df = pd.read_sql(text(f'SELECT * FROM "{file_name}"'), conn)
+#         raw_table_data = raw_df.to_dict(orient="records")
 
-#         rows = result.fetchall()
-#         columns = list(result.keys())
 
-#         sku_table_data = []
-#         sku_table_name = None
+#         print("🔍 DEBUG: Raw rows fetched:", len(raw_df))
 
-#         if country and month and year:
-#             sku_table_name = f"skuwisemonthly_{user_id}_{country.lower()}_{month}{year}".lower()
-#             print(f"🔍 Trying to read sku-wise table: {sku_table_name}")
+#         # df = raw_df.copy()
+#         # df["sku"] = df["sku"] = df["sku"].astype(str).str.strip()
 
-#             if sku_table_name in available_tables:
-#                 sku_query = text(f'SELECT * FROM "{sku_table_name}"')
-#                 sku_result = connection.execute(sku_query)
-#                 sku_rows = sku_result.fetchall()
-#                 sku_cols = list(sku_result.keys())
+#         # df = df[df["sku"].ne("") & df["sku"].ne("0")]
 
-#                 for row in sku_rows:
-#                     row_dict = {sku_cols[i]: row[i] for i in range(len(sku_cols))}
-#                     sku_table_data.append(row_dict)
+#         df = raw_df.copy()
+#         df["other"] = pd.to_numeric(df["other"], errors="coerce").fillna(0)
+#         other_total = float(df["other"].sum())
 
-#                 print(f"✅ Loaded {len(sku_table_data)} rows from {sku_table_name}")
+#         # ✅ Keep real NaN as <NA>, don't convert to "nan" string
+#         df["sku"] = df["sku"].astype("string").str.strip()
+
+#         # ✅ Remove invalid SKUs: NaN, blank, "0", "0.0", "nan", "none"
+#         invalid_skus = {"", "0", "0.0", "nan", "none", "<na>"}
+#         df = df[
+#             df["sku"].notna() &
+#             (~df["sku"].str.lower().isin(invalid_skus))
+#         ]
+
+
+
+#         print("🔍 DEBUG: After SKU cleanup:", len(df))
+
+#         # ✅ RAW ROW-LEVEL split (after SKU cleanup)
+#         df["errorstatus"] = df["errorstatus"].astype(str).str.strip().str.lower()
+
+#         raw_ok_df    = df[df["errorstatus"] == "ok"]
+#         raw_under_df = df[df["errorstatus"] == "undercharged"]
+#         raw_over_df  = df[df["errorstatus"] == "overcharged"]
+
+#         # jo ok/under/over me nahi aata, use no ref fee bucket me daal do
+#         raw_ref_df   = df[~df["errorstatus"].isin(["ok", "undercharged", "overcharged"])]
+
+
+#         numeric_cols = [
+#             "product_sales", "promotional_rebates", "other",
+#             "selling_fees", "answer", "difference", "quantity", "total_value", "fba_fees"
+#         ]
+
+#         print("🔍 DEBUG: Converting numeric columns:", numeric_cols)
+
+#         for col in numeric_cols:
+#             if col in df.columns:
+#                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 #             else:
-#                 print(f"⚠️ SKU-wise table '{sku_table_name}' does not exist")
+#                 print(f"⚠ WARNING: Column missing in DB → {col}")
 
-
-#         result_dicts = []
-#         for row in rows:
-#             row_dict = {columns[i]: row[i] for i in range(len(columns))}
-#             result_dicts.append(row_dict)
-
-#         ### ✅ Calculate Required Stats
-#         def clean(v):
-#             return str(v).strip().replace('"', '').lower()
-
-#         total_cases = len(result_dicts)
-
-#         # error / NoReferralFee / cases to be inquired
-#         error_cases = sum(
-#             1 for r in result_dicts
-#             if clean(r.get("errorstatus")) in ["error", "noreferralfee", "cases to be inquired"]
+#         df["net_sales_total_value"] = (
+#             df["product_sales"] +
+#             df["promotional_rebates"] +
+#             df["other"]
 #         )
 
-#         # OK cases (CASE INSENSITIVE & REMOVE QUOTES / SPACES)
-#         no_error_cases = sum(
-#             1 for r in result_dicts
-#             if clean(r.get("errorstatus")) == "ok"
-#         )
+#         print("🔍 DEBUG: Net Sales calculation done.")
 
-#         # fees charged high (positive difference)
-#         fees_high_cases = sum(
-#             1 for r in result_dicts
-#             if r.get("difference") not in [None, "", 0]
-#             and float(r.get("difference")) > 0
-#             and clean(r.get("errorstatus")) in ["error", "noreferralfee", "cases to be inquired"]
-#         )
+#         def status_row(row):
+#             if str(row["errorstatus"]).lower() == "ok":
+#                 return "Accurate"
+#             if str(row["errorstatus"]).lower() == "overcharged":
+#                 return "Overcharged"
+#             if str(row["errorstatus"]).lower() == "undercharged":
+#                 return "Undercharged"
+#             return "noreferallfee"
 
-#         # fees charged low (negative difference)
-#         fees_low_cases = sum(
-#             1 for r in result_dicts
-#             if r.get("difference") not in [None, "", 0]
-#             and float(r.get("difference")) < 0
-#             and clean(r.get("errorstatus")) in ["error", "noreferralfee", "cases to be inquired"]
-#         )
+#         df["status"] = df.apply(status_row, axis=1)
 
-#         print("\n=== STATISTICS FROM TABLE ===")
-#         print(f"➡ Cases to be analyzed: {total_cases}")
-#         print(f"➡ How many errors: {error_cases}")
-#         print(f"➡ No error cases: {no_error_cases}")
-#         print(f"➡ Cases where fees charged high (+ diff): {fees_high_cases}")
-#         print(f"➡ Cases where fees charged low (- diff): {fees_low_cases}")
-#         print("=================================\n")
+#         print("🔍 DEBUG: Status column generated.")
 
-#         # Convert DB rows into DataFrame
-#         df = pd.DataFrame(result_dicts)
+#         req_cols = [
+#             "sku", "product_name", "product_sales",
+#             "net_sales_total_value", "selling_fees",  "fba_fees",
+#             "answer", "errorstatus", "difference", "status","quantity", "total_value"
+#         ]
 
-#         # Keep only rows where sku is NOT blank / NOT null / NOT "0"
-#         df_valid = df[
-#             df["sku"].astype(str).str.strip().ne("") & 
-#             df["sku"].astype(str).str.strip().ne("0")
-#         ].copy()
+#         final_df = df[req_cols]
 
-#         # Convert required numeric columns
-#         df_valid["sku"] = df_valid["sku"].astype(str).str.strip()
-#         df_valid["difference"] = pd.to_numeric(df_valid["difference"], errors="coerce").fillna(0)
-#         df_valid["applicable_fee"] = pd.to_numeric(df_valid["answer"], errors="coerce").fillna(0)
-#         df_valid["charged_fee"] = pd.to_numeric(df_valid["selling_fees"], errors="coerce").fillna(0)
-#         df_valid["product_sales"] = pd.to_numeric(df_valid["product_sales"], errors="coerce").fillna(0)
-#         df_valid["promotional_rebates"] = pd.to_numeric(df_valid["promotional_rebates"], errors="coerce").fillna(0)
-#         df_valid["other"] = pd.to_numeric(df_valid["other"], errors="coerce").fillna(0)
-#         df_valid["quantity"] = pd.to_numeric(df_valid["quantity"], errors="coerce").fillna(0)
+#         # --- SKU wise aggregation ---
+#         agg_cols = [
+#             "product_sales",
+#             "net_sales_total_value",
+#             "selling_fees",
+#             "fba_fees",
+#             "answer",
+#             "difference",
+#             "quantity",
+#             "total_value"
+#         ]
 
-#         # Calculate Net Sales
-#         df_valid["Net Sales"] = (
-#             df_valid["product_sales"]
-#             + df_valid["promotional_rebates"]
-#             + df_valid["other"]
-#         )
+#         final_df = final_df.groupby(
+#             ["sku", "product_name", "status"], as_index=False
+#         )[agg_cols].sum()
 
-#         # Clean errorstatus and type columns
-#         df_valid["errorstatus_clean"] = df_valid["errorstatus"].astype(str).str.strip().str.lower()
-#         df_valid["type_clean"] = df_valid["type"].astype(str).str.strip().str.lower()
 
-#         # ✅ UNITS CALCULATION - Based on errorstatus and difference
-#         # Accurate: errorstatus = "ok"
-#         # Overcharged: difference > 0
-#         # Undercharged: difference < 0
-#         # Only count rows where type is "order" or "shipment"
-        
-#         # Create a mask for valid type
-#         type_mask = df_valid["type_clean"].isin(["order", "shipment"])
-        
-#         # Calculate units for each category
-#         accurate_units = df_valid[
-#             (df_valid["errorstatus_clean"] == "ok") & type_mask
-#         ]["quantity"].sum()
-        
-#         overcharged_units = df_valid[
-#             (df_valid["difference"] > 0) & type_mask
-#         ]["quantity"].sum()
-        
-#         undercharged_units = df_valid[
-#             (df_valid["difference"] < 0) & type_mask
-#         ]["quantity"].sum()
+#         accurate_df = final_df[final_df["status"] == "Accurate"]
+#         under_df    = final_df[final_df["status"] == "Undercharged"]
+#         over_df     = final_df[final_df["status"] == "Overcharged"]
+#         ref_df      = final_df[final_df["status"] == "noreferallfee"]
 
-#         # ✅ SALES, FEES CALCULATION - Based on errorstatus and difference
-#         # Accurate rows: errorstatus = "ok"
-#         accurate_mask = df_valid["errorstatus_clean"] == "ok"
-#         accurate_sales = df_valid[accurate_mask]["Net Sales"].sum()
-#         accurate_applicable = df_valid[accurate_mask]["applicable_fee"].sum()
-#         accurate_charged = df_valid[accurate_mask]["charged_fee"].sum()
-#         accurate_diff = df_valid[accurate_mask]["difference"].sum()
+#         def create_total_row(df, label):
+#             return pd.DataFrame([{
+#                 "sku": f"Charge - {label}",
+#                 "product_name": "",
+#                 "product_sales": df["product_sales"].sum(),
+#                 "net_sales_total_value": df["net_sales_total_value"].sum(),
+#                 "selling_fees": df["selling_fees"].sum(),
+#                 "fba_fees": df["fba_fees"].sum(),   
+#                 "answer": df["answer"].sum(),
+#                 "quantity": df["quantity"].sum(),
+#                 "total_value": df["total_value"].sum(),
+#                 "errorstatus": "",
+#                 "difference": df["difference"].sum(),
+#                 "status": label
+#             }])
 
-#         # Overcharged rows: difference > 0
-#         overcharged_mask = df_valid["difference"] > 0
-#         overcharged_sales = df_valid[overcharged_mask]["Net Sales"].sum()
-#         overcharged_applicable = df_valid[overcharged_mask]["applicable_fee"].sum()
-#         overcharged_charged = df_valid[overcharged_mask]["charged_fee"].sum()
-#         overcharged_diff = df_valid[overcharged_mask]["difference"].sum()
+#         acc_total  = create_total_row(accurate_df, "Accurate")
+#         under_total = create_total_row(under_df, "Undercharged")
+#         over_total  = create_total_row(over_df, "Overcharged")
+#         ref_total  = create_total_row(ref_df, "noreferallfee")
 
-#         # Undercharged rows: difference < 0
-#         undercharged_mask = df_valid["difference"] < 0
-#         undercharged_sales = df_valid[undercharged_mask]["Net Sales"].sum()
-#         undercharged_applicable = df_valid[undercharged_mask]["applicable_fee"].sum()
-#         undercharged_charged = df_valid[undercharged_mask]["charged_fee"].sum()
-#         undercharged_diff = df_valid[undercharged_mask]["difference"].sum()
-
-#         # Create summary table
-#         summary = pd.DataFrame([
-#             {
-#                 "Ref Fees": "Accurate",
-#                 "Units": accurate_units,
-#                 "Sales": accurate_sales,
-#                 "Ref Fees Applicable": accurate_applicable,
-#                 "Ref Fees Charged": accurate_charged,
-#                 "Overcharged": accurate_diff
-#             },
-#             {
-#                 "Ref Fees": "Undercharged",
-#                 "Units": undercharged_units,
-#                 "Sales": undercharged_sales,
-#                 "Ref Fees Applicable": undercharged_applicable,
-#                 "Ref Fees Charged": undercharged_charged,
-#                 "Overcharged": undercharged_diff
-#             },
-#             {
-#                 "Ref Fees": "Overcharged",
-#                 "Units": overcharged_units,
-#                 "Sales": overcharged_sales,
-#                 "Ref Fees Applicable": overcharged_applicable,
-#                 "Ref Fees Charged": overcharged_charged,
-#                 "Overcharged": overcharged_diff
-#             }
-#         ])
-
-#         # Add total row
-#         total_row = pd.DataFrame([{
-#             "Ref Fees": "Total",
-#             "Units": summary["Units"].sum(),
-#             "Sales": summary["Sales"].sum(),
-#             "Ref Fees Applicable": summary["Ref Fees Applicable"].sum(),
-#             "Ref Fees Charged": summary["Ref Fees Charged"].sum(),
-#             "Overcharged": summary["Overcharged"].sum()
+#         grand_total = pd.DataFrame([{
+#             "sku": "Grand Total",
+#             "product_name": "",
+#             "product_sales": final_df["product_sales"].sum(),
+#             "net_sales_total_value": final_df["net_sales_total_value"].sum(),
+#             "selling_fees": final_df["selling_fees"].sum(),
+#             "fba_fees": final_df["fba_fees"].sum(), 
+#             "answer": final_df["answer"].sum(),
+#             "quantity": final_df["quantity"].sum(),
+#             "total_value": final_df["total_value"].sum(),
+#             "errorstatus": "",
+#             "difference": final_df["difference"].sum(),
+#             "status": "Total"
 #         }])
 
-#         summary = pd.concat([summary, total_row], ignore_index=True)
+#         final_display_df = pd.concat([
+#             acc_total, accurate_df,
+#             under_total, under_df,
+#             over_total, over_df,
+#             ref_total, ref_df,
+#             grand_total
+#         ], ignore_index=True)
 
-#         print("\n✅ FINAL SUMMARY TABLE:")
-#         print(summary)
+#         # now save this one
+#         final_df = final_display_df
 
-#         connection.close()
+#         print("🔍 FINAL DF ROWS:", len(final_df))
+#         print("🔍 FINAL DF COLUMNS:", final_df.columns.tolist())
+
+#         # -------------------------------------------------------
+#         # SAVE TO POSTGRES — FIXED!
+#         # -------------------------------------------------------
+#         if country and month and year:
+#             skutable = f"skuwise_{user_id}_{country}_{month}{year}".lower()
+
+#             print("\n🔍 DEBUG: Saving table to DB:", skutable)
+
+#             final_df.to_sql(
+#                 skutable,
+#                 engine,   # ✅ NOT conn
+#                 if_exists="replace",
+#                 index=False
+#             )
+
+#             print("✅ SUCCESS: Table saved to PostgreSQL:", skutable)
+#         else:
+#             skutable = None
+#             print("⚠ DEBUG: country/month/year missing → NOT saving table.")
+
+        
+
+#         import numpy as np
+#         final_df = final_df.replace({np.nan: 0})
+#         accurate_df = accurate_df.replace({np.nan: 0})
+#         under_df    = under_df.replace({np.nan: 0})
+#         over_df     = over_df.replace({np.nan: 0})
+#         ref_df      = ref_df.replace({np.nan: 0})
+
+
+#         platform_fee_total = 0
+
+#         if country and month and year:
+#             monthly_table = f"skuwisemonthly_{user_id}_{country}_{month}{year}".lower()
+
+#             try:
+#                 # check table exists
+#                 if monthly_table in inspector.get_table_names():
+#                     # sum platform_fee
+#                     res = conn.execute(text(f'''
+#                         SELECT COALESCE(SUM(platform_fee), 0) AS total_platform_fee
+#                         FROM "{monthly_table}"
+#                     ''')).fetchone()
+
+#                     platform_fee_total = float(res[0] or 0)
+#                 else:
+#                     print("⚠ DEBUG: Monthly table not found:", monthly_table)
+
+#             except Exception as e:
+#                 print("⚠ DEBUG: Error reading platform_fee total:", str(e))
+#                 platform_fee_total = 0
+        
+#         conn.close()
+
 
 #         return jsonify({
-#             "table_data": result_dicts,
-#             "summary_table": summary.to_dict(orient="records"),
-#             "stats": {
-#                 "cases_to_be_analyzed": total_cases,
-#                 "how_many_error": error_cases,
-#                 "no_error": no_error_cases,
-#                 "fees_charged_high": fees_high_cases,
-#                 "fees_charged_low": fees_low_cases
-#             },
-#             # ⭐ NEW: sku-wise table returned to frontend
-#             "skuwise_table_name": sku_table_name,
-#             "skuwise_table_data": sku_table_data,
-#             "meta": {
-#                 "file_name": file_name,
-#                 "country": country,
-#                 "month": month,
-#                 "year": year,
-#                 "user_id": user_id
-#             }
-#         }), 200
+#             "success": True,
+#             "message": "SKU wise table generated successfully.",
+#             "table": final_df.to_dict(orient="records"),
+#             "accurate_data": raw_ok_df.to_dict(orient="records"),
+#             "undercharged_data": raw_under_df.to_dict(orient="records"),
+#             "overcharged_data": raw_over_df.to_dict(orient="records"),
+#             "no_ref_fee_data": raw_ref_df.to_dict(orient="records"),
+#             "created_table_name": skutable,
+#             "raw_table": raw_table_data,
+#             "table_name": file_name,   
 
-#     except SQLAlchemyError as e:
-#         print(f"SQLAlchemy error: {str(e)}")
-#         return jsonify({'error': 'Database error', 'message': str(e)}), 500
+#             "platform_fee_total": platform_fee_total,
+#             "other_total": other_total 
+#         })
 
 #     except Exception as e:
-#         print(f"Unexpected error: {str(e)}")
-#         import traceback
-#         traceback.print_exc()
-#         return jsonify({'error': 'Unexpected error occurred', 'message': str(e)}), 500
-
-
-
-@product_bp.route('/get_table_data/<string:file_name>', methods=['GET'])
-def get_table_data(file_name):
-    # --- Auth ---
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({'error': 'Authorization token missing'}), 401
-
-    token = auth_header.split(' ')[1]
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = payload['user_id']
-    except:
-        return jsonify({'error': 'Invalid or expired token'}), 401
-
-    country = request.args.get('country')
-    month = request.args.get('month')
-    year = request.args.get('year')
-
-    print("\n============================")
-    print("🔍 DEBUG: Request Received")
-    print("file_name:", file_name)
-    print("country:", country)
-    print("month:", month)
-    print("year:", year)
-    print("============================\n")
-
-    try:
-        engine = create_engine(db_url)
-        conn = engine.connect()
-
-        inspector = inspect(engine)
-        tables = inspector.get_table_names()
-
-        print("🔍 DEBUG: Existing tables in DB:", tables)
-
-        if file_name not in tables:
-            print("❌ Table does NOT exist in DB:", file_name)
-            return jsonify({'error': f'Table {file_name} not found'}), 404
-
-        print("🔍 DEBUG: Reading table:", file_name)
-        raw_df = pd.read_sql(text(f'SELECT * FROM "{file_name}"'), conn)
-        raw_table_data = raw_df.to_dict(orient="records")
-
-
-        print("🔍 DEBUG: Raw rows fetched:", len(raw_df))
-
-        df = raw_df.copy()
-        df["sku"] = df["sku"] = df["sku"].astype(str).str.strip()
-
-        df = df[df["sku"].ne("") & df["sku"].ne("0")]
-
-        print("🔍 DEBUG: After SKU cleanup:", len(df))
-
-        numeric_cols = [
-            "product_sales", "promotional_rebates", "other",
-            "selling_fees", "answer", "difference", "quantity", "total_value"
-        ]
-
-        print("🔍 DEBUG: Converting numeric columns:", numeric_cols)
-
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-            else:
-                print(f"⚠ WARNING: Column missing in DB → {col}")
-
-        df["net_sales_total_value"] = (
-            df["product_sales"] +
-            df["promotional_rebates"] +
-            df["other"]
-        )
-
-        print("🔍 DEBUG: Net Sales calculation done.")
-
-        def status_row(row):
-            if str(row["errorstatus"]).lower() == "ok":
-                return "Accurate"
-            if str(row["errorstatus"]).lower() == "overcharged":
-                return "Overcharged"
-            if str(row["errorstatus"]).lower() == "undercharged":
-                return "Undercharged"
-            return "noreferallfee"
-
-        df["status"] = df.apply(status_row, axis=1)
-
-        print("🔍 DEBUG: Status column generated.")
-
-        req_cols = [
-            "sku", "product_name", "product_sales",
-            "net_sales_total_value", "selling_fees",
-            "answer", "errorstatus", "difference", "status","quantity", "total_value"
-        ]
-
-        final_df = df[req_cols]
-
-        # --- SKU wise aggregation ---
-        agg_cols = [
-            "product_sales",
-            "net_sales_total_value",
-            "selling_fees",
-            "answer",
-            "difference",
-            "quantity",
-            "total_value"
-        ]
-
-        final_df = final_df.groupby(
-            ["sku", "product_name", "status"], as_index=False
-        )[agg_cols].sum()
-
-
-        accurate_df = final_df[final_df["status"] == "Accurate"]
-        under_df    = final_df[final_df["status"] == "Undercharged"]
-        over_df     = final_df[final_df["status"] == "Overcharged"]
-        ref_df      = final_df[final_df["status"] == "noreferallfee"]
-
-        def create_total_row(df, label):
-            return pd.DataFrame([{
-                "sku": f"Charge - {label}",
-                "product_name": "",
-                "product_sales": df["product_sales"].sum(),
-                "net_sales_total_value": df["net_sales_total_value"].sum(),
-                "selling_fees": df["selling_fees"].sum(),
-                "answer": df["answer"].sum(),
-                "quantity": df["quantity"].sum(),
-                "total_value": df["total_value"].sum(),
-                "errorstatus": "",
-                "difference": df["difference"].sum(),
-                "status": label
-            }])
-
-        acc_total  = create_total_row(accurate_df, "Accurate")
-        under_total = create_total_row(under_df, "Undercharged")
-        over_total  = create_total_row(over_df, "Overcharged")
-        ref_total  = create_total_row(ref_df, "noreferallfee")
-
-        grand_total = pd.DataFrame([{
-            "sku": "Grand Total",
-            "product_name": "",
-            "product_sales": final_df["product_sales"].sum(),
-            "net_sales_total_value": final_df["net_sales_total_value"].sum(),
-            "selling_fees": final_df["selling_fees"].sum(),
-            "answer": final_df["answer"].sum(),
-            "quantity": final_df["quantity"].sum(),
-            "total_value": final_df["total_value"].sum(),
-            "errorstatus": "",
-            "difference": final_df["difference"].sum(),
-            "status": "Total"
-        }])
-
-        final_display_df = pd.concat([
-            acc_total, accurate_df,
-            under_total, under_df,
-            over_total, over_df,
-            ref_total, ref_df,
-            grand_total
-        ], ignore_index=True)
-
-        # now save this one
-        final_df = final_display_df
-
-        print("🔍 FINAL DF ROWS:", len(final_df))
-        print("🔍 FINAL DF COLUMNS:", final_df.columns.tolist())
-
-        # -------------------------------------------------------
-        # SAVE TO POSTGRES — FIXED!
-        # -------------------------------------------------------
-        if country and month and year:
-            skutable = f"skuwise_{user_id}_{country}_{month}{year}".lower()
-
-            print("\n🔍 DEBUG: Saving table to DB:", skutable)
-
-            final_df.to_sql(
-                skutable,
-                engine,   # ✅ NOT conn
-                if_exists="replace",
-                index=False
-            )
-
-            print("✅ SUCCESS: Table saved to PostgreSQL:", skutable)
-        else:
-            skutable = None
-            print("⚠ DEBUG: country/month/year missing → NOT saving table.")
-
-        conn.close()
-
-        import numpy as np
-        final_df = final_df.replace({np.nan: 0})
-
-        return jsonify({
-            "success": True,
-            "message": "SKU wise table generated successfully.",
-            "table": final_df.to_dict(orient="records"),
-            "created_table_name": skutable,
-            "raw_table": raw_table_data,
-            "table_name": file_name,    
-        })
-
-    except Exception as e:
-        print("🔥 ERROR:", str(e))
-        return jsonify({"error": str(e)}), 500
+#         print("🔥 ERROR:", str(e))
+#         return jsonify({"error": str(e)}), 500
 
 
 @product_bp.route('/get_consolidated_table_name/<string:country_name>', methods=['GET'])
@@ -1526,62 +972,6 @@ def get_consolidated_table_name(country_name):
         print(f"Unexpected Error: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
-
-
-
-# @product_bp.route('/skutableprofit/<string:skuwise_file_name>', methods=['GET'])
-# def skutableprofit(skuwise_file_name):
-#     auth_header = request.headers.get('Authorization')
-#     if not auth_header or not auth_header.startswith('Bearer '):
-#         return jsonify({'error': 'Authorization token is missing or invalid'}), 401
-
-#     token = auth_header.split(' ')[1]
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-#         user_id = payload['user_id']
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({'error': 'Token has expired'}), 401
-#     except jwt.InvalidTokenError:
-#         return jsonify({'error': 'Invalid token'}), 401
-
-#     try:
-#         engine = create_engine(db_url)
-#         country = request.args.get('country', '')
-#         month = request.args.get('month', '')
-#         year = request.args.get('year', '')
-
-#         # Determine table name based on country
-#         if country == 'global':
-#             table_name = f"skuwisemonthly_{user_id}_{country}_{month}{year}_table"
-#         elif country and all([month, year]):
-#             table_name = f"skuwise_{user_id}{country}{month}{year}"
-#         else:
-#             table_name = skuwise_file_name
-
-#         metadata = MetaData(schema='public')
-
-#         try:
-#             user_specific_table = Table(table_name, metadata, autoload_with=engine)
-#             with engine.connect() as conn:
-#                 query = select(*user_specific_table.columns)
-#                 results = conn.execute(query).mappings().all()
-#             return jsonify([dict(row) for row in results])
-#         except:
-#             # If the specific table was not found, try the fallback
-#             if table_name != skuwise_file_name:
-#                 try:
-#                     fallback_table = Table(skuwise_file_name, metadata, autoload_with=engine)
-#                     with engine.connect() as conn:
-#                         query = select(*fallback_table.columns)
-#                         results = conn.execute(query).mappings().all()
-#                     return jsonify([dict(row) for row in results])
-#                 except:
-#                     return jsonify({'error': f"Table '{table_name}' or '{skuwise_file_name}' not found for user {user_id}"}), 404
-#             else:
-#                 return jsonify({'error': f"Table '{table_name}' not found for user {user_id}"}), 404
-
-#     except:
-#         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 def resolve_country(country, currency):
     country = (country or "").lower()
@@ -1670,3 +1060,406 @@ def skutableprofit(skuwise_file_name):
     except Exception:
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
+
+
+
+@product_bp.route('/get_table_data/<string:file_name>', methods=['GET'])
+def get_table_data(file_name):
+    # --- Auth ---
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Authorization token missing'}), 401
+
+    token = auth_header.split(' ')[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        user_id = payload['user_id']
+    except:
+        return jsonify({'error': 'Invalid or expired token'}), 401
+
+    country = request.args.get('country')
+    month   = request.args.get('month')   # monthly: "Jan" / "01" etc, quarterly: "Q1"/"Q2" etc (or month inside quarter)
+    year    = request.args.get('year')    # "2025"
+    qtd = (request.args.get("qtd") or "").strip().lower() == "true"
+    ytd = (request.args.get("ytd") or "").strip().lower() == "true"
+    quarter = request.args.get("quarter")  # e.g. Q4
+
+    # decide range
+    if qtd:
+        range_ = "quarterly"
+    elif ytd:
+        range_ = "yearly"
+    else:
+        range_ = "monthly"
+
+    
+
+    print("\n============================")
+    print("🔍 DEBUG: Request Received")
+    print("file_name:", file_name)
+    print("country:", country)
+    print("month:", month)
+    print("year:", year)
+    print("range:", range_)
+    print("quarter:", quarter)
+    print("============================\n")
+
+    def _month_str_to_int(m):
+        if m is None:
+            return None
+        m = str(m).strip()
+        # numeric month
+        if m.isdigit():
+            mi = int(m)
+            return mi if 1 <= mi <= 12 else None
+
+        # short/long month names
+        mm = m.lower()[:3]
+        mapping = {
+            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
+        }
+        return mapping.get(mm)
+
+    def _quarter_to_months(q):
+        q = (q or "").strip().upper()
+        if q in ("Q1", "1"):
+            return [1, 2, 3]
+        if q in ("Q2", "2"):
+            return [4, 5, 6]
+        if q in ("Q3", "3"):
+            return [7, 8, 9]
+        if q in ("Q4", "4"):
+            return [10, 11, 12]
+        return None
+
+    try:
+        engine = create_engine(db_url)
+        conn = engine.connect()
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+
+        print("🔍 DEBUG: Existing tables in DB:", tables)
+
+        # ---------------------------------------------
+        # ✅ DATA SOURCE SELECTION (monthly vs quarter/year)
+        # ---------------------------------------------
+        source_table = None
+
+        if range_ == "monthly":
+            # monthly => use passed file_name table only
+            if file_name not in tables:
+                print("❌ Monthly table does NOT exist in DB:", file_name)
+                return jsonify({'error': f'Table {file_name} not found'}), 404
+            source_table = file_name
+
+        elif range_ in ("quarterly", "yearly"):
+            # quarter/year => use merged table
+            merged_table = f"user_{user_id}_{country}_merge_data_of_all_months".lower()
+            if merged_table not in tables:
+                print("❌ Merged table does NOT exist in DB:", merged_table)
+                return jsonify({'error': f'Merged table {merged_table} not found'}), 404
+            source_table = merged_table
+
+        else:
+            return jsonify({"error": "Invalid range. Use monthly/quarterly/yearly"}), 400
+
+        print("🔍 DEBUG: Reading source table:", source_table)
+        raw_df = pd.read_sql(text(f'SELECT * FROM "{source_table}"'), conn)
+        raw_table_data = raw_df.to_dict(orient="records")
+        print("🔍 DEBUG: Raw rows fetched:", len(raw_df))
+
+        # ---------------------------------------------
+        # ✅ FILTER MONTHS/YEAR IF quarterly/yearly
+        # ---------------------------------------------
+        df = raw_df.copy()
+
+        if range_ in ("quarterly", "yearly"):
+            # Expect merged table to have month/year columns.
+            # We’ll try to filter if columns exist; otherwise we keep whole df (safe fallback).
+            year_val = None
+            try:
+                year_val = int(str(year).strip()) if year is not None else None
+            except:
+                year_val = None
+
+            if "year" in df.columns and year_val is not None:
+                df["year"] = pd.to_numeric(df["year"], errors="coerce")
+                df = df[df["year"] == year_val]
+
+            # month filtering
+            if "month" in df.columns:
+                # convert month col to int 1-12 where possible
+                df["month_num"] = df["month"].apply(_month_str_to_int)
+            elif "month_num" in df.columns:
+                df["month_num"] = pd.to_numeric(df["month_num"], errors="coerce")
+            else:
+                df["month_num"] = None  # can't filter by month
+
+            if range_ == "quarterly":
+                q = quarter or month  # quarter might be in quarter param OR in month param (Q1/Q2..)
+                months_list = _quarter_to_months(q)
+
+                # if quarter not provided, but month is a real month => derive quarter
+                if months_list is None:
+                    m_int = _month_str_to_int(month)
+                    if m_int:
+                        if 1 <= m_int <= 3:
+                            months_list = [1, 2, 3]
+                        elif 4 <= m_int <= 6:
+                            months_list = [4, 5, 6]
+                        elif 7 <= m_int <= 9:
+                            months_list = [7, 8, 9]
+                        else:
+                            months_list = [10, 11, 12]
+
+                if months_list and df["month_num"].notna().any():
+                    df = df[df["month_num"].isin(months_list)]
+
+            elif range_ == "yearly":
+                # yearly => all months of that year (already filtered by year if possible)
+                pass
+
+            # drop helper column if present
+            if "month_num" in df.columns:
+                # keep it if you want; here we drop
+                df = df.drop(columns=["month_num"], errors="ignore")
+
+            print("🔍 DEBUG: After quarter/year filter:", len(df))
+
+        # ---------------------------------------------
+        # EXISTING LOGIC (same formulas) BELOW
+        # ---------------------------------------------
+        # df["other"] = pd.to_numeric(df.get("other", 0), errors="coerce").fillna(0)
+        # other_total = float(df["other"].sum())
+
+        df["other"] = pd.to_numeric(df.get("other", 0), errors="coerce").fillna(0)
+        other_total = float(df["other"].sum())
+
+        # ✅ advertising_total sum
+        if "advertising_total" in df.columns:
+            df["advertising_total"] = pd.to_numeric(df["advertising_total"], errors="coerce").fillna(0)
+            advertising_total_sum = float(df["advertising_total"].sum())
+        else:
+            advertising_total_sum = 0.0
+
+        # ✅ adjust other for frontend
+        other_total_adjusted = other_total - advertising_total_sum
+
+
+        # ✅ Keep real NaN as <NA>, don't convert to "nan" string
+        df["sku"] = df["sku"].astype("string").str.strip()
+
+        # ✅ Remove invalid SKUs
+        invalid_skus = {"", "0", "0.0", "nan", "none", "<na>"}
+        df = df[df["sku"].notna() & (~df["sku"].str.lower().isin(invalid_skus))]
+
+        print("🔍 DEBUG: After SKU cleanup:", len(df))
+
+        # ✅ RAW ROW-LEVEL split (after SKU cleanup)
+        df["errorstatus"] = df["errorstatus"].astype(str).str.strip().str.lower()
+
+        raw_ok_df    = df[df["errorstatus"] == "ok"]
+        raw_under_df = df[df["errorstatus"] == "undercharged"]
+        raw_over_df  = df[df["errorstatus"] == "overcharged"]
+        raw_ref_df   = df[~df["errorstatus"].isin(["ok", "undercharged", "overcharged"])]
+
+        numeric_cols = [
+            "product_sales", "promotional_rebates", "other",
+            "selling_fees", "answer", "difference", "quantity", "total_value", "fba_fees",
+            "platform_fee"
+        ]
+
+        print("🔍 DEBUG: Converting numeric columns:", numeric_cols)
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+        df["net_sales_total_value"] = (
+            df.get("product_sales", 0) +
+            df.get("promotional_rebates", 0) +
+            df.get("other", 0)
+        )
+
+        def status_row(row):
+            es = str(row.get("errorstatus", "")).lower()
+            if es == "ok":
+                return "Accurate"
+            if es == "overcharged":
+                return "Overcharged"
+            if es == "undercharged":
+                return "Undercharged"
+            return "noreferallfee"
+
+        df["status"] = df.apply(status_row, axis=1)
+
+        req_cols = [
+            "sku", "product_name", "product_sales",
+            "net_sales_total_value", "selling_fees", "fba_fees",
+            "answer", "errorstatus", "difference", "status", "quantity", "total_value"
+        ]
+        # keep only available cols
+        req_cols = [c for c in req_cols if c in df.columns]
+        final_df = df[req_cols].copy()
+
+        # --- SKU wise aggregation ---
+        agg_cols = [
+            "product_sales",
+            "net_sales_total_value",
+            "selling_fees",
+            "fba_fees",
+            "answer",
+            "difference",
+            "quantity",
+            "total_value"
+        ]
+        agg_cols = [c for c in agg_cols if c in final_df.columns]
+
+        final_df = final_df.groupby(["sku", "product_name", "status"], as_index=False)[agg_cols].sum()
+
+        accurate_df = final_df[final_df["status"] == "Accurate"]
+        under_df    = final_df[final_df["status"] == "Undercharged"]
+        over_df     = final_df[final_df["status"] == "Overcharged"]
+        ref_df      = final_df[final_df["status"] == "noreferallfee"]
+
+        def create_total_row(_df, label):
+            row = {
+                "sku": f"Charge - {label}",
+                "product_name": "",
+                "errorstatus": "",
+                "status": label
+            }
+            for c in agg_cols:
+                row[c] = float(_df[c].sum())
+            return pd.DataFrame([row])
+
+        acc_total   = create_total_row(accurate_df, "Accurate")
+        under_total = create_total_row(under_df, "Undercharged")
+        over_total  = create_total_row(over_df, "Overcharged")
+        ref_total   = create_total_row(ref_df, "noreferallfee")
+
+        grand_row = {
+            "sku": "Grand Total",
+            "product_name": "",
+            "errorstatus": "",
+            "status": "Total"
+        }
+        for c in agg_cols:
+            grand_row[c] = float(final_df[c].sum())
+        grand_total = pd.DataFrame([grand_row])
+
+        final_display_df = pd.concat(
+            [acc_total, accurate_df, under_total, under_df, over_total, over_df, ref_total, ref_df, grand_total],
+            ignore_index=True
+        )
+
+        final_df = final_display_df
+
+        # ---------------------------------------------
+        # ✅ SAVE SKUWISE TABLES (monthly / quarter / year)
+        # ---------------------------------------------
+        skutable = None
+        if country and year and (range_ != "monthly" or month):
+            if range_ == "monthly":
+                skutable = f"skuwise_{user_id}_{country}_{month}{year}".lower()
+
+            elif range_ == "quarterly":
+                q = (quarter or month or "").strip().upper()
+                if not q.startswith("Q"):
+                    # derive from month if month is like "Jan"/"2"
+                    m_int = _month_str_to_int(month)
+                    if m_int:
+                        q = "Q1" if 1 <= m_int <= 3 else "Q2" if 4 <= m_int <= 6 else "Q3" if 7 <= m_int <= 9 else "Q4"
+                skutable = f"skuwisequarter_{user_id}_{country}_{q}{year}".lower()
+
+            elif range_ == "yearly":
+                skutable = f"skuwiseyear_{user_id}_{country}_{year}".lower()
+
+            if skutable:
+                print("\n🔍 DEBUG: Saving table to DB:", skutable)
+                final_df.to_sql(skutable, engine, if_exists="replace", index=False)
+                print("✅ SUCCESS: Table saved to PostgreSQL:", skutable)
+
+        # ---------------------------------------------
+        # ✅ PLATFORM FEE TOTAL (monthly/quarter/year)
+        # ---------------------------------------------
+        # ---------------------------------------------
+        # ✅ PLATFORM FEE TOTAL (monthly/quarter/year)
+        # ---------------------------------------------
+        platform_fee_total = 0.0
+        try:
+            # ✅ Best: filtered df se sum (works for monthly/quarterly/yearly)
+            if "platform_fee" in df.columns:
+                platform_fee_total = float(pd.to_numeric(df["platform_fee"], errors="coerce").fillna(0).sum())
+            else:
+                # ✅ Fallback: direct table se sum (as you asked)
+                table_for_fee = None
+
+                if range_ == "monthly" and country and month and year:
+                    # NOTE: agar aapke monthly ka actual name _table suffix ke saath hai to yahan add kar do
+                    table_for_fee = f"skuwisemonthly_{user_id}_{country}_{month}{year}".lower()
+
+                elif range_ == "quarterly" and country and year:
+                    q = (quarter or month or "").strip().upper()
+
+                    # derive quarter number (1–4)
+                    if q.startswith("Q"):
+                        q_num = q.replace("Q", "")
+                    else:
+                        m_int = _month_str_to_int(month)
+                        if m_int:
+                            q_num = "1" if 1 <= m_int <= 3 else "2" if 4 <= m_int <= 6 else "3" if 7 <= m_int <= 9 else "4"
+                        else:
+                            q_num = None
+
+                    if q_num:
+                        table_for_fee = f"quarter{q_num}_{user_id}_{country}_{year}_table".lower()
+
+
+                elif range_ == "yearly" and country and year:
+                    # ✅ your required format
+                    table_for_fee = f"skuwiseyearly_{user_id}_{country}_{year}_table".lower()
+
+                if table_for_fee and table_for_fee in inspector.get_table_names():
+                    res = conn.execute(text(f'''
+                        SELECT COALESCE(SUM(platform_fee), 0) AS total_platform_fee
+                        FROM "{table_for_fee}"
+                    ''')).fetchone()
+                    platform_fee_total = float(res[0] or 0)
+
+        except Exception as e:
+            print("⚠ DEBUG: Error reading platform_fee total:", str(e))
+            platform_fee_total = 0.0
+
+
+        conn.close()
+
+        import numpy as np
+        final_df    = final_df.replace({np.nan: 0})
+        accurate_df = accurate_df.replace({np.nan: 0})
+        under_df    = under_df.replace({np.nan: 0})
+        over_df     = over_df.replace({np.nan: 0})
+        ref_df      = ref_df.replace({np.nan: 0})
+
+        return jsonify({
+            "success": True,
+            "message": "SKU wise table generated successfully.",
+            "range": range_,
+            "table": final_df.to_dict(orient="records"),
+            "accurate_data": raw_ok_df.to_dict(orient="records"),
+            "undercharged_data": raw_under_df.to_dict(orient="records"),
+            "overcharged_data": raw_over_df.to_dict(orient="records"),
+            "no_ref_fee_data": raw_ref_df.to_dict(orient="records"),
+            "created_table_name": skutable,
+            "raw_table": raw_table_data,     # raw of source table (monthly or merged)
+            "table_name": source_table,      # which table was used
+
+            "platform_fee_total": platform_fee_total,
+            "other_total": other_total_adjusted,
+            "advertising_total": advertising_total_sum,
+
+        })
+
+    except Exception as e:
+        print("🔥 ERROR:", str(e))
+        return jsonify({"error": str(e)}), 500
