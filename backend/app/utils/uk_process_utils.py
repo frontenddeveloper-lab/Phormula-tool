@@ -231,7 +231,7 @@ def process_skuwise_data(user_id, country, month, year):
 
         # Robust "Transfer" filter
         type_str = df.get("type", pd.Series("", index=df.index)).astype(str).str.strip()
-        transfer_df = df[type_str.eq("Transfer")]
+        transfer_df = df[type_str.isin(["Transfer", "DebtRecovery"])]
         rembursement_fee_desc_sum = abs(transfer_df["total"].sum()) if "total" in transfer_df else 0
         rembursement_fee_col_sum = df["net_reimbursement"].sum() if "net_reimbursement" in df.columns else 0
         rembursement_fee = rembursement_fee_desc_sum + rembursement_fee_col_sum
@@ -276,7 +276,7 @@ def process_skuwise_data(user_id, country, month, year):
 
         lost_total_df = (
             df.loc[lost_mask]
-            .groupby("sku", as_index=False)["total"]
+            .groupby("sku", as_index=False)["total"]    
             .sum()
             .rename(columns={"total": "lost_total"})
         )
@@ -314,7 +314,14 @@ def process_skuwise_data(user_id, country, month, year):
             "MISSING_FROM_INBOUND",
             "Refund",
             "Disbursement",
-        
+            "DebtPayment",
+          
+          
+          
+            
+            "VineCharge", "DealParticipationEvent",
+            "DealPerformanceEvent",
+            
         }
 
         EXCLUDE_TYPES = {"Transfer", "Refund"}
@@ -800,9 +807,11 @@ def process_skuwise_data(user_id, country, month, year):
         # Additional Metrics
         platform_fee = float(platform_total)
         advertising_total = float(advertising_total_all)
+        lost_total_amount = float(pd.to_numeric(sku_grouped["lost_total"], errors="coerce").fillna(0).sum())
+
 
         reimbursement_vs_sales = abs((rembursement_fee / total_sales) * 100) if total_sales != 0 else 0
-        cm2_profit = total_profit - (abs(advertising_total) + abs(platform_fee))
+        cm2_profit = total_profit - lost_total_amount - (abs(advertising_total) + abs(platform_fee))
         cm2_margins = (cm2_profit / total_sales) * 100 if total_sales != 0 else 0
         acos = (advertising_total / total_sales) * 100 if total_sales != 0 else 0
         rembursment_vs_cm2_margins = abs((rembursement_fee / cm2_profit) * 100) if cm2_profit != 0 else 0
@@ -845,7 +854,7 @@ def process_skuwise_data(user_id, country, month, year):
         sum_row["platform_fee"] = abs(platform_fee)
         # sum_row["rembursement_fee"]= abs(rembursement_fee)
         lost_total_total = float(sum_row.get("lost_total", 0) or 0)
-        sum_row["rembursement_fee"] = abs(rembursement_fee) - abs(lost_total_total)
+        sum_row["rembursement_fee"] = abs(rembursement_fee) 
 
         sum_row["advertising_total"]= abs(advertising_total)
         sum_row["reimbursement_vs_sales"]= abs(reimbursement_vs_sales)
