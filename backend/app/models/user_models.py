@@ -201,28 +201,6 @@ class HistoricAISummary(db.Model):
         )
 
  
-class HistoricAISummary(db.Model):
-    __tablename__ = 'historic_ai_summary'
-    __bind_key__ = 'chatbot'
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
-    country = Column(String(255), nullable=False)
-    marketplace_id = Column(Integer, nullable=True)
-    period = Column(
-        Enum('monthly', 'quarterly', 'yearly', name='period_enum'),
-        nullable=False
-    )
-    timeline = Column(String(50), nullable=False)
-    year = Column(Integer, nullable=False)
-    summary = Column(Text, nullable=False)
-    recommendations = Column(Text, nullable=True)
-
-    def __repr__(self):
-        return (
-            f"<HistoricAISummary user_id={self.user_id}, "
-            f"period={self.period}, timeline={self.timeline}, year={self.year}>"
-        )
     
 # ------------------------------------------------- Shopify Models -------------------------------------------------
 

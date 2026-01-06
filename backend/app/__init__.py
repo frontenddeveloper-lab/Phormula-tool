@@ -93,6 +93,7 @@ def create_app():
     from app.routes.amazon_sales_api_routes import amazon_sales_api_bp
     # from app.routes.amazon_live_api_routes import amazon_live_api_bp
     from app.routes.live_data_bi_routes import live_data_bi_bp
+    from app.routes.monthwise_ai_summary_routes import summary_bp
     
      # Register the new fee_preview_bp
    
@@ -122,6 +123,9 @@ def create_app():
     app.register_blueprint(amazon_sales_api_bp)
     # app.register_blueprint(amazon_live_api_bp)
     app.register_blueprint(live_data_bi_bp)
+    app.register_blueprint(summary_bp)
+    
+     # Create tables and handle migrations
     
     
     

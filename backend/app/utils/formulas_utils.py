@@ -26,16 +26,39 @@ def norm_sku_series(s: pd.Series) -> pd.Series:
 
 
 def sku_mask(df: pd.DataFrame) -> pd.Series:
-    """
-    Strict SKU presence: drop NaN / "", "0", "none", "null", "nan".
-    Used by per-SKU breakdowns when you want to enforce valid SKUs only.
-    (For UK totals we still use ALL rows; this mask is for breakdowns.)
-    """
     if "sku" not in df.columns or df.empty:
-        return pd.Series([False] * len(df), index=df.index)
-    norm = norm_sku_series(df["sku"])
-    bad = norm.eq("") | norm.eq("0") | norm.eq("none") | norm.eq("null") | norm.eq("nan")
+        print("[sku_mask] No SKU column or empty DF")
+        return pd.Series(False, index=df.index)
+
+    norm = (
+        df["sku"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    zero_like = norm.str.fullmatch(r"0+(\.0+)?")
+
+    bad = (
+        norm.eq("")
+        | norm.isin({"none", "null", "nan"})
+        | zero_like.fillna(False)
+    )
+
+
+    if bad.any():
+        print("Sample invalid SKUs:")
+        print(
+            df.loc[bad, "sku"]
+            .astype(str)
+            .value_counts()
+            .head(10)
+        )
+
     return ~bad
+
+
+
 
 
 def agg_by(df: pd.DataFrame, by_col: str, cols: List[str]) -> pd.DataFrame:
@@ -64,32 +87,34 @@ def agg_by(df: pd.DataFrame, by_col: str, cols: List[str]) -> pd.DataFrame:
 
 # ---------- UK-only core formulas --------------------------------------------
 # Sales (UK) = product_sales + promotional_rebates + other
+
+
 def uk_sales(df: pd.DataFrame, *, country: Optional[str] = None,
-             want_breakdown: Optional[bool] = None, **kwargs) -> Tuple[float, pd.DataFrame, List[str]]:
+             want_breakdown: Optional[bool] = None, **kwargs):
+
     parts = ["product_sales", "promotional_rebates", "other"]
 
-    # Totals use ALL rows (UK scope keeps all rows)
-    totals = [safe_num(df.get(c, 0.0)).sum() for c in parts]
+    # ✅ FILTER INVALID SKUs FOR TOTALS
+    sales_df = df
+    if "sku" in df.columns:
+        sales_df = df.loc[sku_mask(df)]
+
+    totals = [safe_num(sales_df.get(c, 0.0)).sum() for c in parts]
     total = float(sum(totals))
 
-    # Per-SKU breakdown uses only valid SKUs (to avoid noise)
-    sku_df = df.copy()
-    if "sku" in sku_df.columns:
-        sku_df = sku_df.loc[sku_mask(sku_df)]
-    by = agg_by(sku_df, "sku", parts)
+    # Per-SKU breakdown (unchanged)
+    by = agg_by(sales_df, "sku", parts)
 
     if by.empty:
         return 0.0, pd.DataFrame(columns=["sku", "__metric__", *parts]), parts
 
     by["__metric__"] = by[parts].sum(axis=1)
-    per_sku = by[["sku", "__metric__", *parts]]
-    return total, per_sku, parts
+    return total, by[["sku", "__metric__", *parts]], parts
 
 
-# Tax (UK) = product_sales_tax + marketplace_facilitator_tax + shipping_credits_tax
-#            + giftwrap_credits_tax + promotional_rebates_tax + other_transaction_fees
 def uk_tax(df: pd.DataFrame, *, country: Optional[str] = None,
-           want_breakdown: Optional[bool] = None, **kwargs) -> Tuple[float, pd.DataFrame, List[str]]:
+           want_breakdown: Optional[bool] = None, **kwargs):
+
     parts = [
         "product_sales_tax",
         "marketplace_facilitator_tax",
@@ -99,20 +124,22 @@ def uk_tax(df: pd.DataFrame, *, country: Optional[str] = None,
         "other_transaction_fees",
     ]
 
-    totals = [safe_num(df.get(c, 0.0)).sum() for c in parts]
+    # ✅ FILTER INVALID SKUs FOR TOTALS
+    tax_df = df
+    if "sku" in df.columns:
+        tax_df = df.loc[sku_mask(df)]
+
+    totals = [safe_num(tax_df.get(c, 0.0)).sum() for c in parts]
     total = float(sum(totals))
 
-    sku_df = df.copy()
-    if "sku" in sku_df.columns:
-        sku_df = sku_df.loc[sku_mask(sku_df)]
-    by = agg_by(sku_df, "sku", parts)
+    by = agg_by(tax_df, "sku", parts)
 
     if by.empty:
         return 0.0, pd.DataFrame(columns=["sku", "__metric__", *parts]), parts
 
     by["__metric__"] = by[parts].sum(axis=1)
-    per_sku = by[["sku", "__metric__", *parts]]
-    return total, per_sku, parts
+    return total, by[["sku", "__metric__", *parts]], parts
+
 
 
 # Credits (UK) = postage_credits + gift_wrap_credits
@@ -423,16 +450,20 @@ def uk_advertising(
 # ---------- convenience -------------------------------------------------------
 def uk_all(df: pd.DataFrame) -> dict:
     """
-    Convenience: compute all UK metrics at once.
-    Returns a dict of {name: (total, per_sku_df, components)}.
+    Canonical UK metrics.
+    NOTE: 'sales' here represents NET SALES by business definition.
     """
     return {
-        "sales": uk_sales(df),
+        "net_sales": uk_sales(df),        # alias for clarity
         "tax": uk_tax(df),
         "credits": uk_credits(df),
         "amazon_fee": uk_amazon_fee(df),
+        "platform_fee": uk_platform_fee(df),
+        "advertising": uk_advertising(df),
         "profit": uk_profit(df),
     }
+
+
 
 
 __all__ = [
