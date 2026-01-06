@@ -2946,6 +2946,7 @@ def fetch_previous_period_data(user_id, country, prev_start: date, prev_end: dat
 
 
 def get_previous_month_mtd_payload(user_id: int, country: str, now_utc: datetime) -> dict:
+    # MTD range (keep existing behavior)
     prev_start, prev_end = previous_month_mtd_range(now_utc)
 
     sku_metrics, prev_totals, _daily_series = fetch_previous_period_data(
@@ -2955,11 +2956,25 @@ def get_previous_month_mtd_payload(user_id: int, country: str, now_utc: datetime
         prev_end=prev_end,
     )
 
+    # ✅ Full previous month range (ONLY for reimbursement)
+    full_start, full_end = previous_month_full_range(now_utc)
+    full_month_reimbursement = fetch_net_reimbursement_for_period(
+        user_id=user_id,
+        country=country,
+        start_d=full_start,
+        end_d=full_end,
+    )
+
+    # ✅ override only this field
+    prev_totals["previous_net_reimbursement"] = round(full_month_reimbursement, 2)
+
     return {
         "prev_start": prev_start.isoformat(),
         "prev_end": prev_end.isoformat(),
-        "totals": prev_totals,      # ✅ total only
-        "sku_metrics": sku_metrics, # keep if you need per-sku table
+        "reimbursement_start": full_start.isoformat(),
+        "reimbursement_end": full_end.isoformat(),
+        "totals": prev_totals,
+        "sku_metrics": sku_metrics,
     }
 
 
@@ -2991,4 +3006,52 @@ def compute_net_reimbursement_from_df(df: pd.DataFrame) -> float:
     return float(net or 0.0)
 
 
+def previous_month_full_range(now_utc: datetime) -> tuple[date, date]:
+    # previous month/year
+    if now_utc.month == 1:
+        py, pm = now_utc.year - 1, 12
+    else:
+        py, pm = now_utc.year, now_utc.month - 1
+
+    start = date(py, pm, 1)
+    end = date(py, pm, calendar.monthrange(py, pm)[1])
+    return start, end
+
+def fetch_net_reimbursement_for_period(user_id, country, start_d: date, end_d: date) -> float:
+    table_name = construct_prev_table_name(
+        user_id=user_id,
+        country=country,
+        month=start_d.month,
+        year=start_d.year,
+    )
+    table_name = _safe_sql_identifier_table(table_name)
+
+    query = text(f"""
+        SELECT type, description, total
+        FROM (
+            SELECT
+                type,
+                description,
+                total,
+                NULLIF(NULLIF(date_time, '0'), '')::timestamp AS date_ts
+            FROM {table_name}
+        ) t
+        WHERE date_ts >= :start_ts
+        AND date_ts < :end_ts_excl
+    """)
+
+
+    params = {
+        "start_ts": datetime.combine(start_d, datetime.min.time()),
+        "end_ts_excl": datetime.combine(end_d + timedelta(days=1), datetime.min.time()),
+    }
+
+    with engine_hist.connect() as conn:
+        result = conn.execute(query, params)
+        rows = result.fetchall()
+        if not rows:
+            return 0.0
+        df = pd.DataFrame(rows, columns=result.keys())
+
+    return float(compute_net_reimbursement_from_df(df) or 0.0)
 

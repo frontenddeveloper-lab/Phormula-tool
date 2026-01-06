@@ -1,65 +1,52 @@
+# ===========================
+# Optimized Fee Preview Module
+# ===========================
 from __future__ import annotations
-import base64, io, os,time, gzip, csv, logging
-import pandas as pd
+
+import base64, io, os, time, gzip, csv, logging, jwt, requests
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-import jwt, requests
+
+import numpy as np
+import pandas as pd
+
 from Crypto.Cipher import AES
 from dotenv import find_dotenv, load_dotenv
-from flask import Blueprint,  jsonify, request
+from flask import Blueprint, jsonify, request
+
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import and_, or_, text
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import inspect
+
+from config import Config
 from app import db
-from app.models.user_models import CountryProfile, Category
+from app.models.user_models import CountryProfile, Category, Fee
 from app.utils.amazon_utils import amazon_client, _apply_region_and_marketplace_from_request
-from sqlalchemy import and_, or_
-import numpy as np 
-from config import Config
-SECRET_KEY = Config.SECRET_KEY
-from sqlalchemy import create_engine
-from sqlalchemy import MetaData, Table, Column, Integer, String, Float, text
-from app.models.user_models import db,Fee
-from sqlalchemy.orm import sessionmaker
-
-
-from dotenv import load_dotenv
-from sqlalchemy import MetaData
-# App config / auth
-from config import Config
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import func
 
 SECRET_KEY = Config.SECRET_KEY
 
-# --- load .env robustly (works no matter where you run `flask run`) ---
+# --- load .env robustly ---
 dotenv_path = find_dotenv(filename=".env", usecwd=True)
 load_dotenv(dotenv_path, override=True)
 
 logger = logging.getLogger("amazon_sp_api")
 logging.basicConfig(level=logging.INFO)
-load_dotenv()
-db_url  = os.getenv('DATABASE_URL')
-db_url1 = os.getenv('DATABASE_ADMIN_URL') or db_url  # fallback
 
+db_url  = os.getenv("DATABASE_URL")
+db_url1 = os.getenv("DATABASE_ADMIN_URL") or db_url  # fallback
 
 if not db_url:
     raise RuntimeError("DATABASE_URL is not set")
 if not db_url1:
-    # optional: log a warning if using fallback
     print("[WARN] DATABASE_ADMIN_URL not set; falling back to DATABASE_URL")
 
 fee_preview_bp = Blueprint("fee_preview", __name__)
 
-
-
-
-
-
-# ------------------------------------------- Fee Preview header map ----------------------------------------
-
-
-# --------------------------
+# -------------------------------------------
 # Header map & type coercion
-# --------------------------
+# -------------------------------------------
 FEE_PREVIEW_HEADER_MAP = {
     'sku':                       'sku',
     'fnsku':                     'fnsku',
@@ -93,7 +80,6 @@ FEE_PREVIEW_HEADER_MAP = {
     'expected-efn-fulfilment-fee-per-unit-es':       'expected_efn_fulfilment_fee_per_unit_es',
     'expected-efn-fulfilment-fee-per-unit-se':       'expected_efn_fulfilment_fee_per_unit_se',
 }
-# common aliases found in other exports
 FEE_PREVIEW_HEADER_MAP.update({
     'seller-sku': 'sku',
     'item-name': 'product_name',
@@ -125,19 +111,15 @@ def _coerce_decimal(v):
     except InvalidOperation:
         return None
 
-# --------------------------
-# CSV/TSV parsing
-# --------------------------
+# -------------------------------------------
+# CSV/TSV parsing (fast)
+# -------------------------------------------
 def _read_fee_bytes(raw: bytes):
-    """
-    Detects delimiter (tab vs comma). Returns list of dicts with normalized keys.
-    """
     sample = raw[:4096].decode('utf-8', errors='replace')
     delim = '\t' if sample.count('\t') > sample.count(',') else ','
     rdr = csv.DictReader(io.StringIO(raw.decode('utf-8', errors='replace')), delimiter=delim)
 
     def _norm_key(k: str) -> str:
-        # normalize headers to expected keys
         return (k or '').strip().lower().replace('  ', ' ').replace(' ', '-')
 
     rows = []
@@ -145,9 +127,9 @@ def _read_fee_bytes(raw: bytes):
         rows.append({_norm_key(k): (v or '').strip() for k, v in r.items()})
     return rows
 
-# --------------------------
-# Normalization & dedupe
-# --------------------------
+# -------------------------------------------
+# Normalize & dedupe
+# -------------------------------------------
 def _normalize_fee_row(r: dict, user_id: int, marketplace_id: str) -> dict:
     sku = (r.get("sku") or "").strip()
     mp  = (marketplace_id or "").strip()
@@ -170,26 +152,21 @@ def _normalize_fee_row(r: dict, user_id: int, marketplace_id: str) -> dict:
     return out
 
 def _dedupe_fee_rows(rows: list[dict]) -> list[dict]:
-    """
-    Deduplicate on (user_id, sku, marketplace_id). Last row wins.
-    Skips rows with missing keys.
-    """
     by_key = {}
     for r in rows:
         k = (r.get("user_id"), r.get("sku"), r.get("marketplace_id"))
         if not k[0] or not k[1] or not k[2]:
             continue
-        by_key[k] = r
+        by_key[k] = r  # last wins
     return list(by_key.values())
 
-# --------------------------
-# Upsert (fixes cardinality)
-# --------------------------
+# -------------------------------------------
+# Upsert Fee table (fast + safe)
+# -------------------------------------------
+# Precompute update columns once
+_FEE_UPSERT_COLS = sorted(set(FEE_PREVIEW_HEADER_MAP.values()))
+
 def _upsert_fee_preview(rows: list[dict]) -> int:
-    """
-    Upsert on (user_id, sku, marketplace_id) using uq_fee_user_sku_mkt.
-    We DEDUPE the batch first to avoid the Postgres "affect row a second time" error.
-    """
     if not rows:
         return 0
     unique_rows = _dedupe_fee_rows(rows)
@@ -197,15 +174,13 @@ def _upsert_fee_preview(rows: list[dict]) -> int:
         return 0
 
     stmt = pg_insert(Fee).values(unique_rows)
-
     excluded = stmt.excluded
-    # Build SET mapping only for columns that exist on excluded
+
     update_cols = {}
-    for col in set(FEE_PREVIEW_HEADER_MAP.values()):
+    for col in _FEE_UPSERT_COLS:
         if hasattr(excluded, col):
             update_cols[col] = getattr(excluded, col)
 
-    # always refresh timestamps
     if hasattr(excluded, "synced_at"):
         update_cols["synced_at"] = getattr(excluded, "synced_at")
     update_cols["updated_at"] = datetime.utcnow()
@@ -219,11 +194,10 @@ def _upsert_fee_preview(rows: list[dict]) -> int:
     db.session.commit()
     return len(unique_rows)
 
-# --------------------------
+# -------------------------------------------
 # SP-API document helpers
-# --------------------------
+# -------------------------------------------
 REPORTS_BASE = "/reports/2021-06-30"
-# Valid fee-preview types (Amazon returns error for invalid types)
 FEE_PREVIEW_REPORT_TYPES = [
     "GET_REFERRAL_FEE_PREVIEW_REPORT",
     "GET_FBA_ESTIMATED_FBA_FEES_TXT_DATA",
@@ -258,7 +232,7 @@ def _download_report_document(doc: dict) -> bytes:
 
 def _create_and_fetch_fee_preview_bytes(marketplace_id: str, timeout_seconds: int = 180) -> bytes:
     """
-    Try both supported report types. Return raw bytes of the CSV/TSV/TXT.
+    Optimized polling: linear backoff to reduce spam + CPU.
     """
     last_err = None
     for rtype in FEE_PREVIEW_REPORT_TYPES:
@@ -281,10 +255,12 @@ def _create_and_fetch_fee_preview_bytes(marketplace_id: str, timeout_seconds: in
                 continue
 
             t0 = time.time()
+            sleep_s = 2
             while True:
                 status_res = amazon_client.make_api_call(f"{REPORTS_BASE}/reports/{report_id}", "GET")
                 if not status_res or "error" in status_res:
                     raise RuntimeError(f"Failed status for {rtype}: {status_res}")
+
                 payload = status_res.get("payload") or status_res
                 proc = payload.get("processingStatus")
 
@@ -302,27 +278,344 @@ def _create_and_fetch_fee_preview_bytes(marketplace_id: str, timeout_seconds: in
 
                 if time.time() - t0 > timeout_seconds:
                     raise TimeoutError(f"Timed out waiting for {rtype} to complete.")
-                time.sleep(2)
+
+                time.sleep(sleep_s)
+                sleep_s = min(20, sleep_s + 2)
+
         except Exception as e:
             last_err = str(e)
             continue
     raise RuntimeError(f"All fee preview report types failed. Last error: {last_err}")
 
-# --------------------------
+# ===========================================
+# OPTIMIZED PIPELINE: Fee -> user table
+#   - chunked bulk insert
+#   - ONE SQL UPDATE for SKU join (no Python loop)
+#   - referral fee mapping via temp-table bulk update (works even if Category is in admin DB)
+# ===========================================
+def _run_feepreview_upload_pipeline_from_fee_table(
+    user_id: int,
+    country: str,
+    marketplace: str,
+    transit_time: int,
+    stock_unit: int,
+    filename_hint: str = "SPAPI_FEE_PREVIEW",
+):
+    country = (country or '').lower().strip()
+    mp = (marketplace or '').strip()
+
+    # 1) Pull Fee rows (only necessary columns) – faster than ORM .all()
+    fee_q = (
+        db.session.query(
+            Fee.sku, Fee.fnsku, Fee.asin, Fee.amazon_store, Fee.product_name, Fee.product_group, Fee.brand,
+            Fee.your_price, Fee.estimated_fee_total, Fee.estimated_referral_fee_per_unit, Fee.fulfilled_by,
+            Fee.has_local_inventory, Fee.sales_price, Fee.longest_side, Fee.median_side, Fee.shortest_side,
+            Fee.length_and_girth, Fee.unit_of_dimension, Fee.item_package_weight, Fee.unit_of_weight,
+            Fee.product_size_weight_band, Fee.currency, Fee.estimated_variable_closing_fee,
+            Fee.expected_domestic_fulfilment_fee_per_unit,
+            Fee.expected_efn_fulfilment_fee_per_unit_uk,
+            Fee.expected_efn_fulfilment_fee_per_unit_de,
+            Fee.expected_efn_fulfilment_fee_per_unit_fr,
+            Fee.expected_efn_fulfilment_fee_per_unit_it,
+            Fee.expected_efn_fulfilment_fee_per_unit_es,
+            Fee.expected_efn_fulfilment_fee_per_unit_se,
+        )
+        .filter(Fee.user_id == user_id, Fee.marketplace_id == mp)
+    )
+
+    fee_rows = fee_q.all()
+    if not fee_rows:
+        return {"inserted": 0, "deleted": 0, "message": "No Fee rows for user/marketplace"}
+
+    # 2) Build DataFrame fast
+    df = pd.DataFrame([{
+        'sku': r[0] or '',
+        'fnsku': r[1] or '',
+        'asin': r[2] or '',
+        'amazon_store': r[3] or '',
+        'product_name': r[4] or '',
+        'product_group': r[5] or '',
+        'brand': r[6] or '',
+        'price': float(r[7]) if r[7] is not None else None,
+        'estimated_fees': float(r[8]) if r[8] is not None else None,
+        'estimated_referral_fee': float(r[9]) if r[9] is not None else None,
+        'fulfilled_by': r[10] or '',
+        'has_local_inventory': (str(r[11]) if r[11] is not None else ''),
+        'sales_price': float(r[12]) if r[12] is not None else None,
+        'longest_side': float(r[13]) if r[13] is not None else None,
+        'median_side': float(r[14]) if r[14] is not None else None,
+        'shortest_side': float(r[15]) if r[15] is not None else None,
+        'length_and_girth': float(r[16]) if r[16] is not None else None,
+        'unit_of_dimension': r[17] or '',
+        'item_package_weight': float(r[18]) if r[18] is not None else None,
+        'unit_of_weight': r[19] or '',
+        'product_size_weight_band': r[20] or '',
+        'currency': r[21] or '',
+        'estimated_variable_closing_fee': float(r[22]) if r[22] is not None else None,
+        'expected_domestic_fulfilment_fee_per_unit': float(r[23]) if r[23] is not None else None,
+        'expected_efn_fulfilment_fee_per_unit_uk': float(r[24]) if r[24] is not None else None,
+        'expected_efn_fulfilment_fee_per_unit_de': float(r[25]) if r[25] is not None else None,
+        'expected_efn_fulfilment_fee_per_unit_fr': float(r[26]) if r[26] is not None else None,
+        'expected_efn_fulfilment_fee_per_unit_it': float(r[27]) if r[27] is not None else None,
+        'expected_efn_fulfilment_fee_per_unit_es': float(r[28]) if r[28] is not None else None,
+        'expected_efn_fulfilment_fee_per_unit_se': float(r[29]) if r[29] is not None else None,
+    } for r in fee_rows])
+
+    # 3) Prep DB engines/sessions
+    user_engine = create_engine(db_url, pool_pre_ping=True)
+    metadata = MetaData()
+
+    admin_engine = create_engine(db_url1, pool_pre_ping=True)
+    AdminSession = sessionmaker(bind=admin_engine)
+    admin_session = AdminSession()
+
+    table_name = f"user_{user_id}_{country}_table"
+
+    # 4) Create table if missing (once)
+    user_specific_table = Table(
+        table_name, metadata,
+        Column('id', Integer, primary_key=True),
+        Column('user_id', Integer, nullable=False),
+        Column('country', String(255), nullable=False),
+        Column('transit_time', Integer, nullable=False),
+        Column('stock_unit', Integer, nullable=False),
+        Column('product_group', String(255), nullable=False),
+        Column('estimated_fees', Float, nullable=True),
+        Column('referral_fee', Float, nullable=True),
+        Column('estimated_referral_fee', Float, nullable=True),
+        Column('marketplace', String(255), nullable=False),
+        Column('file_name', String(255), nullable=False),
+        Column('sku', String(255), nullable=False),
+        Column('fnsku', String(255), nullable=False),
+        Column('amazon_store', String(255), nullable=False),
+        Column('asin', String(255), nullable=False),
+        Column('product_barcode', String(255), nullable=True),
+        Column('sku_cost_price', Float, nullable=True),
+        Column('product_name', String(255), nullable=False),
+        Column('brand', String(255), nullable=False),
+        Column('price', Float, nullable=True),
+        Column('fulfilled_by', String(255), nullable=True),
+        Column('has_local_inventory', String(255), nullable=True),
+        Column('sales_price', Float, nullable=True),
+        Column('longest_side', Float, nullable=True),
+        Column('median_side', Float, nullable=True),
+        Column('shortest_side', Float, nullable=True),
+        Column('length_and_girth', Float, nullable=True),
+        Column('unit_of_dimension', String(50), nullable=True),
+        Column('item_package_weight', Float, nullable=True),
+        Column('unit_of_weight', String(50), nullable=True),
+        Column('product_size_weight_band', String(255), nullable=True),
+        Column('currency', String(10), nullable=True),
+        Column('estimated_variable_closing_fee', Float, nullable=True),
+        Column('expected_domestic_fulfilment_fee_per_unit', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_uk', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_de', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_fr', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_it', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_es', Float, nullable=True),
+        Column('expected_efn_fulfilment_fee_per_unit_se', Float, nullable=True),
+        extend_existing=True,
+    )
+    metadata.create_all(user_engine)
+
+    # Helpful indexes (no-op if already exist)
+    with user_engine.begin() as conn:
+        conn.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_user_asin ON {table_name}(user_id, asin)"))
+        conn.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_user_pg_price ON {table_name}(user_id, product_group, price)"))
+
+    # 5) Clear old rows for this key (fast)
+    with user_engine.begin() as conn:
+        conn.execute(
+            text(f"DELETE FROM {table_name} WHERE user_id = :user_id AND country = :country AND marketplace = :marketplace"),
+            {"user_id": user_id, "country": country, "marketplace": mp}
+        )
+
+    # 6) Bulk insert in chunks (fast, stable)
+    # Add fixed columns once (vectorized)
+    df['user_id'] = user_id
+    df['country'] = country
+    df['transit_time'] = int(transit_time)
+    df['stock_unit'] = int(stock_unit)
+    df['marketplace'] = mp
+    df['file_name'] = filename_hint
+    df['product_barcode'] = None
+    df['sku_cost_price'] = None
+    df['referral_fee'] = None
+
+    # Ensure numeric cols are numeric (vectorized)
+    num_cols = [
+        'price','estimated_fees','estimated_referral_fee','sales_price','longest_side','median_side',
+        'shortest_side','length_and_girth','item_package_weight','estimated_variable_closing_fee',
+        'expected_domestic_fulfilment_fee_per_unit','expected_efn_fulfilment_fee_per_unit_uk',
+        'expected_efn_fulfilment_fee_per_unit_de','expected_efn_fulfilment_fee_per_unit_fr',
+        'expected_efn_fulfilment_fee_per_unit_it','expected_efn_fulfilment_fee_per_unit_es',
+        'expected_efn_fulfilment_fee_per_unit_se'
+    ]
+    for c in num_cols:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors='coerce')
+
+    # Column order matching table
+    insert_cols = [
+        'user_id','country','transit_time','stock_unit','product_group','estimated_fees','referral_fee',
+        'estimated_referral_fee','marketplace','file_name','sku','fnsku','amazon_store','asin',
+        'product_barcode','sku_cost_price','product_name','brand','price','fulfilled_by','has_local_inventory',
+        'sales_price','longest_side','median_side','shortest_side','length_and_girth','unit_of_dimension',
+        'item_package_weight','unit_of_weight','product_size_weight_band','currency','estimated_variable_closing_fee',
+        'expected_domestic_fulfilment_fee_per_unit','expected_efn_fulfilment_fee_per_unit_uk',
+        'expected_efn_fulfilment_fee_per_unit_de','expected_efn_fulfilment_fee_per_unit_fr',
+        'expected_efn_fulfilment_fee_per_unit_it','expected_efn_fulfilment_fee_per_unit_es',
+        'expected_efn_fulfilment_fee_per_unit_se'
+    ]
+    df_ins = df.reindex(columns=insert_cols)
+
+    CHUNK = 2000
+    inserted_rows = 0
+    with user_engine.begin() as conn:
+        for start in range(0, len(df_ins), CHUNK):
+            chunk = df_ins.iloc[start:start+CHUNK]
+            conn.execute(user_specific_table.insert(), chunk.to_dict(orient="records"))
+            inserted_rows += len(chunk)
+
+    # 7) Referral fee mapping (FAST):
+    #    - Pull Category once from admin DB
+    #    - Create temp table in user DB
+    #    - Update user_table in one SQL statement
+    COUNTRY_MAP = {
+        "uk": "United Kingdom",
+        "us": "United States",
+        "uae": "United Arab Emirates",
+        "in": "India",
+    }
+    normalized_country = COUNTRY_MAP.get(country.lower(), country)
+
+    cats = admin_session.query(
+        Category.country,
+        Category.category,
+        Category.price_from,
+        Category.price_to,
+        Category.referral_fee_percent_est
+    ).filter(Category.country == normalized_country).all()
+
+    if cats:
+        df_cat = pd.DataFrame([{
+            "category": (c[1] or "").strip(),
+            "price_from": float(c[2]) if c[2] is not None else 0.0,
+            "price_to": float(c[3]) if c[3] is not None else 0.0,
+            "referral_fee": float(c[4]) if c[4] is not None else None,
+        } for c in cats])
+
+        # Clean category key for matching: same cleaning you were doing (split by & / -)
+        # We'll store multiple keys: full and first_word to increase match rate.
+        def _first_word(x: str) -> str:
+            x = (x or "").strip()
+            if not x:
+                return ""
+            return x.split('&')[0].split('/')[0].split('-')[0].strip()
+
+        df_cat["category_full"] = df_cat["category"].astype(str)
+        df_cat["category_first"] = df_cat["category"].apply(_first_word)
+
+        # Temp table with category bands
+        tmp = f"tmp_cat_map_{user_id}_{int(time.time())}"
+        with user_engine.begin() as conn:
+            conn.execute(text(f"""
+                CREATE TEMP TABLE {tmp}(
+                    category_full  text,
+                    category_first text,
+                    price_from     double precision,
+                    price_to       double precision,
+                    referral_fee   double precision
+                ) ON COMMIT DROP
+            """))
+
+            # Insert temp rows in chunks
+            tmp_rows = df_cat[["category_full","category_first","price_from","price_to","referral_fee"]].to_dict("records")
+            for start in range(0, len(tmp_rows), CHUNK):
+                conn.execute(
+                    text(f"""
+                        INSERT INTO {tmp}(category_full, category_first, price_from, price_to, referral_fee)
+                        VALUES (:category_full, :category_first, :price_from, :price_to, :referral_fee)
+                    """),
+                    tmp_rows[start:start+CHUNK]
+                )
+
+            # One UPDATE using LATERAL pick best match:
+            # - try full match first, else first_word match
+            # - price band condition: (price_from=0 or <= price) and (price_to=0 or >= price)
+            conn.execute(text(f"""
+                UPDATE {table_name} t
+                SET referral_fee = (
+                    SELECT x.referral_fee
+                    FROM {tmp} x
+                    WHERE
+                        (
+                            x.category_full = t.product_group
+                            OR (
+                                x.category_first <> ''
+                                AND x.category_first =
+                                    split_part(
+                                        replace(replace(t.product_group, '/', '&'), '-', '&'),
+                                        '&', 1
+                                    )
+                            )
+                        )
+                        AND (x.price_from = 0 OR x.price_from <= COALESCE(t.price, 0))
+                        AND (x.price_to   = 0 OR x.price_to   >= COALESCE(t.price, 0))
+                    ORDER BY
+                        CASE WHEN x.category_full = t.product_group THEN 0 ELSE 1 END,
+                        x.price_from DESC
+                    LIMIT 1
+                )
+                WHERE t.user_id = :user_id
+                AND t.marketplace = :mp
+                AND t.country = :country
+            """), {"user_id": user_id, "mp": mp, "country": country})
+
+
+    # 8) SKU join update in ONE statement (FAST)
+    sku_table_name = f"sku_{user_id}_data_table"
+    with user_engine.begin() as conn:
+        try:
+            insp = inspect(conn)
+            if insp.has_table(sku_table_name):
+                conn.execute(text(f"""
+                    UPDATE {table_name} t
+                    SET product_barcode = s.product_barcode,
+                        sku_cost_price   = s.price
+                    FROM {sku_table_name} s
+                    WHERE t.user_id = :user_id
+                      AND t.asin = s.asin
+                """), {"user_id": user_id})
+        except Exception:
+            logger.exception("SKU join update failed (ignored)")
+
+    # 9) CountryProfile upsert (avoid delete+insert)
+    # If you have a unique constraint, replace with proper upsert.
+    existing_profile = CountryProfile.query.filter_by(
+        user_id=user_id, country=country, marketplace=mp
+    ).first()
+    if existing_profile:
+        existing_profile.transit_time = transit_time
+        existing_profile.stock_unit = stock_unit
+        db.session.commit()
+    else:
+        db.session.add(CountryProfile(
+            user_id=user_id,
+            country=country,
+            marketplace=mp,
+            transit_time=transit_time,
+            stock_unit=stock_unit
+        ))
+        db.session.commit()
+
+    return {"inserted": inserted_rows, "deleted": 0, "table": table_name}
+
+# ===========================================
 # Routes
-# --------------------------
+# ===========================================
 @fee_preview_bp.route("/amazon_api/fees/sync", methods=["POST", "GET"])
 def fees_sync():
-    """
-    POST:
-      - source=upload + file=<csv|tsv|csv.gz>  -> parse & store
-      - source=report (or omit)                -> SP-API report, parse & store
-      - marketplace_id=<id> (optional; defaults from client)
-    GET:
-      - source=report (default)                -> SP-API report, parse & store
-      - marketplace_id=<id> (optional)
-    """
-    # auth
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({'success': False, 'error': 'Authorization token is missing or invalid'}), 401
@@ -347,19 +640,14 @@ def fees_sync():
     try:
         rows, used_source = [], None
 
-        # Upload path (POST only)
         if request.method == "POST" and (source in ("auto", "upload")) and 'file' in request.files:
             f = request.files['file']
             raw = f.read()
-            try:
-                if raw[:2] == b"\x1f\x8b":  # gzip magic
-                    raw = gzip.decompress(raw)
-            except Exception:
-                pass
+            if raw[:2] == b"\x1f\x8b":
+                raw = gzip.decompress(raw)
             rows = _read_fee_bytes(raw)
             used_source = "upload"
 
-        # SP-API report path (GET or POST)
         if not rows and source in ("auto", "report"):
             blob = _create_and_fetch_fee_preview_bytes(mp)
             rows = _read_fee_bytes(blob)
@@ -401,13 +689,6 @@ def fees_sync():
 
 @fee_preview_bp.route("/amazon_api/fees", methods=["GET"])
 def list_fees():
-    """
-    List stored fees for a marketplace (and optional sku filter).
-    Query:
-      - marketplace_id (optional) defaults from client
-      - sku (optional, exact or prefix match if endswith '*')
-      - limit (default 100)
-    """
     auth_header = request.headers.get('Authorization')
     user_id = None
     if auth_header and auth_header.startswith('Bearer '):
@@ -416,7 +697,7 @@ def list_fees():
             payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
             user_id = payload.get('user_id')
         except Exception:
-            pass  # allow anonymous listing if you want
+            pass
 
     _apply_region_and_marketplace_from_request()
     mp = request.args.get("marketplace_id") or amazon_client.marketplace_id
@@ -461,364 +742,12 @@ def list_fees():
         "items": [_row(i) for i in items]
     }), 200
 
-
-def _run_feepreview_upload_pipeline_from_fee_table(
-    user_id: int,
-    country: str,
-    marketplace: str,
-    transit_time: int,
-    stock_unit: int,
-    
-    filename_hint: str = "SPAPI_FEE_PREVIEW"
-):
-    mp = marketplace
-    """
-    Pull rows FROM Fee table (user_id + marketplace),
-    and insert INTO user_{user_id}_{country}_table
-    then run Category referral fee mapping + SKU join + create CountryProfile.
-    """
-    # 1) Pull rows from Fee table
-    fee_rows = (
-        Fee.query
-        .filter(Fee.user_id == user_id, Fee.marketplace_id == marketplace)
-        .all()
-    )
-    if not fee_rows:
-        return {"inserted": 0, "deleted": 0, "message": "No Fee rows for user/marketplace"}
-
-    # 2) Build a DataFrame (mirror the Excel columns your old route expected)
-    def _val(x):  # helper to convert Decimal -> float or None
-        if x is None: return None
-        try: return float(x)
-        except Exception: return None
-
-    rows = []
-    for f in fee_rows:
-        rows.append({
-            # names SAME as your old Excel-based DF expected:
-            'sku': f.sku or '',
-            'fnsku': f.fnsku or '',
-            'asin': f.asin or '',
-            'amazon-store': f.amazon_store or '',
-            'product-name': f.product_name or '',
-            'product-group': f.product_group or '',
-            'brand': f.brand or '',
-            'your-price': _val(f.your_price) or 0,
-            'estimated-fee-total': _val(f.estimated_fee_total) or 0,
-            'estimated-referral-fee-per-unit': _val(f.estimated_referral_fee_per_unit),
-            'fulfilled-by': f.fulfilled_by or '',
-            'has-local-inventory': str(f.has_local_inventory) if f.has_local_inventory is not None else '',
-            'sales-price': _val(f.sales_price),
-            'longest-side': _val(f.longest_side),
-            'median-side': _val(f.median_side),
-            'shortest-side': _val(f.shortest_side),
-            'length-and-girth': _val(f.length_and_girth),
-            'unit-of-dimension': f.unit_of_dimension or '',
-            'item-package-weight': _val(f.item_package_weight),
-            'unit-of-weight': f.unit_of_weight or '',
-            'product-size-weight-band': f.product_size_weight_band or '',
-            'currency': f.currency or '',
-            'estimated-variable-closing-fee': _val(f.estimated_variable_closing_fee),
-            'expected-domestic-fulfilment-fee-per-unit': _val(f.expected_domestic_fulfilment_fee_per_unit),
-            'expected-efn-fulfilment-fee-per-unit-uk': _val(f.expected_efn_fulfilment_fee_per_unit_uk),
-            'expected-efn-fulfilment-fee-per-unit-de': _val(f.expected_efn_fulfilment_fee_per_unit_de),
-            'expected-efn-fulfilment-fee-per-unit-fr': _val(f.expected_efn_fulfilment_fee_per_unit_fr),
-            'expected-efn-fulfilment-fee-per-unit-it': _val(f.expected_efn_fulfilment_fee_per_unit_it),
-            'expected-efn-fulfilment-fee-per-unit-es': _val(f.expected_efn_fulfilment_fee_per_unit_es),
-            'expected-efn-fulfilment-fee-per-unit-se': _val(f.expected_efn_fulfilment_fee_per_unit_se),
-        })
-
-    df = pd.DataFrame(rows)
-
-    # 3) Cleaning: reuse same logic as old route
-    def clean_numeric(value):
-        if value == '--' or pd.isna(value):
-            return 0
-        try:
-            return float(value)
-        except ValueError:
-            return 0
-
-    float_cols = [
-        'price','estimated_fees','estimated_referral_fee','sales_price','longest_side','median_side',
-        'shortest_side','length_and_girth','item_package_weight','estimated_variable_closing_fee',
-        'expected_domestic_fulfilment_fee_per_unit','expected_efn_fulfilment_fee_per_unit_uk',
-        'expected_efn_fulfilment_fee_per_unit_de','expected_efn_fulfilment_fee_per_unit_fr',
-        'expected_efn_fulfilment_fee_per_unit_it','expected_efn_fulfilment_fee_per_unit_es',
-        'expected_efn_fulfilment_fee_per_unit_se'
-    ]
-
-    # Map incoming keys -> your old DF column names
-    rename_map = {
-        'your-price': 'price',
-        'estimated-fee-total': 'estimated_fees',
-        'estimated-referral-fee-per-unit': 'estimated_referral_fee',
-    }
-    df = df.rename(columns=rename_map)
-    for col in float_cols:
-        if col in df.columns:
-            df[col] = df[col].apply(clean_numeric)
-
-    country = (country or '').lower()
-    table_name = f'user_{user_id}_{country}_table'
-
-    # 4) Create engine/session + dynamic table (same as old)
-    user_engine = create_engine(db_url)
-    metadata = MetaData()
-    metadata.bind = user_engine
-    user_session = sessionmaker(bind=user_engine)()
-    admin_engine = create_engine(db_url1)
-    AdminSession = sessionmaker(bind=admin_engine)
-    admin_session = AdminSession()
-
-
-    user_specific_table = Table(
-        table_name, metadata,
-        Column('id', Integer, primary_key=True),
-        Column('user_id', Integer, nullable=False),
-        Column('country', String(255), nullable=False),
-        Column('transit_time', Integer, nullable=False),
-        Column('stock_unit', Integer, nullable=False),
-        Column('product_group', String(255), nullable=False),
-        Column('estimated_fees', Float, nullable=False),
-        Column('referral_fee', Float, nullable=True),
-        Column('estimated_referral_fee', Float, nullable=True),
-        Column('marketplace', String(255), nullable=False),
-        Column('file_name', String(255), nullable=False),
-        Column('sku', String(255), nullable=False),
-        Column('fnsku', String(255), nullable=False),
-        Column('amazon_store', String(255), nullable=False),
-        Column('asin', String(255), nullable=False),
-        Column('product_barcode', String(255), nullable=True),
-        Column('sku_cost_price', Float, nullable=True),
-        Column('product_name', String(255), nullable=False),
-        Column('brand', String(255), nullable=False),
-        Column('price', Float, nullable=False),
-        Column('fulfilled_by', String(255), nullable=True),
-        Column('has_local_inventory', String(255), nullable=True),
-        Column('sales_price', Float, nullable=True),
-        Column('longest_side', Float, nullable=True),
-        Column('median_side', Float, nullable=True),
-        Column('shortest_side', Float, nullable=True),
-        Column('length_and_girth', Float, nullable=True),
-        Column('unit_of_dimension', String(50), nullable=True),
-        Column('item_package_weight', Float, nullable=True),
-        Column('unit_of_weight', String(50), nullable=True),
-        Column('product_size_weight_band', String(255), nullable=True),
-        Column('currency', String(10), nullable=True),
-        Column('estimated_variable_closing_fee', Float, nullable=True),
-        Column('expected_domestic_fulfilment_fee_per_unit', Float, nullable=True),
-        Column('expected_efn_fulfilment_fee_per_unit_uk', Float, nullable=True),
-        Column('expected_efn_fulfilment_fee_per_unit_de', Float, nullable=True),
-        Column('expected_efn_fulfilment_fee_per_unit_fr', Float, nullable=True),
-        Column('expected_efn_fulfilment_fee_per_unit_it', Float, nullable=True),
-        Column('expected_efn_fulfilment_fee_per_unit_es', Float, nullable=True),
-        Column('expected_efn_fulfilment_fee_per_unit_se', Float, nullable=True),
-    )
-    metadata.create_all(user_engine)
-
-    # 5) Clear existing for this (user,country,marketplace)
-    with user_engine.begin() as conn:
-        conn.execute(
-            text(f"DELETE FROM {table_name} WHERE user_id = :user_id AND country = :country AND marketplace = :marketplace"),
-            {"user_id": user_id, "country": country, "marketplace": marketplace}
-        )
-
-    # 6) Insert all rows
-    # df = df.fillna('')
-    df.replace('--', np.nan, inplace=True)
-
-    def _num(v):
-    # normalize numeric values for DB: float or None
-        if v is None or v == '' or v == '--':
-            return None
-        try:
-            return float(v)
-        except Exception:
-            return None
-
-    def _txt(v):
-        # normalize text values for DB: string ('' allowed)
-        return '' if v is None else str(v)
-
-    # 6) Insert all rows
-# df = df.fillna('')   # ❌ is line ko HATA do (numeric me '' aa jayega)
-# df.replace('--', np.nan, inplace=True)  # optional; agar use karna ho to theek hai
-
-    to_insert = []
-    for _, r in df.iterrows():
-        to_insert.append({
-            'user_id': user_id,
-            'country': country,
-            'transit_time': int(transit_time),
-            'stock_unit': int(stock_unit),
-            'marketplace': mp,
-            'file_name': filename_hint,
-
-            # text fields
-            'sku': _txt(r.get('sku')),
-            'fnsku': _txt(r.get('fnsku')),
-            'asin': _txt(r.get('asin')),
-            'amazon_store': _txt(r.get('amazon-store')),
-            'product_name': _txt(r.get('product-name')),
-            'product_group': _txt(r.get('product-group')),
-            'brand': _txt(r.get('brand')),
-            'fulfilled_by': _txt(r.get('fulfilled-by')),
-            'has_local_inventory': _txt(r.get('has-local-inventory')),
-            'unit_of_dimension': _txt(r.get('unit-of-dimension')),
-            'unit_of_weight': _txt(r.get('unit-of-weight')),
-            'product_size_weight_band': _txt(r.get('product-size-weight-band')),
-            'currency': _txt(r.get('currency')),
-            'product_barcode': None,  # will fill later
-            'sku_cost_price': None,   # will fill later
-
-            # numeric fields (ALWAYS via _num)
-            'price': _num(r.get('price')),
-            'estimated_fees': _num(r.get('estimated_fees')),
-            'estimated_referral_fee': _num(r.get('estimated_referral_fee')),
-            'sales_price': _num(r.get('sales-price')),
-            'longest_side': _num(r.get('longest-side')),
-            'median_side': _num(r.get('median-side')),
-            'shortest_side': _num(r.get('shortest-side')),
-            'length_and_girth': _num(r.get('length-and-girth')),
-            'item_package_weight': _num(r.get('item-package-weight')),
-            'estimated_variable_closing_fee': _num(r.get('estimated-variable-closing-fee')),
-            'expected_domestic_fulfilment_fee_per_unit': _num(r.get('expected-domestic-fulfilment-fee-per-unit')),
-            'expected_efn_fulfilment_fee_per_unit_uk': _num(r.get('expected-efn-fulfilment-fee-per-unit-uk')),
-            'expected_efn_fulfilment_fee_per_unit_de': _num(r.get('expected-efn-fulfilment-fee-per-unit-de')),
-            'expected_efn_fulfilment_fee_per_unit_fr': _num(r.get('expected-efn-fulfilment-fee-per-unit-fr')),
-            'expected_efn_fulfilment_fee_per_unit_it': _num(r.get('expected-efn-fulfilment-fee-per-unit-it')),
-            'expected_efn_fulfilment_fee_per_unit_es': _num(r.get('expected-efn-fulfilment-fee-per-unit-es')),
-            'expected_efn_fulfilment_fee_per_unit_se': _num(r.get('expected-efn-fulfilment-fee-per-unit-se')),
-        })
-
-
-    inserted_rows = 0
-    with user_engine.begin() as conn:
-        if to_insert:
-            conn.execute(user_specific_table.insert(), to_insert)
-            inserted_rows = len(to_insert)
-
-    # 7) Referral fee mapping via Category (same logic)
-    with user_engine.begin() as conn:
-        results = conn.execute(user_specific_table.select().where(
-            user_specific_table.c.user_id == user_id
-        )).mappings().all()
-
-        for result in results:
-            country_value = (result['country'] or '').strip().upper()
-            product_group_value = (result['product_group'] or '')
-            product_group_cleaned = product_group_value.strip()
-            price_value = result['price']
-
-            COUNTRY_MAP = {
-                "uk": "United Kingdom",
-                "us": "United States",
-                "uae": "United Arab Emirates",
-                "in": "India"
-                # add more if needed
-            }
-
-            normalized_country = COUNTRY_MAP.get(country.lower(), country)
-
-
-            query = admin_session.query(Category).filter_by(
-                country=normalized_country,
-                category=product_group_cleaned
-            )
-            if price_value is not None:
-                query = query.filter(
-                    and_(
-                        or_(Category.price_from == 0, Category.price_from <= price_value),
-                        or_(Category.price_to == 0, Category.price_to >= price_value)
-                    )
-                )
-            category_obj = query.first()
-
-            if not category_obj:
-                first_word = product_group_cleaned.split('&')[0].split('/')[0].split('-')[0].strip().upper()
-                queery = admin_session.query(Category).filter_by(
-                    country=normalized_country.strip(),
-                    category=first_word
-                )
-                if price_value is not None:
-                    query = query.filter(
-                        and_(
-                            or_(Category.price_from == 0, Category.price_from <= price_value),
-                            or_(Category.price_to == 0, Category.price_to >= price_value)
-                        )
-                    )
-                category_obj = query.first()
-
-            if category_obj:
-                conn.execute(
-                    user_specific_table.update()
-                    .where(user_specific_table.c.id == result['id'])
-                    .values(referral_fee=category_obj.referral_fee_percent_est)
-                )
-
-    # 8) Join with sku_{user_id}_data_table to fill barcode/price
-    sku_table_name = f"sku_{user_id}_data_table"
-    with user_engine.begin() as conn:
-        # Might not exist in some envs – guard with try
-        try:
-            sku_data_table = Table(sku_table_name, metadata, autoload_with=user_engine)
-        except Exception:
-            sku_data_table = None
-
-        if sku_data_table is not None:
-            res = conn.execute(text(f"""
-                SELECT asin, product_barcode, price
-                FROM {sku_table_name}
-                WHERE asin IN (SELECT asin FROM {table_name} WHERE user_id = :user_id)
-            """), {"user_id": user_id})
-
-            rows = [dict(zip(res.keys(), row)) for row in res.fetchall()]
-            asin_mapping = {row['asin']: (row['product_barcode'], row['price']) for row in rows}
-
-            for asin, (barcode, price) in asin_mapping.items():
-                conn.execute(text(f"""
-                    UPDATE {table_name}
-                    SET product_barcode = :barcode, sku_cost_price = :price
-                    WHERE asin = :asin AND user_id = :user_id
-                """), {"barcode": barcode, "price": price, "asin": asin, "user_id": user_id})
-
-    # 9) CountryProfile upsert (delete old like your code, then insert)
-    existing_profile = CountryProfile.query.filter_by(
-        user_id=user_id, country=country, marketplace=marketplace
-    ).first()
-    if existing_profile:
-        db.session.delete(existing_profile)
-        db.session.commit()
-
-    # avoid duplication with exact same transit/stock values
-    dup = CountryProfile.query.filter_by(
-        user_id=user_id, country=country, marketplace=marketplace,
-        transit_time=transit_time, stock_unit=stock_unit
-    ).first()
-    if not dup:
-        new_profile = CountryProfile(
-            user_id=user_id,
-            country=country,
-            marketplace=marketplace,
-            transit_time=transit_time,
-            stock_unit=stock_unit
-        )
-        db.session.add(new_profile)
-        db.session.commit()
-
-    return {"inserted": inserted_rows, "deleted": 0, "table": table_name}
-
-
-from sqlalchemy import inspect
-
 @fee_preview_bp.route("/amazon_api/fees/sync_and_upload", methods=["POST"])
 def fees_sync_and_upload():
-    
     auth_header = request.headers.get('Authorization')
-
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({'success': False, 'error': 'Authorization token is missing or invalid'}), 401
+
     token = auth_header.split(' ')[1]
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
@@ -833,45 +762,32 @@ def fees_sync_and_upload():
     data = request.get_json(silent=True) or {}
     country = (data.get('country') or request.form.get('country') or '').lower().strip()
 
-    # ... transit_time / stock_unit parsing ...
-
     mp = data.get("marketplace_id") or request.form.get("marketplace_id") or request.args.get("marketplace_id") or amazon_client.marketplace_id
     source = (data.get("source") or request.form.get("source") or request.args.get("source") or "report").lower()
+
+    # Optional: allow "force" to re-run even if table exists
+    force = str(data.get("force") or request.args.get("force") or "").lower() in ("1","true","yes","y")
 
     if not country or not mp:
         return jsonify({"success": False, "error": "country and marketplace_id are required"}), 400
 
-    # ---------- NEW: early-exit if user_{user_id}_{country}_table exists ----------
-    try:
-        table_name = f"user_{user_id}_{country}_table"
-        insp = inspect(db.engine)
-        if insp.has_table(table_name):
-            # Table already exists; skip full sync + pipeline
-            return jsonify({
-                "success": True,
-                "skipped": True,
-                "reason": "target user table already exists",
-                "table": table_name,
-            }), 200
-    except Exception:
-        # If inspection fails, just continue with normal flow
-        logger.exception("Error checking existing fee upload table")
+    # DO NOT skip just because table exists (that was causing stale data)
+    # Instead you can skip only if recently updated, but we keep it simple here.
 
     try:
-        # 1) Sync from SP-API -> Fee table
+        # 1) Sync from SP-API -> Fee table (only)
         rows, used_source = [], None
+
         if source in ("auto", "report"):
             blob = _create_and_fetch_fee_preview_bytes(mp)
             rows = _read_fee_bytes(blob)
             used_source = "report"
+
         elif source == "upload" and 'file' in request.files:
             f = request.files['file']
             raw = f.read()
-            try:
-                if raw[:2] == b"\x1f\x8b":
-                    raw = gzip.decompress(raw)
-            except Exception:
-                pass
+            if raw[:2] == b"\x1f\x8b":
+                raw = gzip.decompress(raw)
             rows = _read_fee_bytes(raw)
             used_source = "upload"
 
@@ -885,13 +801,13 @@ def fees_sync_and_upload():
         ]
         saved = _upsert_fee_preview(normalized)
 
-        # 2) Run upload pipeline -> user_{user_id}_{country}_table
+        # 2) Run upload pipeline (optimized)
         pip = _run_feepreview_upload_pipeline_from_fee_table(
             user_id=user_id,
             country=country,
             marketplace=mp,
-            transit_time=0,
-            stock_unit=0,
+            transit_time=int(data.get("transit_time") or 0),
+            stock_unit=int(data.get("stock_unit") or 0),
             filename_hint="SPAPI_FEE_PREVIEW"
         )
 

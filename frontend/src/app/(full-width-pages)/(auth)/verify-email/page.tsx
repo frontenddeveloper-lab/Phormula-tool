@@ -1,32 +1,16 @@
-// app/(auth)/verify-email/page.tsx
-"use client";
+import type { Metadata } from "next";
+import VerifyEmailClient from "./VerifyEmailClient";
 
-import { useSearchParams, useRouter } from "next/navigation";
-import SignInForm from "@/components/auth/SignInForm";
-import VerifyEmailModal from "@/components/auth/VerifyEmailModal";
+export const metadata: Metadata = {
+  title: "Verify Email",
+  description:
+    "Verify your email address to activate your Phormula account and complete sign-up.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
-export default function VerifyEmailPage() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
-  const status = searchParams.get("status") ?? "";
-  const email = searchParams.get("email") ?? ""; // optional, if you add email to the link
-
-  const handleClose = () => {
-    router.push("/signin");
-  };
-
-  return (
-    <>
-      {/* Background: normal sign-in page */}
-      <SignInForm />
-
-      {/* Overlay: verify-email modal */}
-      <VerifyEmailModal
-        status={status}
-        email={email}
-        onClose={handleClose}
-      />
-    </>
-  );
+export default function Page() {
+  return <VerifyEmailClient />;
 }

@@ -1,41 +1,16 @@
-// import ResetPasswordForm from "@/components/auth/ResetPasswordForm";
-// import { Metadata } from "next";
+import type { Metadata } from "next";
+import ResetPasswordClient from "./ResetPasswordClient";
 
-// export const metadata: Metadata = {
-//   title: "Reset Password",
-//   description: "Set a new password for your account.",
-// };
+export const metadata: Metadata = {
+  title: "Reset Password",
+  description:
+    "Set a new password for your Phormula account securely using your password reset link.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
-// export default function ResetPasswordPage() {
-//   return <ResetPasswordForm />;
-// }
-
-
-
-
-
-
-
-
-
-
-"use client";
-
-import { useParams } from "next/navigation";
-import { Metadata } from "next";
-import SignInForm from "@/components/auth/SignInForm";
-import ResetPasswordForm from "@/components/auth/ResetPasswordForm";
-
-export default function ResetPasswordPage() {
-  const { token } = useParams<{ token: string }>();
-
-  return (
-    <>
-      {/* Right side content (under AuthLayout) */}
-      <SignInForm />
-
-      {/* Modal overlay */}
-      {typeof token === "string" && <ResetPasswordForm token={token} />}
-    </>
-  );
+export default function Page() {
+  return <ResetPasswordClient />;
 }

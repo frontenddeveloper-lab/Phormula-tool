@@ -235,14 +235,8 @@ export type AmazonStatCardProps = {
   formatter?: (v: any) => string;
   bottomLabel: string;
   className?: string;
-
-  /**
-   * Optional override for delta display.
-   * - If omitted: uses calcDeltaPct(current, previous)
-   * - If provided (including null): uses this value
-   *   (null => show "—")
-   */
   deltaPct?: number | null;
+  inverseDelta?: boolean;
 };
 
 export default function AmazonStatCard({
@@ -254,6 +248,7 @@ export default function AmazonStatCard({
   bottomLabel,
   className = "",
   deltaPct,
+  inverseDelta
 }: AmazonStatCardProps) {
   const currVal = toNumberSafe(current);
   const prevVal = previous != null ? toNumberSafe(previous) : 0;
@@ -282,12 +277,27 @@ export default function AmazonStatCard({
     );
   }
 
-  const deltaColor =
-    deltaToShow == null
-      ? "text-gray-400"
-      : isUp
-        ? "text-emerald-600"
-        : "text-rose-600";
+  // const deltaColor =
+  //   deltaToShow == null
+  //     ? "text-gray-400"
+  //     : isUp
+  //       ? "text-emerald-600"
+  //       : "text-rose-600";
+
+  const isDown = deltaToShow != null && deltaToShow < 0;
+
+// ✅ normal meaning: up = good (green), down = bad (red)
+// ✅ inverse meaning: up = bad (red), down = good (green)
+const upClass = inverseDelta ? "text-rose-600" : "text-emerald-600";
+const downClass = inverseDelta ? "text-emerald-600" : "text-rose-600";
+
+const deltaColor =
+  deltaToShow == null
+    ? "text-gray-400"
+    : isUp
+      ? upClass
+      : downClass;
+
 
   return (
     <div

@@ -1222,6 +1222,82 @@ export default function ReferralFeesDashboard(): JSX.Element {
     });
   }, [skuwiseRows]);
 
+  const skuTableDistinctAll: Row[] = useMemo(() => {
+    if (!skuTableAll.length) return [];
+
+    const nonTotal = skuTableAll.filter((row) => !(row as any)._isTotal);
+    const totalRow = skuTableAll.find((row) => (row as any)._isTotal) || null;
+
+    // Aggregate by distinct productName (case-insensitive)
+    const map = new Map<string, any>();
+
+    for (const r of nonTotal as any[]) {
+      const nameRaw = String(r.productName ?? "").trim();
+      if (!nameRaw) continue;
+
+      const key = nameRaw.toLowerCase();
+
+      if (!map.has(key)) {
+        map.set(key, {
+          sno: "",
+          productName: nameRaw,
+          sku: "",
+
+          units: 0,
+          sales: 0,
+
+          // referral
+          ref_applicable: 0,
+          ref_charged: 0,
+
+          // for your export columns that currently use applicable/charged
+          applicable: 0,
+          charged: 0,
+
+          overcharged: 0,
+
+          _skus: new Set<string>(),
+        });
+      }
+
+      const acc = map.get(key);
+
+      acc.units += Math.round(toNumberSafe(r.units));
+      acc.sales += toNumberSafe(r.sales);
+
+      acc.ref_applicable += toNumberSafe(r.ref_applicable ?? r.applicable);
+      acc.ref_charged += toNumberSafe(r.ref_charged ?? r.charged);
+
+      // keep these for compatibility with current export headers
+      acc.applicable += toNumberSafe(r.ref_applicable ?? r.applicable);
+      acc.charged += toNumberSafe(r.ref_charged ?? r.charged);
+
+      acc.overcharged += toNumberSafe(r.overcharged);
+
+      const skuStr = String(r.sku ?? "").trim();
+      if (skuStr) acc._skus.add(skuStr);
+    }
+
+    const aggregated = Array.from(map.values()).map((x) => {
+      const skus = Array.from(x._skus);
+      return {
+        ...x,
+        sku: skus.length === 1 ? skus[0] : skus.length > 1 ? "Multiple" : "",
+      };
+    });
+
+    // Sort by sales desc (optional)
+    aggregated.sort((a, b) => toNumberSafe(b.sales) - toNumberSafe(a.sales));
+
+    // Add serial numbers (optional)
+    let counter = 1;
+    const withSno = aggregated.map((row: any) => ({ ...row, sno: counter++ }));
+
+    // Add Grand Total at bottom (same as UI)
+    if (totalRow) withSno.push({ ...(totalRow as any), sno: "" });
+
+    return withSno as Row[];
+  }, [skuTableAll]);
 
   const skuColumns: ColumnDef<Row>[] = [
     { key: "sku", header: "SKU" },
@@ -1248,46 +1324,91 @@ export default function ReferralFeesDashboard(): JSX.Element {
     const nonTotal = skuTableAll.filter((row) => !(row as any)._isTotal);
     const totalRow = skuTableAll.find((row) => (row as any)._isTotal) || null;
 
-    if (!nonTotal.length) return totalRow ? [totalRow] : [];
+    // ✅ 1) Aggregate rows by DISTINCT productName
+    const map = new Map<string, any>();
 
-    const sorted = [...nonTotal].sort(
-      (a, b) => toNumberSafe((b as any).sales) - toNumberSafe((a as any).sales)
+    for (const r of nonTotal as any[]) {
+      const nameRaw = String(r.productName ?? "").trim();
+      if (!nameRaw) continue;
+
+      const key = nameRaw.toLowerCase(); // distinct productName (case-insensitive)
+
+      if (!map.has(key)) {
+        map.set(key, {
+          sno: "",
+          productName: nameRaw,
+          sku: r.sku ? String(r.sku) : "", // will be fixed below if multiple
+          units: 0,
+          sales: 0,
+
+          ref_applicable: 0,
+          ref_charged: 0,
+
+          fba_applicable: 0,
+          fba_charged: 0,
+
+          other_applicable: 0,
+          other_charged: 0,
+
+          total_applicable: 0,
+          total_charged: 0,
+
+          overcharged: 0,
+
+          _skus: new Set<string>(),
+        });
+      }
+
+      const acc = map.get(key);
+
+      acc.units += Math.round(toNumberSafe(r.units));
+      acc.sales += toNumberSafe(r.sales);
+
+      acc.ref_applicable += toNumberSafe(r.ref_applicable);
+      acc.ref_charged += toNumberSafe(r.ref_charged);
+
+      acc.fba_applicable += toNumberSafe(r.fba_applicable);
+      acc.fba_charged += toNumberSafe(r.fba_charged);
+
+      acc.other_applicable += toNumberSafe(r.other_applicable);
+      acc.other_charged += toNumberSafe(r.other_charged);
+
+      acc.total_applicable += toNumberSafe(r.total_applicable);
+      acc.total_charged += toNumberSafe(r.total_charged);
+
+      acc.overcharged += toNumberSafe(r.overcharged);
+
+      const skuStr = String(r.sku ?? "").trim();
+      if (skuStr) acc._skus.add(skuStr);
+    }
+
+    // ✅ 2) Convert to array + decide SKU display
+    const aggregated = Array.from(map.values()).map((x) => {
+      const skus = Array.from(x._skus);
+      return {
+        ...x,
+        sku: skus.length === 1 ? skus[0] : skus.length > 1 ? "Multiple" : "",
+      };
+    });
+
+    if (!aggregated.length) return totalRow ? [totalRow] : [];
+
+    // ✅ 3) Sort + Top5 + Others based on DISTINCT products
+    const sorted = [...aggregated].sort(
+      (a, b) => toNumberSafe(b.sales) - toNumberSafe(a.sales)
     );
 
     const top5 = sorted.slice(0, 5);
     const remaining = sorted.slice(5);
+
     let othersRow: Row | null = null;
-
     if (remaining.length) {
-      // const agg = remaining.reduce(
-      //   (acc: any, row: any) => {
-      //     acc.units += Math.round(toNumberSafe(row.units));
-      //     acc.sales += toNumberSafe(row.sales);
-      //     acc.applicable += toNumberSafe(row.applicable);
-      //     acc.charged += toNumberSafe(row.charged);
-      //     acc.overcharged += toNumberSafe(row.overcharged);
-      //     return acc;
-      //   },
-      //   { units: 0, sales: 0, applicable: 0, charged: 0, overcharged: 0 }
-      // );
-
-      // othersRow = {
-      //   sku: "",
-      //   productName: "Others",
-      //   units: agg.units,
-      //   sales: agg.sales,
-      //   applicable: agg.applicable,
-      //   charged: agg.charged,
-      //   overcharged: agg.overcharged,
-      //   _isOthers: true,
-      // } as Row;
-
-
       const agg = remaining.reduce(
         (acc: any, row: any) => {
           acc.units += Math.round(toNumberSafe(row.units));
           acc.sales += toNumberSafe(row.sales);
 
+          // ✅ YOU WERE MISSING THESE TOO
           acc.ref_applicable += toNumberSafe(row.ref_applicable);
           acc.ref_charged += toNumberSafe(row.ref_charged);
 
@@ -1304,16 +1425,28 @@ export default function ReferralFeesDashboard(): JSX.Element {
           return acc;
         },
         {
-          units: 0, sales: 0,
-          ref_applicable: 0, ref_charged: 0,
-          fba_applicable: 0, fba_charged: 0,
-          other_applicable: 0, other_charged: 0,
-          total_applicable: 0, total_charged: 0,
+          units: 0,
+          sales: 0,
+
+          ref_applicable: 0,
+          ref_charged: 0,
+
+          fba_applicable: 0,
+          fba_charged: 0,
+
+          other_applicable: 0,
+          other_charged: 0,
+
+          total_applicable: 0,
+          total_charged: 0,
+
           overcharged: 0,
         }
       );
 
+
       othersRow = {
+        sno: "",
         sku: "",
         productName: "Others",
         units: agg.units,
@@ -1331,18 +1464,13 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
         _isOthers: true,
       } as Row;
-
     }
 
-
-
-
-    // Build final rows (top5 + optional others + optional total)
-    const finalRows: Row[] = [...top5];
+    // ✅ 4) Final rows + serial numbers (not for Grand Total)
+    const finalRows: any[] = [...top5];
     if (othersRow) finalRows.push(othersRow);
     if (totalRow) finalRows.push(totalRow);
 
-    // ✅ Add serial numbers only up to (and including) Others, not for Grand Total
     let counter = 1;
     return finalRows.map((row: any) => {
       if (row._isTotal) return { ...row, sno: "" };
@@ -1350,48 +1478,30 @@ export default function ReferralFeesDashboard(): JSX.Element {
     });
   }, [skuTableAll]);
 
-  // const groupedSkuTableDisplay: any[] = useMemo(() => {
-  //   return skuTableDisplay.map((row: any) => ({
-  //     sno: row.sno,
-  //     productName: row.productName,
-  //     sku: row.sku,
-  //     units: row.units,
-  //     sales: row.sales,
-  //     ref_applicable: row.applicable,
-  //     ref_charged: row.charged,
-  //     fba_applicable: 0,
-  //     fba_charged: 0,
-  //     other_applicable: 0,
-  //     other_charged: 0,
-  //     total_applicable: row.applicable,
-  //     total_charged: row.charged,
-  //   }));
-  // }, [skuTableDisplay]);
-
   const groupedSkuTableDisplay: any[] = useMemo(() => {
-  return skuTableDisplay.map((row: any) => ({
-    sno: row.sno,
-    productName: row.productName,
-    sku: row.sku,
-    units: row.units,
-    sales: row.sales,
+    return skuTableDisplay.map((row: any) => ({
+      sno: row.sno,
+      productName: row.productName,
+      sku: row.sku,
+      units: row.units,
+      sales: row.sales,
 
-    ref_applicable: row.ref_applicable,
-    ref_charged: row.ref_charged,
+      ref_applicable: row.ref_applicable,
+      ref_charged: row.ref_charged,
 
-    fba_applicable: row.fba_applicable,
-    fba_charged: row.fba_charged,
+      fba_applicable: row.fba_applicable,
+      fba_charged: row.fba_charged,
 
-    other_applicable: row.other_applicable,
-    other_charged: row.other_charged,
+      other_applicable: row.other_applicable,
+      other_charged: row.other_charged,
 
-    total_applicable: row.total_applicable,
-    total_charged: row.total_charged,
+      total_applicable: row.total_applicable,
+      total_charged: row.total_charged,
 
-    // ✅ keep total-row styling working
-    _isTotal: row._isTotal,
-  }));
-}, [skuTableDisplay]);
+      // ✅ keep total-row styling working
+      _isTotal: row._isTotal,
+    }));
+  }, [skuTableDisplay]);
 
 
   const handleDownloadExcel = useCallback(() => {
@@ -1419,12 +1529,12 @@ export default function ReferralFeesDashboard(): JSX.Element {
 
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), "Summary");
 
-    /* ---------------- Sheet 2: Overcharged Ref Fees (SKU-wise) ---------------- */
-    const overData = skuTableAll.map((r: any) => {
+    /* ---------------- Sheet 2: Overcharged Ref Fees (DISTINCT Product Names) ---------------- */
+    const overData = skuTableDistinctAll.map((r: any) => {
       const units = Math.round(toNumberSafe(r.units));
       const sales = toNumberSafe(r.sales);
-      const applicable = toNumberSafe(r.applicable);
-      const charged = toNumberSafe(r.charged);
+      const applicable = toNumberSafe(r.applicable ?? r.ref_applicable);
+      const charged = toNumberSafe(r.charged ?? r.ref_charged);
       const overcharged = toNumberSafe(r.overcharged);
 
       return {
@@ -1443,6 +1553,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
       XLSX.utils.json_to_sheet(overData),
       "Overcharged Ref Fees"
     );
+
 
     /* ---------------- Sheet 3: Orders by Status (CLEANED) ---------------- */
     const cleanedOrdersByStatus = (allOrdersByStatus || []).map((r: any) => {
@@ -1508,7 +1619,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
         {/* LEFT: Title + Subtitle */}
         <div className="flex flex-col leading-tight w-full md:w-auto">
           <div className="flex items-baseline gap-2">
-            <PageBreadcrumb pageTitle="Amazon Fees -" variant="page" align="left" textSize="2xl" className="mb-0 md:mb-2" />
+            <PageBreadcrumb pageTitle="Expense Reconciliation -" variant="page" align="left" textSize="2xl" className="mb-0 md:mb-2" />
             <span className="text-[#5EA68E] font-bold text-lg sm:text-2xl md:text-2xl">
               {country.toUpperCase()}
             </span>
@@ -1609,7 +1720,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
         <>
           {/* ===================== 6 CARDS (UPDATED) ===================== */}
 
-          <div className="grid grid-cols-1 sm:grid-cols-6 lg:grid-cols-3 gap-3 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3 mt-4">
             <SalesCard
               title="Sales"
               sales={card6.sales}
@@ -1938,11 +2049,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
             ========================= */
             return (
               <div className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
-                {/* <div className="text-lg font-semibold text-slate-800 mb-4">
-                  Referral Fee Recon
-                </div> */}
-
-                <div className="flex flex-col md:flex-row items-center justify-between gap-2 flex-wrap w-full mb-2 md:mb-0">
+                <div className="flex flex-row items-center justify-between gap-2 flex-wrap w-full mb-2 md:mb-0">
                   <PageBreadcrumb
                     pageTitle="Referral Fee Recon"
                     variant="page"
@@ -2080,7 +2187,7 @@ export default function ReferralFeesDashboard(): JSX.Element {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-2 md:px-4 pb-2 md:pb-4 w-full overflow-x-auto mt-4">
             <div className="flex flex-col md:flex-row items-center justify-between gap-2 flex-wrap w-full mb-2 md:mb-0">
               <PageBreadcrumb
-                pageTitle="Product-wise Details of Overcharged Ref Fees"
+                pageTitle="Product-wise breakdown"
                 variant="page"
                 align="left"
                 className="mt-4 mb-0 md:mb-4 text-center"
@@ -2091,28 +2198,6 @@ export default function ReferralFeesDashboard(): JSX.Element {
             {/* <AiButton /> */}
 
             <div className="[&_table]:w-full ">
-              {/* <DataTable
-                columns={[
-                  { key: "sno", header: "S. No." },
-                  { key: "productName", header: "Product Name" },
-                  { key: "sku", header: "SKU" },
-                  { key: "units", header: "Units" },
-                  { key: "sales", header: "Net Sales", render: (_, v) => fmtCurrency(Number(v)) },
-                  { key: "applicable", header: "Ref Fees Applicable", render: (_, v) => fmtCurrency(Number(v)) },
-                  { key: "charged", header: "Ref Fees Charged", render: (_, v) => fmtCurrency(Number(v)) },
-                  { key: "overcharged", header: "Overcharged", render: (_, v) => <span>{fmtCurrency(Number(v))}</span> },
-                ]}
-
-                data={skuTableDisplay}
-                paginate={false}
-                scrollY={false}
-                maxHeight="none"
-                zebra={true}
-                stickyHeader={false}
-                rowClassName={(row) => ((row as any)._isTotal ? "bg-[#DDDDDD] font-bold" : "")}
-              /> */}
-
-
               <GroupedDataTable
                 data={groupedSkuTableDisplay}
                 rowClassName={(row) =>

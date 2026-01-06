@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FaCheckCircle as CheckCircle2,
@@ -43,6 +43,8 @@ const fullMonthNames = [
   "November",
   "December",
 ];
+
+
 
 const monthSlugOrder = fullMonthNames.map((m) => m.toLowerCase());
 const two = (n: number | string) => String(n).padStart(2, "0");
@@ -428,6 +430,10 @@ if (!marketplaceIdUsed) {
   const [message, setMessage] = useState<string>("");
 
   const [busy, setBusy] = useState(false);
+
+  const TOTAL_FETCH_SECONDS = 15 * 60;
+
+const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   
   // 6-step progress tracking
   const [currentStep, setCurrentStep] = useState<number>(0); // 0 = not started, 1-6 = active step
@@ -455,6 +461,27 @@ if (!marketplaceIdUsed) {
     ok: 0,
     fail: 0,
   });
+
+  useEffect(() => {
+  if (!busy) {
+    setRemainingSeconds(null);
+    return;
+  }
+
+  setRemainingSeconds(TOTAL_FETCH_SECONDS);
+
+  const interval = setInterval(() => {
+    setRemainingSeconds((prev) => {
+      if (!prev || prev <= 1) {
+        clearInterval(interval);
+        return 0;
+      }
+      return prev - 1;
+    });
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, [busy]);
 
   const markStepComplete = (step: number) => {
     setCompletedSteps((prev) => new Set([...prev, step]));
@@ -580,6 +607,12 @@ if (!marketplaceIdUsed) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       markStepComplete(6);
 
+      setStep(7, "Plotting Graph", 0, "Preparing charts...");
+await new Promise((resolve) => setTimeout(resolve, 1000));
+markStepComplete(7);
+
+await new Promise((r) => setTimeout(r, 600));
+
       const monthSlug = fullMonthNames[mNum - 1].toLowerCase();
       updateLatestFetchedPeriod(monthSlug, String(y));
 
@@ -704,6 +737,12 @@ if (!marketplaceIdUsed) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       markStepComplete(6);
 
+      setStep(7, "Plotting Graph", 0, "Preparing charts...");
+await new Promise((resolve) => setTimeout(resolve, 1000));
+markStepComplete(7);
+
+await new Promise((r) => setTimeout(r, 600));
+
       const last = months[months.length - 1];
       const latestMonthSlug = fullMonthNames[last.mIdx].toLowerCase();
 
@@ -798,95 +837,7 @@ if (!marketplaceIdUsed) {
         </div>
 
         {/* Progress UI with 6-Step Stepper */}
-        {busy && stepProgress.active && currentStep > 0 && (
-          <div className="mt-6 max-w-4xl mx-auto">
-            {/* Current Step Progress Bar */}
-            <div className="rounded-lg border border-slate-200 bg-white p-4 mb-4">
-              <div className="flex items-center justify-between gap-3 mb-2">
-                <div className="text-sm font-semibold text-slate-700">{stepProgress.label}</div>
-                <div className="text-xs text-slate-500 tabular-nums">
-                  {stepProgress.percentage}%
-                </div>
-              </div>
-
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full bg-[#5EA68E] transition-all duration-300"
-                  style={{
-                    width: `${stepProgress.percentage}%`,
-                  }}
-                />
-              </div>
-
-              {stepProgress.detail && (
-                <div className="mt-2 text-xs text-slate-500">{stepProgress.detail}</div>
-              )}
-
-              {/* Range progress for Historic Data step */}
-              {currentStep === 5 && rangeProgress.totalMonths > 0 && (
-                <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
-                  <div>
-                    Month {rangeProgress.currentMonth}/{rangeProgress.totalMonths}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-emerald-600">OK: {rangeProgress.ok}</span>
-                    <span className="text-red-600">Failed: {rangeProgress.fail}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 6-Step Stepper */}
-            <div className="flex items-center justify-between relative">
-              {/* Connecting lines - spans from first to last step */}
-              <div className="absolute top-6 left-[4%] right-[4%] h-0.5 bg-slate-200 -z-10">
-                {completedSteps.size > 0 && (() => {
-                  const maxCompleted = Math.max(...Array.from(completedSteps));
-                  const progressPercent = maxCompleted > 1 ? ((maxCompleted - 1) / 5) * 100 : 0;
-                  return (
-                    <div
-                      className="h-full bg-[#5EA68E] transition-all duration-500"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  );
-                })()}
-              </div>
-
-              {[
-                { num: 1, label: "Currency Conversion" },
-                { num: 2, label: "Category Fees" },
-                { num: 3, label: "Fee Preview" },
-                { num: 4, label: "Inventory" },
-                { num: 5, label: "Historic Data" },
-                { num: 6, label: "Live Data" },
-              ].map((step) => {
-                const isCompleted = completedSteps.has(step.num);
-                const isActive = currentStep === step.num;
-                const isPast = currentStep > step.num;
-
-                return (
-                  <div key={step.num} className="flex flex-col items-center flex-1 relative z-10">
-                    <StepBadge
-                      completed={isCompleted}
-                      label={step.num}
-                    />
-                    <div className="mt-2 text-center">
-                      <div
-                        className={`text-[10px] sm:text-xs font-medium ${
-                          isActive || isCompleted
-                            ? "text-[#5EA68E]"
-                            : "text-slate-400"
-                        }`}
-                      >
-                        {step.label}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+       
 
         {/* 1 month controls */}
         {selectedPeriod === 1 && (
@@ -962,6 +913,8 @@ if (!marketplaceIdUsed) {
           </div>
         )}
 
+
+
         {/* >1 month controls (includes Lifetime) */}
         {selectedPeriod && (selectedPeriod === "lifetime" || selectedPeriod > 1) && (
           <div className="w-full flex justify-center gap-3 mt-4">
@@ -972,6 +925,102 @@ if (!marketplaceIdUsed) {
             <Button onClick={handleFetchRange} variant="primary" size="sm" disabled={busy}>
               {busy ? "Fetching..." : `Continue`}
             </Button>
+          </div>
+        )}
+
+        {busy && remainingSeconds !== null && (
+  <div className="mt-2 text-center text-xs text-slate-500">
+    Estimated time remaining:{" "}
+    <span className="font-medium tabular-nums">
+      {Math.floor(remainingSeconds / 60)}:
+      {String(remainingSeconds % 60).padStart(2, "0")}
+    </span>
+  </div>
+)}
+
+         {busy && stepProgress.active && currentStep > 0 && (
+          <div className="mt-6 max-w-4xl mx-auto">
+            {/* Current Step Progress Bar */}
+            <div className="rounded-lg border border-slate-200 bg-white p-4 mb-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="text-sm font-semibold text-slate-700">{stepProgress.label}</div>
+                <div className="text-xs text-slate-500 tabular-nums">
+                  {stepProgress.percentage}%
+                </div>
+              </div>
+
+              <div className="h-3 w-full overflow-hidden rounded-full bg-[#D9D9D9]">
+                <div
+                  className="h-full  transition-all duration-300 shin"
+                  style={{
+                    width: `${stepProgress.percentage}%`,
+                        background: "linear-gradient(90deg, #5EA68E 0%, #37455F 100%)",
+
+                  }}
+                />
+              </div>
+
+              {stepProgress.detail && (
+                <div className="mt-2 text-xs text-slate-500">{stepProgress.detail}</div>
+              )}
+
+              {/* Range progress for Historic Data step */}
+              
+            </div>
+
+            {/* 6-Step Stepper */}
+
+ <div className="flex items-center justify-between relative">
+              {/* Connecting lines - spans from first to last step */}
+              <div className="absolute top-6 left-[4%] right-[4%] h-1.5 bg-[#D9D9D9] -z-10">
+                {completedSteps.size > 0 && (() => {
+                  const maxCompleted = Math.max(...Array.from(completedSteps));
+                  const progressPercent = maxCompleted > 1 ? ((maxCompleted - 1) / 5) * 100 : 0;
+                  return (
+                    <div
+                      className="h-full bg-[#5EA68E] transition-all duration-500"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  );
+                })()}
+              </div>
+
+              {[
+  { num: 1, label: "Currency Conversion" },
+  { num: 2, label: "Category Fees" },
+  { num: 3, label: "Fee Preview" },
+  { num: 4, label: "Inventory Data" },
+  { num: 5, label: "Historic Data" },
+  { num: 6, label: "Live Data" },
+  { num: 7, label: "Plotting Graph" },
+].map((step) => {
+                const isCompleted = completedSteps.has(step.num);
+                const isActive = currentStep === step.num;
+                const isPast = currentStep > step.num;
+
+                return (
+                 <div key={step.num} className="flex flex-col items-center flex-1 relative z-10">
+                    <StepBadge
+                      completed={isCompleted}
+                      label={step.num}
+                    />
+                    <div className="mt-2 text-center">
+                    <div
+  className={`text-[10px] sm:text-xs font-medium leading-tight text-center w-20 h-8 flex flex-col justify-center ${
+    isActive || isCompleted ? "text-[#5EA68E]" : "text-[#414042]"
+  }`}
+>
+  {step.label.split(" ").map((word, i) => (
+    <span key={i} className="block">
+      {word}
+    </span>
+  ))}
+</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

@@ -28,13 +28,13 @@ import { buildCountryMarketplaceMap } from "@/lib/utils/countryMarketplace";
 type NavSubItem = {
   name: string;
   path:
-    | string
-    | ((params: {
-        ranged: string;
-        countryName: string;
-        month: string;
-        year: string;
-      }) => string);
+  | string
+  | ((params: {
+    ranged: string;
+    countryName: string;
+    month: string;
+    year: string;
+  }) => string);
   onClick?: () => void;
 };
 
@@ -61,30 +61,30 @@ const AppSidebar: React.FC = () => {
   const routeParams = useParams();
   const { data: user } = useGetUserDataQuery();
 
-//   useEffect(() => {
-//   if (typeof window === "undefined") return;
+  //   useEffect(() => {
+  //   if (typeof window === "undefined") return;
 
-//   // 🔑 country URL se aayega (uk / us / global)
-//   const countryFromRoute = routeParams?.countryName as string | undefined;
+  //   // 🔑 country URL se aayega (uk / us / global)
+  //   const countryFromRoute = routeParams?.countryName as string | undefined;
 
-//   // ✅ CASE 1: URL me country present hai
-//   if (countryFromRoute) {
-//     let platformFromRoute = "global";
+  //   // ✅ CASE 1: URL me country present hai
+  //   if (countryFromRoute) {
+  //     let platformFromRoute = "global";
 
-//     if (countryFromRoute === "uk") platformFromRoute = "amazon_uk";
-//     if (countryFromRoute === "us") platformFromRoute = "amazon_us";
+  //     if (countryFromRoute === "uk") platformFromRoute = "amazon_uk";
+  //     if (countryFromRoute === "us") platformFromRoute = "amazon_us";
 
-//     setSelectedPlatform(platformFromRoute);
-//     localStorage.setItem("selectedPlatform", platformFromRoute);
-//     return;
-//   }
+  //     setSelectedPlatform(platformFromRoute);
+  //     localStorage.setItem("selectedPlatform", platformFromRoute);
+  //     return;
+  //   }
 
-//   // ✅ CASE 2: URL me kuch nahi → localStorage fallback
-//   const saved = localStorage.getItem("selectedPlatform");
-//   if (saved) {
-//     setSelectedPlatform(saved);
-//   }
-// }, [routeParams]);
+  //   // ✅ CASE 2: URL me kuch nahi → localStorage fallback
+  //   const saved = localStorage.getItem("selectedPlatform");
+  //   if (saved) {
+  //     setSelectedPlatform(saved);
+  //   }
+  // }, [routeParams]);
 
   // ✅ Smaller / laptop friendly typography
   const textMain = "text-[11px] sm:text-[12px] lg:text-[12.5px] xl:text-[13px]";
@@ -125,72 +125,72 @@ const AppSidebar: React.FC = () => {
 
   // ===== Platform data =====
   const connectedPlatforms = useConnectedPlatforms();
-const rawOptions: RegionOption[] =
-  buildPlatformOptions(connectedPlatforms);
-
-const countryFromRoute = routeParams?.countryName as string | undefined;
-
-const regionOptions: RegionOption[] = React.useMemo(() => {
-  const opts = buildPlatformOptions(connectedPlatforms);
+  const rawOptions: RegionOption[] =
+    buildPlatformOptions(connectedPlatforms);
 
   const countryFromRoute = routeParams?.countryName as string | undefined;
-  if (countryFromRoute) {
-    const forcedValue = `amazon-${countryFromRoute}`;
 
-    const exists = opts.some(o => o.value === forcedValue);
-    if (!exists) {
-      opts.unshift({
-        value: forcedValue,
-        label: `Amazon ${countryFromRoute.toUpperCase()}`,
-      });
+  const regionOptions: RegionOption[] = React.useMemo(() => {
+    const opts = buildPlatformOptions(connectedPlatforms);
+
+    const countryFromRoute = routeParams?.countryName as string | undefined;
+    if (countryFromRoute) {
+      const forcedValue = `amazon-${countryFromRoute}`;
+
+      const exists = opts.some(o => o.value === forcedValue);
+      if (!exists) {
+        opts.unshift({
+          value: forcedValue,
+          label: `Amazon ${countryFromRoute.toUpperCase()}`,
+        });
+      }
     }
-  }
 
-  return opts;
-}, [connectedPlatforms, routeParams?.countryName]);
+    return opts;
+  }, [connectedPlatforms, routeParams?.countryName]);
 
 
   // ===== Selected platform =====
 
-const [selectedPlatform, setSelectedPlatform] = useState<string>(
-  countryFromRoute ? `amazon-${countryFromRoute}` : "global"
-);
-const countryMarketplaceMap = React.useMemo(() => {
-  return buildCountryMarketplaceMap(
-    user?.countries,
-    user?.marketplaces
+  const [selectedPlatform, setSelectedPlatform] = useState<string>(
+    countryFromRoute ? `amazon-${countryFromRoute}` : "global"
   );
-}, [user]);
+  const countryMarketplaceMap = React.useMemo(() => {
+    return buildCountryMarketplaceMap(
+      user?.countries,
+      user?.marketplaces
+    );
+  }, [user]);
 
-useEffect(() => {
-  // 1️⃣ URL has highest priority
-  const country = routeParams?.countryName as string | undefined;
-  if (country) {
-    const platform = `amazon-${country}` as PlatformId;
-    setSelectedPlatform(platform);
-    setPlatformCtx(platform);
-    localStorage.setItem("selectedPlatform", platform);
-    return;
-  }
+  useEffect(() => {
+    // 1️⃣ URL has highest priority
+    const country = routeParams?.countryName as string | undefined;
+    if (country) {
+      const platform = `amazon-${country}` as PlatformId;
+      setSelectedPlatform(platform);
+      setPlatformCtx(platform);
+      localStorage.setItem("selectedPlatform", platform);
+      return;
+    }
 
-  // 2️⃣ fallback to localStorage
-  const saved = localStorage.getItem("selectedPlatform");
-  if (saved) {
-    setSelectedPlatform(saved);
-    setPlatformCtx(saved as PlatformId);
-  }
-}, [routeParams?.countryName]);
-
-
+    // 2️⃣ fallback to localStorage
+    const saved = localStorage.getItem("selectedPlatform");
+    if (saved) {
+      setSelectedPlatform(saved);
+      setPlatformCtx(saved as PlatformId);
+    }
+  }, [routeParams?.countryName]);
 
 
 
 
-  
+
+
+
 
   const monthNames = [
-    "january","february","march","april","may","june",
-    "july","august","september","october","november","december",
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
   ];
 
   const [initialPeriod] = useState(() => {
@@ -209,123 +209,123 @@ useEffect(() => {
             year = String(parsed.year);
           }
         }
-      } catch {}
+      } catch { }
     }
     return { ranged, month, year };
   });
 
-  
 
-const currentCountryName =
-  (routeParams?.countryName as string) || "global";
+
+  const currentCountryName =
+    (routeParams?.countryName as string) || "global";
 
   const currentParams = {
-  ranged: (routeParams?.ranged as string) || initialPeriod.ranged,
-  countryName: currentCountryName,
-  month: (routeParams?.month as string) || initialPeriod.month,
-  year: (routeParams?.year as string) || initialPeriod.year,
-};
+    ranged: (routeParams?.ranged as string) || initialPeriod.ranged,
+    countryName: currentCountryName,
+    month: (routeParams?.month as string) || initialPeriod.month,
+    year: (routeParams?.year as string) || initialPeriod.year,
+  };
 
 
   const { setPlatform: setPlatformCtx } = usePlatform();
 
   const handleFetchAgedInventory = async () => {
-  try {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("jwtToken")
-        : null;
+    try {
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("jwtToken")
+          : null;
 
-    if (!token) {
-      console.error("No auth token found");
-      return;
+      if (!token) {
+        console.error("No auth token found");
+        return;
+      }
+
+      const res = await fetch(
+        "http://localhost:5000/amazon_api/inventory/aged",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`API Error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      console.log("Aged Inventory Response:", data);
+
+      // 👉 yahin se tum data ko store / context / redux me bhej sakte ho
+    } catch (err) {
+      console.error("Aged Inventory API Error:", err);
     }
+  };
 
-    const res = await fetch(
-      "http://localhost:5000/amazon_api/inventory/aged",
-      {
+  const handleInventoryForecastFetch = async () => {
+    try {
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("jwtToken")
+          : null;
+
+      if (!token) {
+        console.error("No auth token found");
+        return;
+      }
+
+      const baseUrl =
+        process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
+
+      // 🔒 month/year se LAST DATE nikaalne ka logic (same as page)
+      const months = [
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+      ];
+
+      const monthIndex = months.indexOf(currentParams.month.toLowerCase());
+      if (monthIndex === -1) {
+        console.error("Invalid month");
+        return;
+      }
+
+      const year = Number(currentParams.year);
+      const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+
+      const lastDateISO = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+      const url =
+        `${baseUrl}/amazon_api/inventory/ledger-summary` +
+        `?start_date=${encodeURIComponent(lastDateISO)}` +
+        `&end_date=${encodeURIComponent(lastDateISO)}` +
+        `&store_in_db=true`;
+
+      const res = await fetch(url, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
         },
-      }
-    );
+      });
 
-    if (!res.ok) {
-      throw new Error(`API Error: ${res.status}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Ledger API failed");
+
+      console.log("✅ Inventory Forecast API Response:", data);
+
+      // 👉 yahan tum:
+      // - context
+      // - redux
+      // - localStorage
+      // - ya direct table component
+      // bhej sakte ho
+
+    } catch (err) {
+      console.error("❌ Inventory Forecast API Error:", err);
     }
-
-    const data = await res.json();
-    console.log("Aged Inventory Response:", data);
-
-    // 👉 yahin se tum data ko store / context / redux me bhej sakte ho
-  } catch (err) {
-    console.error("Aged Inventory API Error:", err);
-  }
-};
-
-const handleInventoryForecastFetch = async () => {
-  try {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("jwtToken")
-        : null;
-
-    if (!token) {
-      console.error("No auth token found");
-      return;
-    }
-
-    const baseUrl =
-      process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:5000";
-
-    // 🔒 month/year se LAST DATE nikaalne ka logic (same as page)
-    const months = [
-      "january","february","march","april","may","june",
-      "july","august","september","october","november","december",
-    ];
-
-    const monthIndex = months.indexOf(currentParams.month.toLowerCase());
-    if (monthIndex === -1) {
-      console.error("Invalid month");
-      return;
-    }
-
-    const year = Number(currentParams.year);
-    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
-
-    const lastDateISO = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-
-    const url =
-      `${baseUrl}/amazon_api/inventory/ledger-summary` +
-      `?start_date=${encodeURIComponent(lastDateISO)}` +
-      `&end_date=${encodeURIComponent(lastDateISO)}` +
-      `&store_in_db=true`;
-
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || "Ledger API failed");
-
-    console.log("✅ Inventory Forecast API Response:", data);
-
-    // 👉 yahan tum:
-    // - context
-    // - redux
-    // - localStorage
-    // - ya direct table component
-    // bhej sakte ho
-
-  } catch (err) {
-    console.error("❌ Inventory Forecast API Error:", err);
-  }
-};
+  };
 
 
 
@@ -425,40 +425,203 @@ const handleInventoryForecastFetch = async () => {
     if (newPath && newPath !== pathname) router.push(newPath);
   };
 
-  const sections: NavSection[] = [
-    {
-  key: "Live Analytics",
-  name: "LIVE ANALYTICS",
-  icon: (
-    <Image
-      src="/images/brand/business.png"
-      alt="Logo"
-      width={18}
-      height={18}
-      className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
-    />
-  ),
-  subItems: [
-    {
-      name: "Real-Time Dashboard",
-      path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-      onClick: handleFetchAgedInventory, 
-    },
-  ],
-},
+  //   const sections: NavSection[] = [
+  //     {
+  //   key: "Live Analytics",
+  //   name: "LIVE ANALYTICS",
+  //   icon: (
+  //     <Image
+  //       src="/images/brand/business.png"
+  //       alt="Logo"
+  //       width={18}
+  //       height={18}
+  //       className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
+  //     />
+  //   ),
+  //   subItems: [
+  //     {
+  //       name: "Real-Time Dashboard",
+  //       path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //       onClick: handleFetchAgedInventory, 
+  //     },
+  //   ],
+  // },
 
+  //     {
+  //       key: "dashboard",
+  //       name: "HISTORICAL DASHBOARD",
+  //       icon: <LuLayoutDashboard className={iconSize} />,
+  //       subItems: [
+  //         {
+  //           name: "Profits",
+  //           path: ({ ranged, countryName, month, year }) =>
+  //             `/country/${ranged}/${countryName}/${month}/${year}`,
+  //         },
+  //         {
+  //           name: "SKU-Wise Profit",
+  //           path: (params: {
+  //             productname?: string;
+  //             countryName: string;
+  //             month: string;
+  //             year: string;
+  //           }) =>
+  //             `/productwiseperformance/${params.productname ?? "Classic"}/${params.countryName}/${params.month}/${params.year}`,
+  //         },
+  //         {
+  //           name: "Cash Flow",
+  //           path: ({ countryName, month, year }) =>
+  //             `/cashflow/${encodeURIComponent(countryName)}/${encodeURIComponent(month)}/${encodeURIComponent(year)}`,
+  //         },
+  //       ],
+  //     },
+  //     {
+  //       key: "business-intelligence",
+  //       name: "BUSINESS INTELLIGENCE",
+  //       icon: (
+  //         <Image
+  //           src="/images/brand/business.png"
+  //           alt="Logo"
+  //           width={18}
+  //           height={18}
+  //           className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
+  //         />
+  //       ),
+  //       subItems: [
+  //         {
+  //           name: "Business Insights",
+  //           path: `/business-insight/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //         },
+  //         {
+  //           name: "Chatbot",
+  //           path: `/chatbot/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //         },
+  //         {
+  //           name: "Inventory Forecast",
+  //           path: `/inventoryChoice/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //           onClick: handleInventoryForecastFetch,
+  //         },
+  //         {
+  //           name: "P/L Forecast",
+  //           path: `/pnlforecast/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //         },
+  //       ],
+  //     },
+  //     {
+  //       key: "inventory",
+  //       name: "INVENTORY",
+  //       icon: (
+  //         <Image
+  //           src="/images/brand/inventory.png"
+  //           alt="Logo"
+  //           width={18}
+  //           height={18}
+  //           className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
+  //         />
+  //       ),
+  //       subItems: [
+  //         {
+  //           name: "Current Inventory",
+  //           path: `/inputCost/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //         },
+  //         // {
+  //         //   name: "Month-Wise Inventory",
+  //         //   path: `/currentInventory/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //         // },
+  //         {
+  //           name: "Dispatches",
+  //           path: `/dispatch/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //         },
+  //         {
+  //           name: "PO",
+  //           path: `/purchase-order/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //         },
+  //       ],
+  //     },
+  //     {
+  //       key: "recon",
+  //       name: "RECON",
+  //       icon: (
+  //         <Image
+  //           src="/images/brand/recon.png"
+  //           alt="Logo"
+  //           width={18}
+  //           height={18}
+  //           className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
+  //         />
+  //       ),
+  //       subItems: [
+  //         {
+  //           name: "Referral Fees",
+  //           path: ({ countryName, month, year }) =>
+  //             `/referral-fees/${encodeURIComponent(countryName)}/${encodeURIComponent(month)}/${encodeURIComponent(year)}`,
+  //         },
+  //         {
+  //           name: "FBA Fees",
+  //           path: `/fba/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+  //         },
+  //       ],
+  //     },
+  //   ];
+
+  const sections: NavSection[] = [
+    // A) Live Dashboard (real-time page sections only)
     {
-      key: "dashboard",
-      name: "HISTORICAL DASHBOARD",
+      key: "live-dashboard",
+      name: "LIVE DASHBOARD",
+      icon: (
+        <Image
+          src="/images/brand/business.png"
+          alt="Logo"
+          width={18}
+          height={18}
+          className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
+        />
+      ),
+      subItems: [
+        {
+          name: "Live Sales",
+          path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#live-sales`,
+        },
+        {
+          name: "Targets and Action Items",
+          path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#targets-action-items`,
+        },
+        {
+          name: "MTD P&L",
+          path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#mtd-pl`,
+        },
+        {
+          name: "Current Inventory",
+          path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#current-inventory`,
+          onClick: handleFetchAgedInventory, // optional: keep/remove if you want an API call here
+        },
+      ],
+    },
+
+    // B) Finance Dashboards
+    {
+      key: "finance-dashboards",
+      name: "FINANCE DASHBOARDS",
       icon: <LuLayoutDashboard className={iconSize} />,
       subItems: [
         {
-          name: "Profits",
+          name: "P&L Dashboard",
           path: ({ ranged, countryName, month, year }) =>
-            `/country/${ranged}/${countryName}/${month}/${year}`,
+            `/country/${ranged}/${countryName}/${month}/${year}`, // your Profits page
         },
         {
-          name: "SKU-Wise Profit",
+          name: "Business Summary",
+          path: "#", // nothing to map
+        },
+        {
+          name: "Cash Flow",
+          path: ({ countryName, month, year }) =>
+            `/cashflow/${encodeURIComponent(countryName)}/${encodeURIComponent(
+              month
+            )}/${encodeURIComponent(year)}`,
+        },
+        {
+          name: "SKU wise Profit",
           path: (params: {
             productname?: string;
             countryName: string;
@@ -468,12 +631,16 @@ const handleInventoryForecastFetch = async () => {
             `/productwiseperformance/${params.productname ?? "Classic"}/${params.countryName}/${params.month}/${params.year}`,
         },
         {
-          name: "Cash Flow",
+          name: "Expense Reconcilliation",
           path: ({ countryName, month, year }) =>
-            `/cashflow/${encodeURIComponent(countryName)}/${encodeURIComponent(month)}/${encodeURIComponent(year)}`,
+            `/referral-fees/${encodeURIComponent(countryName)}/${encodeURIComponent(
+              month
+            )}/${encodeURIComponent(year)}`, // your Amazon/Referral Fees page
         },
       ],
     },
+
+    // C) Business Intelligence
     {
       key: "business-intelligence",
       name: "BUSINESS INTELLIGENCE",
@@ -488,7 +655,7 @@ const handleInventoryForecastFetch = async () => {
       ),
       subItems: [
         {
-          name: "Business Insights",
+          name: "AI Insights",
           path: `/business-insight/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
         },
         {
@@ -501,14 +668,16 @@ const handleInventoryForecastFetch = async () => {
           onClick: handleInventoryForecastFetch,
         },
         {
-          name: "P/L Forecast",
+          name: "P&L Forecast",
           path: `/pnlforecast/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
         },
       ],
     },
+
+    // D) Inventory Planning
     {
-      key: "inventory",
-      name: "INVENTORY",
+      key: "inventory-planning",
+      name: "INVENTORY PLANNING",
       icon: (
         <Image
           src="/images/brand/inventory.png"
@@ -520,57 +689,39 @@ const handleInventoryForecastFetch = async () => {
       ),
       subItems: [
         {
-          name: "Current Inventory",
-          path: `/inputCost/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+          name: "Inventory Reconcilliation",
+          path: `/inputCost/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`, // ✅ Current Inventory
         },
-        // {
-        //   name: "Month-Wise Inventory",
-        //   path: `/currentInventory/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-        // },
+
         {
-          name: "Dispatches",
+          name: "Dispatch Planning",
           path: `/dispatch/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
         },
         {
-          name: "PO",
+          name: "Purchase Order (PO) Planning",
           path: `/purchase-order/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-        },
-      ],
-    },
-    {
-      key: "recon",
-      name: "RECON",
-      icon: (
-        <Image
-          src="/images/brand/recon.png"
-          alt="Logo"
-          width={18}
-          height={18}
-          className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
-        />
-      ),
-      subItems: [
-        {
-          name: "Referral Fees",
-          path: ({ countryName, month, year }) =>
-            `/referral-fees/${encodeURIComponent(countryName)}/${encodeURIComponent(month)}/${encodeURIComponent(year)}`,
-        },
-        {
-          name: "FBA Fees",
-          path: `/fba/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
         },
       ],
     },
   ];
 
+
+  // const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+  //   "Live Analytics": true,
+  //   dashboard: true,
+  //   "business-intelligence": true,
+  //   inventory: true,
+  //   recon: true,
+  //   integrations: false,
+  // });
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    "Live Analytics": true,
-    dashboard: true,
+    "live-dashboard": true,
+    "finance-dashboards": true,
     "business-intelligence": true,
-    inventory: true,
-    recon: true,
-    integrations: false,
+    "inventory-planning": true,
   });
+
 
   const toggleSection = useCallback((key: string) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -587,18 +738,17 @@ const handleInventoryForecastFetch = async () => {
   const showText = isExpanded || isHovered || isMobileOpen;
 
   const safeSelectedPlatform =
-  regionOptions.find((o) => o.value === selectedPlatform)?.value ??
-  regionOptions[0]?.value ??
-  "global";
+    regionOptions.find((o) => o.value === selectedPlatform)?.value ??
+    regionOptions[0]?.value ??
+    "global";
 
   return (
     <aside
       className={`fixed mt-16 flex flex-col lg:mt-0 top-0 left-0 bg-white text-gray-900 h-screen overflow-y-auto transition-all duration-300 ease-in-out z-[1100]
         px-3 sm:px-4 lg:px-3 xl:px-4
-        ${
-          isMobileOpen
-            ? "w-full"
-            : showText
+        ${isMobileOpen
+          ? "w-full"
+          : showText
             ? "w-[clamp(190px,18vw,280px)]"
             : "w-[64px] sm:w-[72px]"
         }
@@ -610,9 +760,8 @@ const handleInventoryForecastFetch = async () => {
     >
       {/* Logo + toggle */}
       <div
-        className={`py-4 sm:py-5 lg:py-6 flex gap-2 items-center border-0 ${
-          !isExpanded && !isHovered ? "lg:justify-between" : "justify-between"
-        }`}
+        className={`py-4 sm:py-5 lg:py-6 flex gap-2 items-center border-0 ${!isExpanded && !isHovered ? "lg:justify-between" : "justify-between"
+          }`}
       >
         <Link href={`/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`} className="flex items-center gap-2">
           {showText ? (
@@ -665,16 +814,16 @@ const handleInventoryForecastFetch = async () => {
       </div>
 
       {/* Platform Select */}
-{showText && regionOptions.length > 0 && (
-  <RegionSelect
-    label="Platform"
-    selectedCountry={safeSelectedPlatform}   // ✅ yahin use
-    options={regionOptions}
-    onChange={onRegionChange}
-    className={`mb-2 rounded bg-transparent text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#5EA68E]
+      {showText && regionOptions.length > 0 && (
+        <RegionSelect
+          label="Platform"
+          selectedCountry={safeSelectedPlatform}   // ✅ yahin use
+          options={regionOptions}
+          onChange={onRegionChange}
+          className={`mb-2 rounded bg-transparent text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#5EA68E]
       px-2 py-1 ${textMain}`}
-  />
-)}
+        />
+      )}
 
       {/* Navigation Sections */}
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar px-2">
@@ -694,8 +843,7 @@ const handleInventoryForecastFetch = async () => {
                     onClick={() => toggleSection(section.key)}
                     className={`w-full rounded hover:bg-[#5EA68E]/15 transition-colors cursor-pointer group
                       ${padHeader} ${textSection} text-left text-[#5EA68E] font-semibold
-                      flex items-center ${
-                        showText ? "justify-between" : "justify-center"
+                      flex items-center ${showText ? "justify-between" : "justify-center"
                       }
                       ${isSectionActive ? "bg-[#5EA68E]/10" : ""}`}
                   >
@@ -706,9 +854,8 @@ const handleInventoryForecastFetch = async () => {
 
                     {showText && (
                       <FaChevronDown
-                        className={`h-3 w-3 sm:h-3.5 sm:w-3.5 transition-transform duration-200 ${
-                          openSections[section.key] ? "rotate-0" : "rotate-90"
-                        }`}
+                        className={`h-3 w-3 sm:h-3.5 sm:w-3.5 transition-transform duration-200 ${openSections[section.key] ? "rotate-0" : "rotate-90"
+                          }`}
                       />
                     )}
                   </button>
@@ -728,10 +875,9 @@ const handleInventoryForecastFetch = async () => {
                             onClick={() => subItem.onClick?.()}
                             className={`block rounded transition-colors
                               ${padItem} ${textMain} text-gray-700 hover:bg-[#5EA68E]/15
-                              ${
-                                isActive(subItem.path as any)
-                                  ? "bg-[#5EA68E]/20 text-[#5EA68E] font-medium"
-                                  : ""
+                              ${isActive(subItem.path as any)
+                                ? "bg-[#5EA68E]/20 text-[#5EA68E] font-medium"
+                                : ""
                               }`}
                           >
                             {subItem.name}
