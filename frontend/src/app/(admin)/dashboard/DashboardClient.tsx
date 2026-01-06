@@ -15,7 +15,7 @@ import AmazonStatCard from "@/components/dashboard/AmazonStatCard";
 import CurrentInventorySection from "@/components/dashboard/CurrentInventorySection";
 import { RootState } from "@/lib/store";
 import { useAmazonConnections } from "@/lib/utils/useAmazonConnections";
-
+import HashScroll from "@/components/common/HashScroll";
 import {
   getISTYearMonth,
   getPrevISTYearMonth,
@@ -125,16 +125,27 @@ type BiApiResponse = {
 
 
 type BiAlignedTotals = {
+  // existing fields you already have...
   current_cm2_profit?: number;
   previous_cm2_profit?: number;
   total_current_profit_percentage?: number;
   total_previous_profit_percentage?: number;
 
-  // ✅ add these
   total_previous_net_sales_full_month?: number;
   total_previous_net_sales?: number;
   total_current_net_sales?: number;
+
+  // ✅ NEW (from your API response)
+  total_current_advertising?: number;
+  total_previous_advertising?: number;
+
+  total_current_platform_fees?: number;
+  total_previous_platform_fees?: number;
+
+  total_current_profit?: number;
+  total_previous_profit?: number;
 };
+
 
 /* ===================== SMALL HELPERS ===================== */
 const getShort = (label?: string) => (label ? label.split(" ")[0] || label : "");
@@ -155,6 +166,8 @@ const safeDeltaPctFromPct = (currentPct: number, previousPct: number) => {
   if (!p) return null;
   return ((c - p) / Math.abs(p)) * 100;
 };
+
+const fmtPct2 = (v: number) => `${(Number(v) || 0).toFixed(2)}%`;
 
 
 /* ===================== RANGE PICKER (moved above graph) ===================== */
@@ -347,10 +360,9 @@ const sliceByDayRange = (
 
 
 export default function DashboardPage() {
+
   const { platform } = usePlatform();
   const { data: userData } = useGetUserDataQuery();
-  console.log("DATAAA", userData)
-
   const isCountryMode = platform !== "global" && platform !== "shopify";
 
   const countryName = useMemo(() => {
@@ -384,6 +396,15 @@ export default function DashboardPage() {
     () => currencyForCountry(biCountryName),
     [biCountryName]
   );
+
+  const amazonDataCurrency: CurrencyCode = useMemo(() => {
+    // your fetchAmazon uses UK when platform is "global"
+    if (platform === "amazon-us") return "USD";
+    if (platform === "amazon-ca") return "CAD";
+    return "GBP"; // amazon-uk OR global default
+  }, [platform]);
+
+
 
 
   /* ===================== PLATFORM → DISPLAY CURRENCY ===================== */
@@ -992,7 +1013,27 @@ export default function DashboardPage() {
         setBiPeriods(json?.periods || null);
         setBiDailySeries(json?.daily_series || null);
 
-        setBiAlignedTotals(json?.aligned_totals || null);
+        // setBiAlignedTotals(json?.aligned_totals || null);
+        const alignedFromNested = (json as any)?.aligned_totals;
+
+        const alignedFromTopLevel: BiAlignedTotals = {
+          total_current_advertising: (json as any)?.total_current_advertising,
+          total_previous_advertising: (json as any)?.total_previous_advertising,
+
+          total_current_net_sales: (json as any)?.total_current_net_sales,
+          total_previous_net_sales: (json as any)?.total_previous_net_sales,
+          total_previous_net_sales_full_month: (json as any)?.total_previous_net_sales_full_month,
+
+          total_current_platform_fees: (json as any)?.total_current_platform_fees,
+          total_previous_platform_fees: (json as any)?.total_previous_platform_fees,
+
+          total_current_profit: (json as any)?.total_current_profit,
+          total_previous_profit: (json as any)?.total_previous_profit,
+        };
+
+        // ✅ prefer nested if backend sends it, else fallback to top-level
+        setBiAlignedTotals(alignedFromNested ?? alignedFromTopLevel ?? null);
+
       } catch (e: any) {
         setBiPeriods(null);
         setBiDailySeries(null);
@@ -1127,6 +1168,39 @@ export default function DashboardPage() {
     };
   }, [prevTotals]);
 
+  // ✅ AMAZON Ads (display currency)
+  const amazonCurrAdsDisp = useMemo(() => {
+    const ads = toNumberSafe(derived?.advertising_fees ?? 0);
+    return convertToDisplayCurrency(ads, amazonDataCurrency);
+  }, [derived?.advertising_fees, convertToDisplayCurrency, amazonDataCurrency]);
+
+  const amazonPrevAdsDisp = useMemo(() => {
+    const ads = toNumberSafe(data?.previous_period?.totals?.advertising_fees ?? 0);
+    return convertToDisplayCurrency(ads, amazonDataCurrency);
+  }, [data?.previous_period?.totals?.advertising_fees, convertToDisplayCurrency, amazonDataCurrency]);
+
+  const amazonAdsDeltaPct = useMemo(
+    () => safeDeltaPct(amazonCurrAdsDisp, amazonPrevAdsDisp),
+    [amazonCurrAdsDisp, amazonPrevAdsDisp]
+  );
+
+  // ✅ AMAZON ROAS% = (Ads / Net Sales) * 100
+  const amazonCurrRoasPct = useMemo(() => {
+    const sales = toNumberSafe(derived?.net_sales ?? 0);
+    const ads = toNumberSafe(derived?.advertising_fees ?? 0);
+    return sales > 0 ? (ads / sales) * 100 : 0;
+  }, [derived?.net_sales, derived?.advertising_fees]);
+
+  const amazonPrevRoasPct = useMemo(() => {
+    const sales = toNumberSafe(data?.previous_period?.totals?.net_sales ?? 0);
+    const ads = toNumberSafe(data?.previous_period?.totals?.advertising_fees ?? 0);
+    return sales > 0 ? (ads / sales) * 100 : 0;
+  }, [data?.previous_period?.totals?.net_sales, data?.previous_period?.totals?.advertising_fees]);
+
+  const amazonRoasDeltaPct = useMemo(
+    () => safeDeltaPct(amazonCurrRoasPct, amazonPrevRoasPct),
+    [amazonCurrRoasPct, amazonPrevRoasPct]
+  );
 
 
 
@@ -1159,6 +1233,12 @@ export default function DashboardPage() {
     const c = Number(currentPct) || 0;
     const p = Number(previousPct) || 0;
     return c - p; // percentage points
+  };
+
+  const deltaPctAbs = (currentPct: number, previousPct: number) => {
+    const c = Number(currentPct) || 0;
+    const p = Number(previousPct) || 0;
+    return c - p;
   };
 
 
@@ -1456,91 +1536,91 @@ export default function DashboardPage() {
   // ]);
 
   const regions = useMemo(() => {
-  // ✅ user target is stored in GBP; convert to display (home) currency
-  const userMonthlyTargetGBP = toNumberSafe(userData?.target_sales ?? 0);
-  const userMonthlyTargetHome =
-    userMonthlyTargetGBP > 0
-      ? convertToDisplayCurrency(userMonthlyTargetGBP, "GBP")
-      : 0;
+    // ✅ user target is stored in GBP; convert to display (home) currency
+    const userMonthlyTargetGBP = toNumberSafe(userData?.target_sales ?? 0);
+    const userMonthlyTargetHome =
+      userMonthlyTargetGBP > 0
+        ? convertToDisplayCurrency(userMonthlyTargetGBP, "GBP")
+        : 0;
 
-  // ✅ GLOBAL: keep "sales" (lastMonthTotalUSD) as your computed prev full-month sales
-  const globalPrevFullMonthSales =
-    globalPrevFullMonthNetSalesDisp > 0
-      ? globalPrevFullMonthNetSalesDisp
-      : globalPrevNetDisp;
+    // ✅ GLOBAL: keep "sales" (lastMonthTotalUSD) as your computed prev full-month sales
+    const globalPrevFullMonthSales =
+      globalPrevFullMonthNetSalesDisp > 0
+        ? globalPrevFullMonthNetSalesDisp
+        : globalPrevNetDisp;
 
-  // ✅ GLOBAL target: prefer user target, else fallback to sales baseline
-  const globalTarget =
-    userMonthlyTargetHome > 0 ? userMonthlyTargetHome : globalPrevFullMonthSales;
+    // ✅ GLOBAL target: prefer user target, else fallback to sales baseline
+    const globalTarget =
+      userMonthlyTargetHome > 0 ? userMonthlyTargetHome : globalPrevFullMonthSales;
 
-  const global: RegionMetrics = {
-    mtdUSD: globalCurrNetDisp,
-    lastMonthToDateUSD: globalPrevNetDisp, // prev MTD
-    lastMonthTotalUSD: globalPrevFullMonthSales, // ✅ Dec/prev full-month SALES (as-is)
-    targetUSD: globalTarget, // ✅ Target from userData
-    decTargetUSD: globalTarget,
-  };
+    const global: RegionMetrics = {
+      mtdUSD: globalCurrNetDisp,
+      lastMonthToDateUSD: globalPrevNetDisp, // prev MTD
+      lastMonthTotalUSD: globalPrevFullMonthSales, // ✅ Dec/prev full-month SALES (as-is)
+      targetUSD: globalTarget, // ✅ Target from userData
+      decTargetUSD: globalTarget,
+    };
 
-  // ✅ UK: keep "sales" (lastMonthTotalUSD) as your computed prev full-month sales
-  const ukPrevFullMonthSales =
-    prevFullMonthNetSalesDisp > 0
-      ? prevFullMonthNetSalesDisp
-      : amazonPrevNetDisp;
+    // ✅ UK: keep "sales" (lastMonthTotalUSD) as your computed prev full-month sales
+    const ukPrevFullMonthSales =
+      prevFullMonthNetSalesDisp > 0
+        ? prevFullMonthNetSalesDisp
+        : amazonPrevNetDisp;
 
-  // ✅ UK target: prefer user target, else fallback
-  const ukTarget =
-    userMonthlyTargetHome > 0 ? userMonthlyTargetHome : ukPrevFullMonthSales;
+    // ✅ UK target: prefer user target, else fallback
+    const ukTarget =
+      userMonthlyTargetHome > 0 ? userMonthlyTargetHome : ukPrevFullMonthSales;
 
-  const ukRegion: RegionMetrics = {
-    mtdUSD: amazonCurrNetDisp,
-    lastMonthToDateUSD: amazonPrevNetDisp, // prev MTD
-    lastMonthTotalUSD: ukPrevFullMonthSales, // ✅ Dec/prev full-month SALES (as-is)
-    targetUSD: ukTarget, // ✅ Target from userData
-    decTargetUSD: ukTarget,
-  };
+    const ukRegion: RegionMetrics = {
+      mtdUSD: amazonCurrNetDisp,
+      lastMonthToDateUSD: amazonPrevNetDisp, // prev MTD
+      lastMonthTotalUSD: ukPrevFullMonthSales, // ✅ Dec/prev full-month SALES (as-is)
+      targetUSD: ukTarget, // ✅ Target from userData
+      decTargetUSD: ukTarget,
+    };
 
-  // ✅ US/CA unchanged (you currently use manual env fallbacks)
-  const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
-  const usRegion: RegionMetrics = {
-    mtdUSD: 0,
-    lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
-    lastMonthTotalUSD: usLastMonthTotal,
-    targetUSD: usLastMonthTotal,
-    decTargetUSD: usLastMonthTotal,
-  };
+    // ✅ US/CA unchanged (you currently use manual env fallbacks)
+    const usLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_US, 0);
+    const usRegion: RegionMetrics = {
+      mtdUSD: 0,
+      lastMonthToDateUSD: prorateToDate(usLastMonthTotal),
+      lastMonthTotalUSD: usLastMonthTotal,
+      targetUSD: usLastMonthTotal,
+      decTargetUSD: usLastMonthTotal,
+    };
 
-  const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
-  const caRegion: RegionMetrics = {
-    mtdUSD: 0,
-    lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
-    lastMonthTotalUSD: caLastMonthTotal,
-    targetUSD: caLastMonthTotal,
-    decTargetUSD: caLastMonthTotal,
-  };
+    const caLastMonthTotal = chooseLastMonthTotal(MANUAL_LAST_MONTH_USD_CA, 0);
+    const caRegion: RegionMetrics = {
+      mtdUSD: 0,
+      lastMonthToDateUSD: prorateToDate(caLastMonthTotal),
+      lastMonthTotalUSD: caLastMonthTotal,
+      targetUSD: caLastMonthTotal,
+      decTargetUSD: caLastMonthTotal,
+    };
 
-  return {
-    Global: global,
-    UK: ukRegion,
-    US: usRegion,
-    CA: caRegion,
-  } as Record<RegionKey, RegionMetrics>;
-}, [
-  // existing deps you already had
-  globalCurrNetDisp,
-  globalPrevNetDisp,
-  amazonCurrNetDisp,
-  amazonPrevNetDisp,
-  prevFullMonthNetSalesDisp,
-  globalPrevFullMonthNetSalesDisp,
+    return {
+      Global: global,
+      UK: ukRegion,
+      US: usRegion,
+      CA: caRegion,
+    } as Record<RegionKey, RegionMetrics>;
+  }, [
+    // existing deps you already had
+    globalCurrNetDisp,
+    globalPrevNetDisp,
+    amazonCurrNetDisp,
+    amazonPrevNetDisp,
+    prevFullMonthNetSalesDisp,
+    globalPrevFullMonthNetSalesDisp,
 
-  // ✅ add these because we use them inside now
-  userData?.target_sales,
-  convertToDisplayCurrency,
+    // ✅ add these because we use them inside now
+    userData?.target_sales,
+    convertToDisplayCurrency,
 
-  // these are referenced by US/CA regions
-  chooseLastMonthTotal,
-  prorateToDate,
-]);
+    // these are referenced by US/CA regions
+    chooseLastMonthTotal,
+    prorateToDate,
+  ]);
 
 
   const anyLoading = loading || shopifyLoading;
@@ -1855,6 +1935,88 @@ export default function DashboardPage() {
     return convertToDisplayCurrency(globalPrevTotalUSD, "USD");
   }, [onlyAmazon, prev.netSales, globalPrevTotalUSD, convertToDisplayCurrency]);
 
+  // ✅ GLOBAL Ads (Amazon Ads only for now)
+  const globalCurrAdsDisp = useMemo(() => {
+    const ads = toNumberSafe(derived?.advertising_fees ?? 0);
+    return convertToDisplayCurrency(ads, amazonDataCurrency);
+  }, [derived?.advertising_fees, convertToDisplayCurrency, amazonDataCurrency]);
+
+  const globalPrevAdsDisp = useMemo(() => {
+    const ads = toNumberSafe(data?.previous_period?.totals?.advertising_fees ?? 0);
+    return convertToDisplayCurrency(ads, amazonDataCurrency);
+  }, [data?.previous_period?.totals?.advertising_fees, convertToDisplayCurrency, amazonDataCurrency]);
+
+  const globalAdsDeltaPct = useMemo(
+    () => safeDeltaPct(globalCurrAdsDisp, globalPrevAdsDisp),
+    [globalCurrAdsDisp, globalPrevAdsDisp]
+  );
+
+  // ✅ GLOBAL ROAS% (normalize to USD to avoid GBP+INR mixing)
+  const globalCurrRoasPct = useMemo(() => {
+    const ads = toNumberSafe(derived?.advertising_fees ?? 0);
+    const amazonSales = toNumberSafe(derived?.net_sales ?? 0);
+    const shopifySales = toNumberSafe(shopifyDeriv?.netSales ?? 0);
+
+    const amazonSalesUsd =
+      amazonDataCurrency === "GBP" ? amazonSales * gbpToUsd :
+        amazonDataCurrency === "CAD" ? amazonSales * cadToUsd :
+          amazonSales;
+
+    const shopifySalesUsd = shopifySales * inrToUsd;
+    const globalSalesUsd = onlyAmazon ? amazonSalesUsd : (amazonSalesUsd + shopifySalesUsd);
+
+    const adsUsd =
+      amazonDataCurrency === "GBP" ? ads * gbpToUsd :
+        amazonDataCurrency === "CAD" ? ads * cadToUsd :
+          ads;
+
+    return globalSalesUsd > 0 ? (adsUsd / globalSalesUsd) * 100 : 0;
+  }, [
+    derived?.advertising_fees,
+    derived?.net_sales,
+    shopifyDeriv?.netSales,
+    onlyAmazon,
+    amazonDataCurrency,
+    gbpToUsd,
+    cadToUsd,
+    inrToUsd,
+  ]);
+
+  const globalPrevRoasPct = useMemo(() => {
+    const ads = toNumberSafe(data?.previous_period?.totals?.advertising_fees ?? 0);
+    const amazonSales = toNumberSafe(data?.previous_period?.totals?.net_sales ?? 0);
+    const shopifySales = toNumberSafe(shopifyPrevDeriv?.netSales ?? 0);
+
+    const amazonSalesUsd =
+      amazonDataCurrency === "GBP" ? amazonSales * gbpToUsd :
+        amazonDataCurrency === "CAD" ? amazonSales * cadToUsd :
+          amazonSales;
+
+    const shopifySalesUsd = shopifySales * inrToUsd;
+    const globalSalesUsd = onlyAmazon ? amazonSalesUsd : (amazonSalesUsd + shopifySalesUsd);
+
+    const adsUsd =
+      amazonDataCurrency === "GBP" ? ads * gbpToUsd :
+        amazonDataCurrency === "CAD" ? ads * cadToUsd :
+          ads;
+
+    return globalSalesUsd > 0 ? (adsUsd / globalSalesUsd) * 100 : 0;
+  }, [
+    data?.previous_period?.totals?.advertising_fees,
+    data?.previous_period?.totals?.net_sales,
+    shopifyPrevDeriv?.netSales,
+    onlyAmazon,
+    amazonDataCurrency,
+    gbpToUsd,
+    cadToUsd,
+    inrToUsd,
+  ]);
+
+  const globalRoasDeltaPct = useMemo(
+    () => safeDeltaPct(globalCurrRoasPct, globalPrevRoasPct),
+    [globalCurrRoasPct, globalPrevRoasPct]
+  );
+
   const globalCurrAspDisp = useMemo(() => {
     return globalCurrUnits > 0 ? globalCurrNetSalesDisp / globalCurrUnits : 0;
   }, [globalCurrUnits, globalCurrNetSalesDisp]);
@@ -1930,12 +2092,6 @@ export default function DashboardPage() {
 
   const rangeCurrency = currencyForCountry(countryName);
 
-  const amazonDataCurrency: CurrencyCode = useMemo(() => {
-    // your fetchAmazon uses UK when platform is "global"
-    if (platform === "amazon-us") return "USD";
-    if (platform === "amazon-ca") return "CAD";
-    return "GBP"; // amazon-uk OR global default
-  }, [platform]);
 
   const identityConvert = useCallback((v: number, _from?: any) => v, []);
 
@@ -1995,6 +2151,7 @@ export default function DashboardPage() {
 
   return (
     <div className="relative overflow-x-hidden">
+      <HashScroll offset={80} />
       {(loading || shopifyLoading) && !data && !shopify && (
         <>
           <div className="fixed inset-0 z-40 bg-white/70" />
@@ -2046,7 +2203,8 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        <div className={`grid grid-cols-12 gap-6 items-stretch`}>
+        {/* <div className={`grid grid-cols-12 gap-6 items-stretch`}> */}
+        <div id="live-sales" className="grid grid-cols-12 gap-6 items-stretch scroll-mt-[80px]">
 
           {/* LEFT COLUMN */}
           <div className={`col-span-12 lg:col-span-8 order-2 lg:order-1 flex flex-col gap-6 ${leftColumnHeightClass}`}>
@@ -2080,8 +2238,7 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6 gap-3 auto-rows-fr">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 2xl:grid-cols-4 gap-3 auto-rows-fr">
 
                     <AmazonStatCard
                       label="Units"
@@ -2135,6 +2292,100 @@ export default function DashboardPage() {
                       className="border-[#FF5C5C] bg-[#FF5C5C26]"
                     />
 
+                    {/* ✅ GLOBAL: Cost of Ads (uses BI totals when rangeActive) */}
+                    <AmazonStatCard
+                      label="Cost of Ads"
+                      current={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? convertToDisplayCurrency(
+                              biAlignedTotals?.total_current_advertising ?? 0,
+                              biSourceCurrency
+                            )
+                            : 0)
+                          : globalCurrAdsDisp
+                      }
+                      previous={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? convertToDisplayCurrency(
+                              biAlignedTotals?.total_previous_advertising ?? 0,
+                              biSourceCurrency
+                            )
+                            : 0)
+                          : globalPrevAdsDisp
+                      }
+                      deltaPct={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? safeDeltaPct(
+                              // delta should be computed on converted values (home currency) to avoid FX noise
+                              convertToDisplayCurrency(
+                                biAlignedTotals?.total_current_advertising ?? 0,
+                                biSourceCurrency
+                              ),
+                              convertToDisplayCurrency(
+                                biAlignedTotals?.total_previous_advertising ?? 0,
+                                biSourceCurrency
+                              )
+                            )
+                            : null)
+                          : globalAdsDeltaPct
+                      }
+                      loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
+                      formatter={formatDisplayAmount}
+                      bottomLabel={prevLabel}
+                      className="border-[#A78BFA] bg-[#A78BFA26]"
+                    />
+
+                    <AmazonStatCard
+                      label="TACoS"
+                      current={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? (() => {
+                              const ads = biAlignedTotals?.total_current_advertising ?? 0;
+                              const sales = biAlignedTotals?.total_current_net_sales ?? 0;
+                              return sales > 0 ? (ads / sales) * 100 : 0;
+                            })()
+                            : 0)
+                          : globalCurrRoasPct
+                      }
+                      previous={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? (() => {
+                              const ads = biAlignedTotals?.total_previous_advertising ?? 0;
+                              const sales = biAlignedTotals?.total_previous_net_sales ?? 0;
+                              return sales > 0 ? (ads / sales) * 100 : 0;
+                            })()
+                            : 0)
+                          : globalPrevRoasPct
+                      }
+                      deltaPct={
+                        globalUseBi
+                          ? (globalCm2Ready
+                            ? deltaPctAbs(
+                              (() => {
+                                const ads = biAlignedTotals?.total_current_advertising ?? 0;
+                                const sales = biAlignedTotals?.total_current_net_sales ?? 0;
+                                return sales > 0 ? (ads / sales) * 100 : 0;
+                              })(),
+                              (() => {
+                                const ads = biAlignedTotals?.total_previous_advertising ?? 0;
+                                const sales = biAlignedTotals?.total_previous_net_sales ?? 0;
+                                return sales > 0 ? (ads / sales) * 100 : 0;
+                              })()
+                            )
+                            : null)
+                          : deltaPctAbs(globalCurrRoasPct, globalPrevRoasPct)
+                      }
+                      inverseDelta
+                      loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
+                      formatter={fmtPct2}
+                      bottomLabel={prevLabel}
+                      className="border-[#10B981] bg-[#10B98126]"
+                    />
 
 
                     <AmazonStatCard
@@ -2210,43 +2461,17 @@ export default function DashboardPage() {
             {/* AMAZON SECTION */}
             {hasAmazonCard && (
               <div className="flex flex-col lg:flex-1 gap-4">
-
                 {/* Amazon KPI Box */}
                 <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
                   <div className="mb-4 flex flex-row gap-3 items-start md:items-start md:justify-between">
                     <div className="flex flex-col flex-1 min-w-0">
                       <div className="flex flex-wrap items-baseline gap-2">
                         <PageBreadcrumb pageTitle="Amazon" variant="page" align="left" />
-                        {/* {showLiveBI && (
-                          <span className="text-xs text-gray-400">
-                            {prevShort && currShort ? `(${currShort} vs ${prevShort})` : ""}
-                          </span>
-                        )} */}
                       </div>
-                      {/* <p className="mt-1 text-sm text-charcoal-500">
-                        Real-time data from Amazon
-                      </p> */}
+
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* {showLiveBI && (isCountryMode || platform === "global") && (
-                        <RangePicker
-                          selectedStartDay={selectedStartDay}
-                          selectedEndDay={selectedEndDay}
-                          onSubmit={(s, e) => {
-                            setSelectedStartDay(s);
-                            setSelectedEndDay(e);
-                          }}
-                          onClear={() => {
-                            setSelectedStartDay(null);
-                            setSelectedEndDay(null);
-                          }}
-                          onCloseReset={() => {
-                            setSelectedStartDay(null);
-                            setSelectedEndDay(null);
-                          }}
-                        />
-                      )} */}
                       {showLiveBI && isCountryMode && (
                         <RangePicker
                           selectedStartDay={selectedStartDay}
@@ -2269,7 +2494,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6 gap-3 auto-rows-fr">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 2xl:grid-cols-4 gap-3 auto-rows-fr">
 
                     <AmazonStatCard
                       label="Units"
@@ -2344,6 +2569,100 @@ export default function DashboardPage() {
                       bottomLabel={prevLabel}
                       className="border-[#FF5C5C] bg-[#FF5C5C26]"
                     />
+
+                    <AmazonStatCard
+                      label="Cost of Ads"
+                      current={
+                        useBiForAmazonCards
+                          ? (cm2Ready
+                            ? convertToDisplayCurrency(
+                              biAlignedTotals?.total_current_advertising ?? 0,
+                              biSourceCurrency
+                            )
+                            : 0)
+                          : amazonCurrAdsDisp
+                      }
+                      previous={
+                        useBiForAmazonCards
+                          ? (cm2Ready
+                            ? convertToDisplayCurrency(
+                              biAlignedTotals?.total_previous_advertising ?? 0,
+                              biSourceCurrency
+                            )
+                            : 0)
+                          : amazonPrevAdsDisp
+                      }
+                      deltaPct={
+                        useBiForAmazonCards
+                          ? (cm2Ready
+                            ? safeDeltaPct(
+                              convertToDisplayCurrency(
+                                biAlignedTotals?.total_current_advertising ?? 0,
+                                biSourceCurrency
+                              ),
+                              convertToDisplayCurrency(
+                                biAlignedTotals?.total_previous_advertising ?? 0,
+                                biSourceCurrency
+                              )
+                            )
+                            : null)
+                          : amazonAdsDeltaPct
+                      }
+                      loading={loading || (useBiForAmazonCards ? biLoading : false)}
+                      formatter={formatDisplayAmount}
+                      bottomLabel={prevLabel}
+                      className="border-[#A78BFA] bg-[#A78BFA26]"
+                    />
+
+                    <AmazonStatCard
+                      label="TACoS"
+                      current={
+                        useBiForAmazonCards
+                          ? (cm2Ready
+                            ? (() => {
+                              const ads = biAlignedTotals?.total_current_advertising ?? 0;
+                              const sales = biAlignedTotals?.total_current_net_sales ?? 0;
+                              return sales > 0 ? (ads / sales) * 100 : 0;
+                            })()
+                            : 0)
+                          : amazonCurrRoasPct
+                      }
+                      previous={
+                        useBiForAmazonCards
+                          ? (cm2Ready
+                            ? (() => {
+                              const ads = biAlignedTotals?.total_previous_advertising ?? 0;
+                              const sales = biAlignedTotals?.total_previous_net_sales ?? 0;
+                              return sales > 0 ? (ads / sales) * 100 : 0;
+                            })()
+                            : 0)
+                          : amazonPrevRoasPct
+                      }
+                      deltaPct={
+                        useBiForAmazonCards
+                          ? (cm2Ready
+                            ? deltaPctAbs(
+                              (() => {
+                                const ads = biAlignedTotals?.total_current_advertising ?? 0;
+                                const sales = biAlignedTotals?.total_current_net_sales ?? 0;
+                                return sales > 0 ? (ads / sales) * 100 : 0;
+                              })(),
+                              (() => {
+                                const ads = biAlignedTotals?.total_previous_advertising ?? 0;
+                                const sales = biAlignedTotals?.total_previous_net_sales ?? 0;
+                                return sales > 0 ? (ads / sales) * 100 : 0;
+                              })()
+                            )
+                            : null)
+                          : deltaPctAbs(amazonCurrRoasPct, amazonPrevRoasPct)
+                      }
+                      inverseDelta
+                      loading={loading || (useBiForAmazonCards ? biLoading : false)}
+                      formatter={fmtPct2}
+                      bottomLabel={prevLabel}
+                      className="border-[#10B981] bg-[#10B98126]"
+                    />
+
 
                     <AmazonStatCard
                       label="CM2 Profit"
@@ -2532,7 +2851,7 @@ export default function DashboardPage() {
                 targetTrendPct={stats_targetTrendPct}
                 currentReimbursement={reimbursementHome.current}
                 previousReimbursement={reimbursementHome.previous}
-                 targetHome={stats_targetHome}
+                targetHome={stats_targetHome}
               />
             </div>
 
@@ -2561,7 +2880,11 @@ export default function DashboardPage() {
 
         {/* ✅ Global-only Performance Trend BELOW top section */}
         {platform === "global" && showLiveBI && (
-          <div className="mt-6 w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
+          // <div className="mt-6 w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
+          <div
+            id="targets-action-items"
+            className="mt-6 w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden scroll-mt-[80px]"
+          >
             <div className="w-full max-w-full min-w-0">
               <LiveBiLineGraph
                 dailySeries={biDailySeriesHome}
@@ -2578,7 +2901,8 @@ export default function DashboardPage() {
 
 
         {/* Months for BI */}
-        <div className="w-full overflow-x-hidden">
+        {/* <div className="w-full overflow-x-hidden"> */}
+        <div id="targets-action-items" className="w-full overflow-x-hidden scroll-mt-[80px]">
           {showLiveBI && (
             <div className="w-full max-w-full min-w-0">
               <MonthsforBI
@@ -2592,38 +2916,16 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-        {/* 
-        {platform === "global" && showLiveBI && (
-          <div className="mt-6 w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm text-gray-500">
-                <PageBreadcrumb pageTitle="Performance Trend" align="left" textSize="2xl" variant="page" />
-              </div>
-
-            
-              <div className="text-xs text-gray-400">
-                {selectedStartDay && selectedEndDay ? `Day ${selectedStartDay} – ${selectedEndDay}` : "MTD"}
-              </div>
-            </div>
-
-            <div className="w-full max-w-full min-w-0">
-              <LiveBiLineGraph
-                dailySeries={biDailySeries}
-                periods={biPeriods}
-                loading={biLoading}
-                error={biError}
-                selectedStartDay={selectedStartDay}
-                selectedEndDay={selectedEndDay}
-              />
-            </div>
-          </div>
-        )} */}
-
 
         {/* Lower P&L Graph and Inventory */}
         {hasAnyGraphData && (
           <>
-            <div className="mt-6 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
+            {/* <div className="mt-6 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm"> */}
+            <div
+              id="mtd-pl"
+              className="mt-6 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm scroll-mt-[80px]"
+            >
+
               <div className="mb-3 flex items-center justify-between">
                 <div className="text-sm text-gray-500">
                   <PageBreadcrumb
@@ -2632,10 +2934,6 @@ export default function DashboardPage() {
                     textSize="2xl"
                     variant="page"
                   />
-                  {/* <p className="text-charcoal-500">
-                    Real-time data{" "}
-                    {graphRegionToUse === "Global" ? "Global" : graphRegionToUse}
-                  </p> */}
                 </div>
 
                 {!isCountryMode && (
@@ -2668,7 +2966,9 @@ export default function DashboardPage() {
             </div>
 
             {amazonIntegrated && graphRegionToUse !== "Global" && (
-              <CurrentInventorySection region={graphRegionToUse} />
+              <div id="current-inventory" className="scroll-mt-[80px]">
+                <CurrentInventorySection region={graphRegionToUse} />
+              </div>
             )}
 
           </>

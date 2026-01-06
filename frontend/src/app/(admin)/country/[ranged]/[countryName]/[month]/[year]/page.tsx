@@ -73,8 +73,8 @@ export function generateMetadata({
   const monthFormatted = monthName(params.month);
   const range = params.ranged.toUpperCase();
 
-  // const title = `P&L Dashboard`;
-   const title = ` Profit Dashboard | Amazon ${country}`;
+  const title = `P&L Dashboard | Amazon ${country}`;
+  //  const title = ` Profit Dashboard | Amazon ${country}`;
 
   return {
     title,
