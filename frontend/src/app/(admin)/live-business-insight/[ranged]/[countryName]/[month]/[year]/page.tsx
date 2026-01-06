@@ -15,6 +15,7 @@ import DataTable, { ColumnDef } from '@/components/ui/table/DataTable';
 import DownloadIconButton from '@/components/ui/button/DownloadIconButton';
 import SegmentedToggle from '@/components/ui/SegmentedToggle';
 import { AiButton } from '@/components/ui/button/AiButton';
+import PageBreadcrumb from '@/components/common/PageBreadCrumb';
 
 
 type MonthsforBIProps = {
@@ -1352,85 +1353,85 @@ const MonthsforBI: React.FC<MonthsforBIProps> = ({
     });
   };
 
-const renderAiActionLine = (line: string) => {
-  if (!line) return null;
+  const renderAiActionLine = (line: string) => {
+    if (!line) return null;
 
-  // 1) Remove leading "Product name -"
-  const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, "").trim();
+    // 1) Remove leading "Product name -"
+    const cleaned = line.replace(/^\s*Product\s*name\s*[-–:]\s*/i, "").trim();
 
-  // 2) Extract product name safely:
-  //    take text from start until we hit common sentence starters like "The/There/A/An/Increase/Decrease/..."
-  const productMatch = cleaned.match(
-    /^(.+?)(?=\s+(?:The|There|A|An|Increase|Decreased|Decreasing|Increased|Increasing)\b|$)/i
-  );
+    // 2) Extract product name safely:
+    //    take text from start until we hit common sentence starters like "The/There/A/An/Increase/Decrease/..."
+    const productMatch = cleaned.match(
+      /^(.+?)(?=\s+(?:The|There|A|An|Increase|Decreased|Decreasing|Increased|Increasing)\b|$)/i
+    );
 
-  const productName = (productMatch?.[1] || "").trim();
+    const productName = (productMatch?.[1] || "").trim();
 
-  // 3) Remaining text (everything after product name)
-  let rest = cleaned;
-  if (productName) {
-    // remove ONLY first occurrence at the start
-    rest = rest.replace(new RegExp("^" + productName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*", "i"), "");
-  }
-  rest = rest.trim();
+    // 3) Remaining text (everything after product name)
+    let rest = cleaned;
+    if (productName) {
+      // remove ONLY first occurrence at the start
+      rest = rest.replace(new RegExp("^" + productName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*", "i"), "");
+    }
+    rest = rest.trim();
 
-  // 4) Split into sentences (keeps simple, works for your AI text)
-  const sentences = rest
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+    // 4) Split into sentences (keeps simple, works for your AI text)
+    const sentences = rest
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-  const verbs = ["Check", "Review", "Monitor", "Increase", "Reduce", "Maintain", "Push"];
-  const isAction = (s: string) =>
-    new RegExp(`^(?:⚠\\s*)?(?:${verbs.join("|")})\\b`, "i").test(s);
+    const verbs = ["Check", "Review", "Monitor", "Increase", "Reduce", "Maintain", "Push"];
+    const isAction = (s: string) =>
+      new RegExp(`^(?:⚠\\s*)?(?:${verbs.join("|")})\\b`, "i").test(s);
 
-  const isInventory = (s: string) =>
-    /inventory\s*:/i.test(s) || /^\s*⚠\s*inventory\s*:/i.test(s);
+    const isInventory = (s: string) =>
+      /inventory\s*:/i.test(s) || /^\s*⚠\s*inventory\s*:/i.test(s);
 
-  const inventoryLines: string[] = [];
-  const actionLines: string[] = [];
-  const descLines: string[] = [];
+    const inventoryLines: string[] = [];
+    const actionLines: string[] = [];
+    const descLines: string[] = [];
 
-  for (const s of sentences) {
-    if (isInventory(s)) inventoryLines.push(s);
-    else if (isAction(s)) actionLines.push(s);
-    else descLines.push(s);
-  }
+    for (const s of sentences) {
+      if (isInventory(s)) inventoryLines.push(s);
+      else if (isAction(s)) actionLines.push(s);
+      else descLines.push(s);
+    }
 
-  const description = descLines.join(" ");
+    const description = descLines.join(" ");
 
-  return (
-    <div className="space-y-2">
-      {/* Product Name */}
-      {productName && (
-        <div className="font-bold text-[#414042]">
-          Product name – {productName}
-        </div>
-      )}
+    return (
+      <div className="space-y-2">
+        {/* Product Name */}
+        {productName && (
+          <div className="font-bold text-charcoal-500">
+            Product name – {productName}
+          </div>
+        )}
 
-      {/* Description */}
-      {description && (
-        <div className="text-sm text-[#414042]">
-          {formatBulletLine(description)}
-        </div>
-      )}
+        {/* Description */}
+        {description && (
+          <div className="text-xs 2xl:text-sm text-charcoal-500">
+            {formatBulletLine(description)}
+          </div>
+        )}
 
-      {/* Actions (bold, separate lines) */}
-      {actionLines.map((a, i) => (
-        <div key={i} className="font-bold text-[#414042]">
-          {a.replace(/^⚠\s*/, "")}
-        </div>
-      ))}
+        {/* Actions (bold, separate lines) */}
+        {actionLines.map((a, i) => (
+          <div key={i} className="font-bold text-xs 2xl:text-sm text-charcoal-500">
+            {a.replace(/^⚠\s*/, "")}
+          </div>
+        ))}
 
-      {/* Inventory (always last, bold) */}
-      {inventoryLines.map((inv, i) => (
-        <div key={i} className="font-bold text-[#414042]">
-          ⚠ {inv.replace(/^⚠?\s*Inventory\s*:\s*/i, "Inventory: ")}
-        </div>
-      ))}
-    </div>
-  );
-};
+        {/* Inventory (always last, bold) */}
+        {inventoryLines.map((inv, i) => (
+          <div key={i} className="font-bold text-xs 2xl:text-sm text-charcoal-500">
+            ⚠ {inv.replace(/^⚠?\s*Inventory\s*:\s*/i, "Inventory: ")}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
 
 
@@ -1605,82 +1606,82 @@ const renderAiActionLine = (line: string) => {
   // DataTable wiring
   // =========================
 
-type BIGridRow = {
-  __isTotal?: boolean;
-  sNo?: number | string;
-  product?: React.ReactNode;
-  salesMix?: React.ReactNode;
-  unit?: React.ReactNode;
-  asp?: React.ReactNode;
-  sales?: React.ReactNode;
-  mixChange?: React.ReactNode;
-  unitProfit?: React.ReactNode;
-  ai?: React.ReactNode;
-  profit?: React.ReactNode;
-};
+  type BIGridRow = {
+    __isTotal?: boolean;
+    sNo?: number | string;
+    product?: React.ReactNode;
+    salesMix?: React.ReactNode;
+    unit?: React.ReactNode;
+    asp?: React.ReactNode;
+    sales?: React.ReactNode;
+    mixChange?: React.ReactNode;
+    unitProfit?: React.ReactNode;
+    ai?: React.ReactNode;
+    profit?: React.ReactNode;
+  };
 
-const calcGrowthValue = (prev: number, curr: number) => {
-  if (!prev || prev === 0 || curr == null) return null;
-  return ((curr - prev) / prev) * 100;
-};
+  const calcGrowthValue = (prev: number, curr: number) => {
+    if (!prev || prev === 0 || curr == null) return null;
+    return ((curr - prev) / prev) * 100;
+  };
 
-const safePct = (prev: number, curr: number) => {
-  if (!prev || prev === 0 || curr == null) return null;
-  return ((curr - prev) / prev) * 100;
-};
+  const safePct = (prev: number, curr: number) => {
+    if (!prev || prev === 0 || curr == null) return null;
+    return ((curr - prev) / prev) * 100;
+  };
 
-const makeGrowth = (prev: number, curr: number): GrowthCategory | undefined => {
-  const v = calcGrowthValue(prev, curr);
-  if (v == null) return undefined;
-  return { value: v, category: "" };
-};
+  const makeGrowth = (prev: number, curr: number): GrowthCategory | undefined => {
+    const v = calcGrowthValue(prev, curr);
+    if (v == null) return undefined;
+    return { value: v, category: "" };
+  };
 
-const GrowthCell = ({
-  val,
-  color,
-  showArrow,
-}: {
-  val: number;
-  color: string;
-  showArrow: boolean;
-}) => {
-  const text = `${val > 0 ? "+" : ""}${val.toFixed(2)}%`; // keeps + only for positive
-  const Icon = val > 0 ? FaArrowUp : FaArrowDown;
+  const GrowthCell = ({
+    val,
+    color,
+    showArrow,
+  }: {
+    val: number;
+    color: string;
+    showArrow: boolean;
+  }) => {
+    const text = `${val > 0 ? "+" : ""}${val.toFixed(2)}%`; // keeps + only for positive
+    const Icon = val > 0 ? FaArrowUp : FaArrowDown;
 
-  return (
-    <span
-      className="inline-flex items-center justify-center gap-2 w-full font-semibold"
-      style={{ color }}
-    >
-      {/* ✅ fixed icon slot (never collapses) */}
-      <span className="w-4 flex justify-center shrink-0">
-        {showArrow ? (
-          <Icon size={12} />
-        ) : (
-          <Icon size={12} style={{ visibility: "hidden" }} />
-        )}
+    return (
+      <span
+        className="inline-flex items-center justify-center gap-2 w-full font-semibold"
+        style={{ color }}
+      >
+        {/* ✅ fixed icon slot (never collapses) */}
+        <span className="w-4 flex justify-center shrink-0">
+          {showArrow ? (
+            <Icon size={12} />
+          ) : (
+            <Icon size={12} style={{ visibility: "hidden" }} />
+          )}
+        </span>
+
+        {/* ✅ fixed number width so columns stay aligned */}
+        <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
+          {val === 0 ? "0.00%" : text}
+        </span>
       </span>
+    );
+  };
 
-      {/* ✅ fixed number width so columns stay aligned */}
-      <span className="tabular-nums inline-block w-[50px] 2xl:w-[60px] text-right">
-        {val === 0 ? "0.00%" : text}
-      </span>
-    </span>
-  );
-};
+  const renderGrowthOrNA = (g?: GrowthCategory) => {
+    if (!g || g.value == null) return <span>N/A</span>;
 
-const renderGrowthOrNA = (g?: GrowthCategory) => {
-  if (!g || g.value == null) return <span>N/A</span>;
+    const val = Number(g.value);
 
-  const val = Number(g.value);
+    let color = "#414042";
+    if (val > 5) color = "#5EA68E";
+    else if (val < -5) color = "#dc2626";
 
-  let color = "#414042";
-  if (val > 5) color = "#5EA68E";
-  else if (val < -5) color = "#dc2626";
-
-  // ✅ keep icon space even for 0
-  return <GrowthCell val={val} color={color} showArrow={val !== 0} />;
-};
+    // ✅ keep icon space even for 0
+    return <GrowthCell val={val} color={color} showArrow={val !== 0} />;
+  };
 
 
   const renderNewRevGrowthOrDash = (g?: GrowthCategory) => {
@@ -2053,14 +2054,15 @@ const renderGrowthOrNA = (g?: GrowthCategory) => {
           />
         </div>
       ) : (
-        <div className="flex flex-col mt-8">
+        <div className="flex flex-col mt-4">
           {error && <p style={{ color: 'red' }}>{error}</p>}
 
           {(overallSummary.length > 0 || overallActions.length > 0) && (
-            <div className="flex gap-8 flex-col">
+            <div className="flex gap-4 flex-col">
               {overallSummary.length > 0 && (
-                <div className="bg-[#D9D9D94D] border border-[#D9D9D9] rounded-md p-3 text-sm text-[#414042]  w-full">
-                  <h2 className="text-xl font-bold">Business Summary MTD</h2>
+                <div className="bg-[#D9D9D94D] border border-[#D9D9D9] rounded-md p-3 text-xs 2xl:text-sm text-charcoal-500 w-full">
+                  {/* <h2 className="text-xl font-bold">Business Summary MTD</h2> */}
+                  <PageBreadcrumb pageTitle="Business Summary MTD" variant="page" align="left" />
                   <ul className="list-disc pl-5 space-y-1 pt-2">
                     {overallSummary.map((line, idx) => (
                       <li key={idx}>{formatBulletLine(line)}</li>
@@ -2070,8 +2072,8 @@ const renderGrowthOrNA = (g?: GrowthCategory) => {
               )}
 
               {overallActions.length > 0 && (
-                <div className="bg-[#5EA68E33] border border-[#5EA68E] rounded-md p-3 text-sm text-[#414042]  w-full">
-                  <h2 className="text-xl font-bold">AI-Powered Recommendations</h2>
+                <div className="bg-[#5EA68E33] border border-[#5EA68E] rounded-md p-3 text-xs 2xl:text-sm text-charcoal-500  w-full">
+                  <PageBreadcrumb pageTitle="AI-Powered Recommendations" variant="page" align="left" />
                   <ul className="list-disc pl-5 space-y-1 pt-2">
                     {overallActions.map((line, idx) => (
                       <li key={idx}>{renderAiActionLine(line)}</li>
@@ -2083,13 +2085,10 @@ const renderGrowthOrNA = (g?: GrowthCategory) => {
           )}
 
           <div>
-            <div className="mt-6 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
+            <div className="mt-4 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm">
 
               <div className="flex flex-col 2xl:flex-row gap-4  xl:items-left xl:justify-between">
-
-                <h2 className="text-2xl font-bold text-[#414042] whitespace-nowrap">
-                  SKU Analysis MTD
-                </h2>
+                <PageBreadcrumb pageTitle="SKU Analysis MTD" variant="page" align="left" />
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:justify-between">
                   <SegmentedToggle<TabKey>
@@ -2097,7 +2096,7 @@ const renderGrowthOrNA = (g?: GrowthCategory) => {
                     options={tabOptions}
                     onChange={handleTabChange}
                     className="bg-white border border-[#D9D9D9E5] shadow-sm"
-                    textSizeClass="text-sm"
+                    textSizeClass="text-xs 2xl:text-sm"
                   />
 
 
@@ -2189,52 +2188,35 @@ const renderGrowthOrNA = (g?: GrowthCategory) => {
                 </div>
 
               )}
-              < div className='flex justify-center mt-2'>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 42,
-                    flexWrap: 'wrap',
-                    fontSize: 14,
-                    color: '#414042',
-                    marginTop: 6,
-                  }}
-                >
-
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#5EA68E', fontWeight: 700 }}>
-                      <FaArrowUp size={12} /> High growth
+              <div className="flex justify-center mt-2">
+                <div className="flex items-center gap-10 flex-wrap text-xs 2xl:text-sm text-[#414042] mt-1">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2 text-[#5EA68E] font-bold">
+                      <FaArrowUp className="text-[10px] 2xl:text-xs" /> High growth
                     </span>
                   </span>
 
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#FF5C5C', fontWeight: 700 }}>
-                      <FaArrowDown size={12} /> Negative growth
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2 text-[#FF5C5C] font-bold">
+                      <FaArrowDown className="text-[10px] 2xl:text-xs" /> Negative growth
                     </span>
                   </span>
 
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <span style={{ color: '#414042', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <FaArrowUp size={12} /> + / <FaArrowDown size={12} /> -
+                  <span className="inline-flex items-center gap-2 font-bold whitespace-nowrap">
+                    <span className="text-[#414042] inline-flex items-center gap-1">
+                      <FaArrowUp className="text-[10px] 2xl:text-xs" /> + /
+                      <FaArrowDown className="text-[10px] 2xl:text-xs" /> -
                     </span>
                     Low growth
                   </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
-                    <span style={{ fontSize: 16, lineHeight: 1 }}>-</span>
+
+                  <span className="inline-flex items-center gap-2 font-bold">
+                    <span className="text-sm 2xl:text-base leading-none">-</span>
                     Past data for SKU is not available
                   </span>
-
                 </div>
               </div>
+
             </div>
           </div>
         </div>

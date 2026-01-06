@@ -187,15 +187,13 @@ export default function DataTable<T extends Row>({
     >
       <table
         className={clsx(
-          // ✅ table-fixed makes widths and wrapping behave predictably
-          "w-full table-fixed border-collapse text-xs  text-slate-700",
+          "w-full table-fixed border-collapse text-[10px] 2xl:text-xs text-slate-700",
           tableClassName
         )}
       >
         <thead
           className={clsx(
-            "bg-[#5EA68E] text-yellow-200",
-            "text-xs font-bold",
+            "bg-[#5EA68E] text-yellow-200 font-bold",
             stickyHeader && "sticky top-0 z-10"
           )}
         >
@@ -207,7 +205,7 @@ export default function DataTable<T extends Row>({
                 className={clsx(
                   // "border border-[#e1e5ea] px-2 sm:px-3 py-2 text-center align-middle",
                   // "whitespace-normal break-words leading-tight",
-                  "whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]",
+                  "whitespace-nowrap border border-gray-300 px-2 py-2 text-center",
                   col.headerClassName,
                   col.onHeaderClick && "cursor-pointer select-none"
                 )}
@@ -223,7 +221,7 @@ export default function DataTable<T extends Row>({
           {!hasData && (
             <tr>
               <td
-                className="px-3 py-8 text-center text-xs  text-slate-400"
+                className="px-3 py-8 text-center text-slate-400"
                 colSpan={columns.length}
               >
                 {emptyMessage}
@@ -239,10 +237,14 @@ export default function DataTable<T extends Row>({
                   rowClassName?.(row, (page - 1) * pageSize + ri),
                   "transition-colors",
                   // @ts-expect-error: your rows may include __isTotal
-                  !(row as any).__isTotal ,
-                  zebra && ri % 2 === 1 && ""
+                  (row as any).__isTotal
+                    ? "bg-[#EFEFEF] font-semibold"
+                    : zebra && ri % 2 === 1
+                      ? ""
+                      : ""
                 )}
               >
+
                 {columns.map((col, ci) => {
                   const value = (row as Record<string, React.ReactNode>)[String(col.key)];
 
@@ -250,7 +252,7 @@ export default function DataTable<T extends Row>({
                     <td
                       key={String(col.key) + ci}
                       className={clsx(
-                        "border border-[#e1e5ea] px-2 sm:px-3 py-3 align-middle text-center text-xs ",
+                        "border border-[#e1e5ea] px-2 sm:px-3 py-3 align-middle text-center",
                         "whitespace-nowrap",
                         col.cellClassName
                       )}
@@ -269,7 +271,7 @@ export default function DataTable<T extends Row>({
 
       {paginate && totalPages > 1 && (
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="flex items-center justify-between gap-4 text-xs">
+          <div className="flex items-center justify-between gap-4 text-[10px] 2xl:text-xs">
             <button
               onClick={onPrev}
               disabled={page <= 1}
@@ -292,7 +294,7 @@ export default function DataTable<T extends Row>({
                     key={item}
                     onClick={() => goToPage(item)}
                     className={clsx(
-                      "h-7 w-7 sm:h-8 sm:w-8 rounded-full text-xs ",
+                      "h-7 w-7 sm:h-8 sm:w-8 rounded-full",
                       "flex items-center justify-center",
                       "transition-colors",
                       item === page

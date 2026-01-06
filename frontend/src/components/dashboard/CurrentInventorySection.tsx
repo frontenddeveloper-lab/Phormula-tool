@@ -534,7 +534,7 @@ uiRows.push({
   return (
     <div
       className="
-        mt-6 rounded-2xl border bg-white p-4 shadow-sm
+        mt-4 rounded-2xl border bg-white p-4 shadow-sm
         w-full max-w-full overflow-hidden
         flex flex-col
       "
@@ -543,9 +543,6 @@ uiRows.push({
         <div className="flex items-baseline gap-2">
           <PageBreadcrumb pageTitle="Current Inventory" variant="page" align="left" />
         </div>
-        {/* <p className="mt-1 text-sm text-charcoal-500">
-          Auto-loaded for the current month
-        </p> */}
       </div>
 
       {invLoading ? (
@@ -577,7 +574,7 @@ uiRows.push({
               emptyMessage="No inventory data."
               rowClassName={(row) => {
   if (row.rowType === "total") {
-    return "!bg-[#D9D9D9] font-semibold";
+    return "bg-[#EFEFEF] font-semibold";
   }
   if (row.rowType === "others") {
     return "!bg-[#FFFFFF]";

@@ -84,17 +84,29 @@ const PageBreadcrumb: React.FC<BreadcrumbProps> = ({
     right: "text-right",
   };
 
-  const responsiveSizeMap: Record<
-    NonNullable<BreadcrumbProps["textSize"]>,
-    string
-  > = {
-    sm: "text-xs sm:text-sm md:text-sm",
-    base: "text-sm sm:text-base md:text-base",
-    lg: "text-base sm:text-lg md:text-lg",
-    xl: "text-lg sm:text-xl md:text-xl",
-    "2xl": "text-lg sm:text-2xl md:text-2xl ",
-    "3xl": "text-lg sm:text-2xl md:text-3xl",
-  };
+  // const responsiveSizeMap: Record<
+  //   NonNullable<BreadcrumbProps["textSize"]>,
+  //   string
+  // > = {
+  //   sm: "text-xs sm:text-sm md:text-sm",
+  //   base: "text-sm sm:text-base md:text-base",
+  //   lg: "text-base sm:text-lg md:text-lg",
+  //   xl: "text-lg sm:text-xl md:text-xl",
+  //   "2xl": "text-lg sm:text-2xl md:text-2xl ",
+  //   "3xl": "text-lg sm:text-2xl md:text-3xl",
+  // };
+
+   const responsiveSizeMap: Record<
+  NonNullable<BreadcrumbProps["textSize"]>,
+  string
+> = {
+  sm:  "text-[11px] sm:text-xs lg:text-xs 2xl:text-sm",
+  base:"text-xs sm:text-sm lg:text-sm 2xl:text-base",
+  lg:  "text-sm sm:text-base lg:text-base 2xl:text-lg",
+  xl:  "text-base sm:text-lg lg:text-lg 2xl:text-xl",
+  "2xl":"text-base sm:text-xl lg:text-lg 2xl:text-2xl",
+  "3xl":"text-lg sm:text-2xl lg:text-xl 2xl:text-3xl",
+};
 
   return (
     <div className={`${alignClassMap[align]}`}>
