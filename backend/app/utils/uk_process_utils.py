@@ -44,6 +44,30 @@ MONTHS_MAP = {
     'september': 9, 'october': 10, 'november': 11, 'december': 12
 }
 
+text_cols = [
+    "sku","product_name","errorstatus","category","positive","improvements",
+    "month","year","country",
+    "profit_growth","unit_wise_profitability_growth","asp_growth",
+    "sales_growth","unit_growth","amazon_fee_growth","profit_mix_growth",
+    "sales_mix_growth","sales_mix_analysis","profit_mix_analysis"
+]
+int_cols = ["quantity","previous_quantity","user_id","return_quantity","total_quantity"]
+
+def sanitize_for_db(df_):
+    for c in int_cols:
+        if c in df_.columns:
+            df_[c] = pd.to_numeric(df_[c], errors="coerce").fillna(0).astype(int)
+
+    for c in text_cols:
+        if c in df_.columns:
+            df_[c] = df_[c].astype(str).fillna("")
+
+    for c in df_.columns:
+        if c in text_cols or c in int_cols:
+            continue
+        df_[c] = pd.to_numeric(df_[c], errors="coerce").fillna(0.0)
+
+    return df_
 
 
 
@@ -224,6 +248,89 @@ def process_skuwise_data(user_id, country, month, year):
         if numeric_columns:
             df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce').fillna(0)
 
+        # ------------------- LOST / LEFTOUT LOGIC (NEW) -------------------
+
+        # ------------------- LOST / LEFTOUT LOGIC (NEW) -------------------
+
+        desc_str = df.get("description", pd.Series("", index=df.index)).astype(str).str.strip()
+        type_str2 = df.get("type", pd.Series("", index=df.index)).astype(str).str.strip()
+
+        LOST_DESCRIPTIONS = {
+            "REVERSAL_REIMBURSEMENT",
+            "WAREHOUSE_LOST",
+            "WAREHOUSE_DAMAGE",
+            "MISSING_FROM_INBOUND",
+        }
+
+
+
+        lost_mask = desc_str.isin(LOST_DESCRIPTIONS)
+
+        lost_qty_df = (
+            df.loc[lost_mask]
+            .groupby("sku", as_index=False)["quantity"]
+            .sum()
+            .rename(columns={"quantity": "lost_quantity"})
+        )
+        lost_qty_df["lost_quantity"] = pd.to_numeric(lost_qty_df["lost_quantity"], errors="coerce").fillna(0).abs()
+
+        lost_total_df = (
+            df.loc[lost_mask]
+            .groupby("sku", as_index=False)["total"]
+            .sum()
+            .rename(columns={"total": "lost_total"})
+        )
+        lost_total_df["lost_total"] = pd.to_numeric(lost_total_df["lost_total"], errors="coerce").fillna(0)
+
+        
+# ------------------- END NEW LOGIC -------------------
+
+
+        # ================= LEFTOUT OTHER TRANSACTION (TOTAL ONLY) =================
+
+        desc_str = df.get("description", pd.Series("", index=df.index)).astype(str).str.strip()
+        type_str2 = df.get("type", pd.Series("", index=df.index)).astype(str).str.strip()
+
+        EXCLUDE_DESCRIPTIONS = {
+            "Cost of Advertising",
+            "Coupon Redemption Fee",
+            "Deals",
+            "Lightning Deal",
+            "ProductAdsPayment",
+            "CouponPerformanceEvent",
+            "CouponParticipationEvent",
+            "SellerDealComplete",
+            "FBA Return Fee",
+            "FBA Long-Term Storage Fee",
+            "FBA storage fee",
+            "Subscription",
+            "FBADisposal",
+            "FBAStorageBilling",
+            "FBALongTermStorageBilling",
+            "Order Payment",
+            "REVERSAL_REIMBURSEMENT",
+            "WAREHOUSE_LOST",
+            "WAREHOUSE_DAMAGE",
+            "MISSING_FROM_INBOUND",
+            "Refund",
+            "Disbursement",
+        
+        }
+
+        EXCLUDE_TYPES = {"Transfer", "Refund"}
+
+        leftout_mask = (~desc_str.isin(EXCLUDE_DESCRIPTIONS)) & (~type_str2.isin(EXCLUDE_TYPES))
+
+        leftout_other_transaction_total = (
+            pd.to_numeric(df.loc[leftout_mask, "total"], errors="coerce")
+            .fillna(0)
+            .sum()
+        )
+
+# ========================================================================
+
+
+
         # ---------------------------------------------------------------------
         # Centralized platform fee & advertising using helpers
         # ---------------------------------------------------------------------
@@ -241,10 +348,45 @@ def process_skuwise_data(user_id, country, month, year):
 
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
 
+        # ---------------- REFUND / RETURN QTY ----------------
+        df_refund = df[type_str.eq("Refund")].copy()
+
+        # return_quantity = sum(quantity) where type == "Refund" (SKU wise)
+        return_qty_df = (
+            df_refund.groupby("sku", as_index=False)["quantity"]
+            .sum()
+            .rename(columns={"quantity": "return_quantity"})
+        )
+
+        # optional safety: if refunds come negative in raw, convert to positive
+        return_qty_df["return_quantity"] = pd.to_numeric(return_qty_df["return_quantity"], errors="coerce").fillna(0)
+        return_qty_df["return_quantity"] = return_qty_df["return_quantity"].abs()
+
+# total quantity = total quantity - return_quantity (SKU wise)
+# (note: total quantity will be created AFTER we merge total quantity)
+
+
+        # quantity_df = (
+        #     df.groupby("sku", as_index=False)["quantity"]
+        #     .sum()
+        # )
+
         quantity_df = (
             df.groupby("sku", as_index=False)["quantity"]
             .sum()
         )
+
+        # subtract lost quantities
+        quantity_df = quantity_df.merge(lost_qty_df, on="sku", how="left")
+        quantity_df["lost_quantity"] = pd.to_numeric(quantity_df["lost_quantity"], errors="coerce").fillna(0)
+
+        quantity_df["quantity"] = (
+            pd.to_numeric(quantity_df["quantity"], errors="coerce").fillna(0)
+            - quantity_df["lost_quantity"]
+        )
+
+        quantity_df.drop(columns=["lost_quantity"], inplace=True)
+
 
         # Aggregate data SKU-wise (base columns)
         sku_grouped = df.groupby('sku').agg({
@@ -260,6 +402,11 @@ def process_skuwise_data(user_id, country, month, year):
             **({"shipment_charges": "sum"} if "shipment_charges" in df.columns else {}),
         }).reset_index()
 
+        sku_grouped = sku_grouped.merge(lost_total_df, on="sku", how="left")
+        sku_grouped["lost_total"] = pd.to_numeric(sku_grouped["lost_total"], errors="coerce").fillna(0)
+
+        
+
         sku_grouped = sku_grouped.merge(df_prev, on="sku", how="left").fillna(0)
 
         sku_grouped["sku"] = sku_grouped["sku"].astype(str).str.strip()
@@ -267,6 +414,17 @@ def process_skuwise_data(user_id, country, month, year):
 
         # Merge the filtered quantity data
         sku_grouped = sku_grouped.merge(quantity_df, on="sku", how="left")
+
+        # Merge return_quantity
+        sku_grouped = sku_grouped.merge(return_qty_df, on="sku", how="left")
+        sku_grouped["return_quantity"] = pd.to_numeric(sku_grouped["return_quantity"], errors="coerce").fillna(0).astype(int)
+
+        # total_quantity = quantity - return_quantity
+        sku_grouped["total_quantity"] = (
+            pd.to_numeric(sku_grouped["quantity"], errors="coerce").fillna(0).astype(int)
+            - sku_grouped["return_quantity"]
+        ).astype(int)
+
         sku_grouped["quantity"] = sku_grouped["quantity"].fillna(0)
 
         # Total quantity
@@ -286,6 +444,57 @@ def process_skuwise_data(user_id, country, month, year):
         fee_total, fees_by_sku, _ = uk_amazon_fee(df)
         profit_total, profit_by_sku, _ = uk_profit(df)
 
+        # ---------------- REFUND METRICS USING SAME FORMULAS ----------------
+        refund_sales_total, refund_sales_by_sku, _ = uk_sales(df_refund) if not df_refund.empty else (0, pd.DataFrame(), None)
+        refund_tax_total, refund_tax_by_sku, _     = uk_tax(df_refund)  if not df_refund.empty else (0, pd.DataFrame(), None)
+        refund_cred_total, refund_cred_by_sku, _   = uk_credits(df_refund) if not df_refund.empty else (0, pd.DataFrame(), None)
+
+        # Merge refund sales
+        if not refund_sales_by_sku.empty:
+            sku_grouped = sku_grouped.merge(
+                refund_sales_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "refund_sales"}),
+                on="sku", how="left"
+            )
+        else:
+            sku_grouped["refund_sales"] = 0.0
+
+        # Merge refund tax
+        if not refund_tax_by_sku.empty:
+            sku_grouped = sku_grouped.merge(
+                refund_tax_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "sales_tax_refund"}),
+                on="sku", how="left"
+            )
+        else:
+            sku_grouped["sales_tax_refund"] = 0.0
+        
+        sku_grouped["sales_tax_refund"] = pd.to_numeric(
+            sku_grouped["sales_tax_refund"], errors="coerce"
+        ).fillna(0) * 0.5
+
+        # Merge refund credit
+        if not refund_cred_by_sku.empty:
+            sku_grouped = sku_grouped.merge(
+                refund_cred_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "sales_credit_refund"}),
+                on="sku", how="left"
+            )
+        else:
+            sku_grouped["sales_credit_refund"] = 0.0
+
+        # refund_rebate = promotional_rebates for Refund rows sku wise
+        refund_rebate_df = (
+            df_refund.groupby("sku", as_index=False)["promotional_rebates"]
+            .sum()
+            .rename(columns={"promotional_rebates": "refund_rebate"})
+        ) if not df_refund.empty else pd.DataFrame(columns=["sku", "refund_rebate"])
+
+        sku_grouped = sku_grouped.merge(refund_rebate_df, on="sku", how="left")
+        sku_grouped["refund_rebate"] = pd.to_numeric(sku_grouped["refund_rebate"], errors="coerce").fillna(0.0)
+
+        # Final gross sales = net_sales - refund_sales
+        
+
+
+
         # Merge shared results into the working table with your expected column names
         if not sales_by_sku.empty:
             sku_grouped = sku_grouped.merge(
@@ -294,6 +503,14 @@ def process_skuwise_data(user_id, country, month, year):
             )
         else:
             sku_grouped["Net Sales"] = 0.0
+
+        sku_grouped["gross_sales"] = (
+            pd.to_numeric(sku_grouped["Net Sales"], errors="coerce").fillna(0.0)
+            - pd.to_numeric(sku_grouped["refund_sales"], errors="coerce").fillna(0.0)
+        )
+
+        for _col in ["refund_sales", "sales_tax_refund", "sales_credit_refund", "refund_rebate", "gross_sales"]:
+            sku_grouped[_col] = pd.to_numeric(sku_grouped[_col], errors="coerce").fillna(0.0)
 
         if not tax_by_sku.empty:
             sku_grouped = sku_grouped.merge(
@@ -434,6 +651,9 @@ def process_skuwise_data(user_id, country, month, year):
         sku_grouped["month"] = month
         sku_grouped["year"] = year
         sku_grouped["country"] = country
+        # leftout_other_transaction is ONLY for TOTAL row
+        sku_grouped["leftout_other_transaction"] = 0.0
+
         # these will already be merged; keep initialization for schema safety (won't hurt)
         sku_grouped["platform_fee"] = sku_grouped.get("platform_fee", 0).fillna(0)
         sku_grouped["rembursement_fee"] = 0
@@ -595,7 +815,15 @@ def process_skuwise_data(user_id, country, month, year):
             "unit_sales_analysis", "unit_asp_analysis", "amazon_fee_increase",
             "cross_check_analysis", "text_credit_increase", "final_total_analysis",
             "positive_action", "negative_action", "cross_check_analysis_backup",
-            "total_analysis", "shipping_credits", "shipment_charges"
+            "total_analysis", "shipping_credits", "shipment_charges", "return_quantity",
+            "total_quantity",
+            "refund_sales",
+            "gross_sales",
+            "sales_tax_refund",
+            "sales_credit_refund",
+            "refund_rebate",
+            "lost_total",
+            "leftout_other_transaction",
         ]
 
         cols_for_sum = list(dict.fromkeys(numeric_columns + extra_cols_for_total))
@@ -615,7 +843,10 @@ def process_skuwise_data(user_id, country, month, year):
         sum_row["profit%"] = (sum_row.get("profit", 0) / sum_row.get("Net Sales", 0)) * 100 if sum_row.get("Net Sales", 0) != 0 else 0
 
         sum_row["platform_fee"] = abs(platform_fee)
-        sum_row["rembursement_fee"]= abs(rembursement_fee)
+        # sum_row["rembursement_fee"]= abs(rembursement_fee)
+        lost_total_total = float(sum_row.get("lost_total", 0) or 0)
+        sum_row["rembursement_fee"] = abs(rembursement_fee) - abs(lost_total_total)
+
         sum_row["advertising_total"]= abs(advertising_total)
         sum_row["reimbursement_vs_sales"]= abs(reimbursement_vs_sales)
         sum_row["cm2_profit"]= abs(cm2_profit)
@@ -640,6 +871,11 @@ def process_skuwise_data(user_id, country, month, year):
         sum_row["previous_net_taxes"]= p
         sum_row["previous_fba_fees"]= q
         sum_row["previous_selling_fees"]= r
+        sum_row["return_quantity"] = int(float(sum_row.get("return_quantity", 0) or 0))
+        sum_row["total_quantity"]  = int(float(sum_row.get("total_quantity", 0) or 0))
+        sum_row["leftout_other_transaction"] = float(leftout_other_transaction_total)
+
+
 
         # Totals part 2 (derived)
         qty = float(sum_row.get("quantity", 0) or 0)
@@ -942,6 +1178,17 @@ def process_skuwise_data(user_id, country, month, year):
                     errorstatus TEXT,
                     answer REAL,
                     difference REAL,
+                    return_quantity INTEGER,
+                    total_quantity INTEGER,
+                    refund_sales REAL,
+                    gross_sales REAL,
+                    sales_tax_refund REAL,
+                    sales_credit_refund REAL,
+                    refund_rebate REAL,
+                    lost_total REAL,
+                    leftout_other_transaction REAL,
+
+
                     user_id INTEGER
                 )
             """))
@@ -1056,6 +1303,17 @@ def process_skuwise_data(user_id, country, month, year):
                     errorstatus TEXT,
                     answer REAL,
                     difference REAL,
+                    return_quantity INTEGER,
+                    total_quantity INTEGER,
+                    refund_sales REAL,
+                    gross_sales REAL,
+                    sales_tax_refund REAL,
+                    sales_credit_refund REAL,
+                    refund_rebate REAL,
+                    lost_total REAL,
+                    leftout_other_transaction REAL,
+
+
                     user_id INTEGER
                 )
             """))
@@ -1111,7 +1369,8 @@ def process_skuwise_data(user_id, country, month, year):
             'previous_reimbursement_vs_sales', 'previous_cm2_profit', 'previous_cm2_margins',
             'previous_acos', 'previous_rembursment_vs_cm2_margins', 'previous_sales_mix',
             'sales_mix_percentage', 'positive_action', 'negative_action',
-            'cross_check_analysis_backup', 'text_credit_increase', 'final_total_analysis', 'postage_credits'
+            'cross_check_analysis_backup', 'text_credit_increase', 'final_total_analysis', 'postage_credits', 'refund_sales', 'gross_sales', 'sales_tax_refund', 'sales_credit_refund', 'refund_rebate', 'lost_total',
+            'leftout_other_transaction'
         ]
 
         df_usd  = sku_grouped.copy()
@@ -1261,6 +1520,17 @@ def process_skuwise_data(user_id, country, month, year):
                     errorstatus TEXT,
                     answer REAL,
                     difference REAL,
+                    return_quantity INTEGER,
+                    total_quantity INTEGER,
+                    refund_sales REAL,
+                    gross_sales REAL,
+                    sales_tax_refund REAL,
+                    sales_credit_refund REAL,
+                    refund_rebate REAL,
+                    lost_total REAL,
+                    leftout_other_transaction REAL,
+
+
                     user_id INTEGER
                 )
             """))
@@ -1302,6 +1572,9 @@ def process_skuwise_data(user_id, country, month, year):
             except Exception:
                 pass
 
+            
+
+
             df_conv.to_sql(tbl, conn, if_exists="append", index=False, method="multi", chunksize=100)
             
 
@@ -1328,7 +1601,27 @@ def process_skuwise_data(user_id, country, month, year):
         # ================== IMPORTANT CHANGE END ==================
 
         # Insert data into the respective tables
+        sanitize_for_db(df_month)
+        sanitize_for_db(df_roll)
+        
+       
+
+        for df_conv in [df_usd, df_ind, df_can, df_gbp]:
+            sanitize_for_db(df_conv)
+
+        sanitize_for_db(sku_grouped)
+
         df_month.to_sql(target_table, conn, if_exists="replace", index=False, method="multi", chunksize=100)
+        sanitize_for_db(df_month)
+        sanitize_for_db(df_roll)
+        
+        
+
+        for df_conv in [df_usd, df_ind, df_can, df_gbp]:
+            sanitize_for_db(df_conv)
+
+        sanitize_for_db(sku_grouped)
+
         df_roll.to_sql(target_table2, conn, if_exists="append", index=False, method="multi", chunksize=100)
 
                 # ========= NEW: USD per-country tables =========
@@ -1342,6 +1635,16 @@ def process_skuwise_data(user_id, country, month, year):
                 df_roll_usd[col] = df_roll_usd[col].abs()
 
         # 1) Monthly USD table -> overwrite (per month)
+        sanitize_for_db(df_month)
+        sanitize_for_db(df_roll)
+        sanitize_for_db(df_month_usd)
+        sanitize_for_db(df_roll_usd)
+
+        for df_conv in [df_usd, df_ind, df_can, df_gbp]:
+            sanitize_for_db(df_conv)
+
+        sanitize_for_db(sku_grouped)
+
         df_month_usd.to_sql(
             target_table_usd_month,
             conn,
@@ -1365,6 +1668,17 @@ def process_skuwise_data(user_id, country, month, year):
             conn.commit()
         except Exception:
             pass
+
+        sanitize_for_db(df_month)
+        sanitize_for_db(df_roll)
+        sanitize_for_db(df_month_usd)
+        sanitize_for_db(df_roll_usd)
+
+        for df_conv in [df_usd, df_ind, df_can, df_gbp]:
+            sanitize_for_db(df_conv)
+
+        sanitize_for_db(sku_grouped)
+
 
         df_roll_usd.to_sql(
             target_table_usd_roll,
@@ -1573,7 +1887,16 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                 "profit", "profit_percentage", "amazon_fee", "quantity",
                 "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
                 "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku"
+                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku","return_quantity",
+                "total_quantity",
+                "refund_sales",
+                "gross_sales",
+                "sales_tax_refund",
+                "sales_credit_refund",
+                "refund_rebate",
+                "lost_total",
+                "leftout_other_transaction"
+
                 FROM {source_table}
                 WHERE LOWER(month) IN ({placeholders}) AND year = %s
             """
@@ -1614,6 +1937,15 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                 "cm2_profit": "sum",
                 "shipment_charges": "sum",
                 "unit_wise_profitability": "sum",
+                "return_quantity": "sum",
+                "total_quantity": "sum",
+                "refund_sales": "sum",
+                "gross_sales": "sum",
+                "sales_tax_refund": "sum",
+                "sales_credit_refund": "sum",
+                "refund_rebate": "sum",
+                "lost_total": "sum",
+                "leftout_other_transaction": "sum",
                 "user_id": "first"
             }).reset_index()
 
@@ -1715,11 +2047,23 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                         profit_mix DOUBLE PRECISION,
                         shipment_charges DOUBLE PRECISION, 
                         unit_wise_profitability DOUBLE PRECISION,
+                        return_quantity INTEGER,
+                        total_quantity INTEGER,
+                        refund_sales DOUBLE PRECISION,
+                        gross_sales DOUBLE PRECISION,
+                        sales_tax_refund DOUBLE PRECISION,
+                        sales_credit_refund DOUBLE PRECISION,
+                        refund_rebate DOUBLE PRECISION,
+                        lost_total DOUBLE PRECISION,
+                        leftout_other_transaction DOUBLE PRECISION,
+
                         user_id INTEGER
                     )
                 """))
 
                 sku_grouped.columns = sku_grouped.columns.str.lower()
+                
+
                 sku_grouped.to_sql(quarter_table, conn_inner, if_exists="replace", index=False)
 
     except Exception as e:
@@ -1757,7 +2101,15 @@ def process_yearly_skuwise_data(user_id, country, year):
                 "profit", "profit_percentage", "amazon_fee", "quantity",
                 "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
                 "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku"
+                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku", "return_quantity",
+                "total_quantity",
+                "refund_sales",
+                "gross_sales",
+                "sales_tax_refund",
+                "sales_credit_refund",
+                "refund_rebate","lost_total",
+                "leftout_other_transaction"
+
                 FROM {source_table}
                 WHERE "year" = '{year}'
             """
@@ -1813,6 +2165,15 @@ def process_yearly_skuwise_data(user_id, country, year):
                 # "rembursment_vs_cm2_margins": "sum",
                 "shipment_charges": "sum",
                 "unit_wise_profitability": "sum", 
+                "return_quantity": "sum",
+                "total_quantity": "sum",
+                "refund_sales": "sum",
+                "gross_sales": "sum",
+                "sales_tax_refund": "sum",
+                "sales_credit_refund": "sum",
+                "refund_rebate": "sum",
+                "lost_total": "sum",
+                "leftout_other_transaction": "sum",
                 "user_id": "first"  # or "sum" if you want to repeat user_id for each group
             }).reset_index()
             sku_grouped["product_name"] = sku_grouped["product_name"].astype(str).str.strip()
@@ -1916,6 +2277,16 @@ def process_yearly_skuwise_data(user_id, country, year):
                     rembursment_vs_cm2_margins DOUBLE PRECISION,
                     shipment_charges DOUBLE PRECISION,
                     unit_wise_profitability DOUBLE PRECISION,
+                    return_quantity INTEGER,
+                    total_quantity INTEGER,
+                    refund_sales DOUBLE PRECISION,
+                    gross_sales DOUBLE PRECISION,
+                    sales_tax_refund DOUBLE PRECISION,
+                    sales_credit_refund DOUBLE PRECISION,
+                    refund_rebate DOUBLE PRECISION,
+                    lost_total DOUBLE PRECISION,
+                    leftout_other_transaction DOUBLE PRECISION,
+
                     user_id INTEGER
                 )
             """
@@ -1925,6 +2296,8 @@ def process_yearly_skuwise_data(user_id, country, year):
             sku_grouped.columns = [col.lower() for col in sku_grouped.columns]
             
             # Use to_sql with correct parameters for PostgreSQL
+            
+
             sku_grouped.to_sql(quarter_table, conn, if_exists="replace", index=False, 
                             schema="public", method="multi", chunksize=1000)
             

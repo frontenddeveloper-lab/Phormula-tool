@@ -911,6 +911,11 @@ def get_table_data(file_name):
                 # keep it if you want; here we drop
                 df = df.drop(columns=["month_num"], errors="ignore")
 
+        
+        
+        
+
+
 
 
         df["other"] = pd.to_numeric(df.get("other", 0), errors="coerce").fillna(0)
@@ -952,6 +957,26 @@ def get_table_data(file_name):
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        # ================= FIX QUANTITY (exclude LOST descriptions) =================
+        if "quantity" in df.columns:
+            df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
+
+            # description normalize (case-insensitive)
+            desc_str = df.get("description", pd.Series("", index=df.index)).astype(str).str.strip().str.upper()
+
+            EXCLUDE_QTY_DESCRIPTIONS = {
+                "REVERSAL_REIMBURSEMENT",
+                "WAREHOUSE_LOST",
+                "WAREHOUSE_DAMAGE",
+                "MISSING_FROM_INBOUND",
+            }
+
+            exclude_qty_mask = desc_str.isin(EXCLUDE_QTY_DESCRIPTIONS)
+
+            # ✅ un rows ki quantity count hi nahi hogi
+            df.loc[exclude_qty_mask, "quantity"] = 0
+        # ======================================================================
+
 
         df["net_sales_total_value"] = (
             df.get("product_sales", 0) +
@@ -992,6 +1017,8 @@ def get_table_data(file_name):
             "total_value"
         ]
         agg_cols = [c for c in agg_cols if c in final_df.columns]
+
+        
 
         final_df = final_df.groupby(["sku", "product_name", "status"], as_index=False)[agg_cols].sum()
 

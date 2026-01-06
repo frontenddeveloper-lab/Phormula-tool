@@ -11,6 +11,7 @@ from config import Config
 import logging
 from app.models.user_models import User, CountryProfile
 from app import db
+from io import BytesIO
 from dotenv import load_dotenv
 from datetime import datetime
 from calendar import monthrange
@@ -143,12 +144,7 @@ def current_inventory():
         # =========================
         month_number = datetime.strptime(month_name, "%B").month
         month_start = datetime(year, month_number, 1)
-        month_end = datetime(
-            year,
-            month_number,
-            monthrange(year, month_number)[1],
-            23, 59, 59
-        )
+        month_end = datetime(year, month_number, monthrange(year, month_number)[1], 23, 59, 59)
 
         current_month_col = f"Current Month Units Sold ({month_name})"
 
@@ -209,12 +205,11 @@ def current_inventory():
             if not inv_df.empty:
                 inv_df["seller_sku"] = inv_df["seller_sku"].apply(norm_sku)
         except Exception:
-            # keep inv_df empty if inventory table isn't present / no data
             inv_df = pd.DataFrame()
 
         # =========================================================
         # AGED INVENTORY (PRIMARY inventory source, joins on sku)
-        # Your screenshot shows inventory_aged has column "sku" (NOT seller_sku)
+        # inventory_aged has column "sku"
         # =========================================================
         aged_df = pd.DataFrame()
         try:
@@ -244,17 +239,17 @@ def current_inventory():
         # MERGE master + sales + aged inventory (JOIN KEY = sku)
         # =========================================================
         final_df = sku_df[["sku", "product_name"]].merge(
-            current_month_sales_df[["sku", current_month_col]] if not current_month_sales_df.empty
+            current_month_sales_df[["sku", current_month_col]]
+            if not current_month_sales_df.empty
             else pd.DataFrame({"sku": sku_df["sku"], current_month_col: 0}),
             on="sku",
             how="left"
         )
 
-        # Join aged inventory ON sku (this was the missing fix)
+        # Join aged inventory ON sku
         if not aged_df.empty:
             final_df = final_df.merge(aged_df, on="sku", how="left")
         else:
-            # Ensure columns exist even if aged inventory missing
             for c in [
                 "available",
                 "inv-age-0-to-90-days",
@@ -287,11 +282,11 @@ def current_inventory():
         # =========================================================
         final_df[current_month_col] = pd.to_numeric(final_df[current_month_col], errors="coerce").fillna(0)
 
-        # inventory inwarded (prefer inbound_quantity from inventory table; else 0)
+        # inventory inwarded
         final_df["inbound_quantity"] = pd.to_numeric(final_df.get("inbound_quantity"), errors="coerce").fillna(0)
         final_df["Inventory Inwarded"] = final_df["inbound_quantity"]
 
-        # End-of-month inventory: prefer aged inventory "available" (your screenshot proves it's correct)
+        # End-of-month inventory: prefer aged inventory "available"
         final_df["available"] = pd.to_numeric(final_df.get("available"), errors="coerce").fillna(0)
         final_df["Inventory at the end of the month"] = final_df["available"]
 
@@ -341,7 +336,7 @@ def current_inventory():
         except Exception:
             pass
 
-        # Beginning inventory:
+        # Beginning inventory
         final_df["Inventory at the beginning of the month"] = (
             final_df["Inventory at the end of the month"]
             - final_df["Inventory Inwarded"]
@@ -352,20 +347,16 @@ def current_inventory():
         # --- Rename & tidy up for Excel / UI ---
         final_df.rename(columns={"sku": "SKU", "product_name": "Product Name"}, inplace=True)
 
-        # Remove helper
         if "seller_sku" in final_df.columns:
             final_df.drop(columns=["seller_sku"], inplace=True)
 
-        # Add S.No. first
         final_df.insert(0, "Sno.", range(1, len(final_df) + 1))
 
-        # Column order
         desired_order = [
             "Sno.",
             "SKU",
             "Product Name",
 
-            # inventory table columns (optional)
             "total_quantity",
             "inbound_quantity",
             "available_quantity",
@@ -373,7 +364,6 @@ def current_inventory():
             "fulfillable_quantity",
             "synced_at",
 
-            # aged inventory (primary)
             "available",
             "inv-age-0-to-90-days",
             "inv-age-91-to-180-days",
@@ -383,15 +373,16 @@ def current_inventory():
             "sales-rank",
             "estimated-storage-cost-next-month",
 
-            # calculated
             "Inventory at the beginning of the month",
             current_month_col,
             "Inventory Inwarded",
             "Others",
             "Inventory at the end of the month",
         ]
-        final_df = final_df.reindex(columns=[c for c in desired_order if c in final_df.columns] +
-                                           [c for c in final_df.columns if c not in desired_order])
+        final_df = final_df.reindex(
+            columns=[c for c in desired_order if c in final_df.columns]
+            + [c for c in final_df.columns if c not in desired_order]
+        )
 
         # --- Total row ---
         numeric_columns = final_df.select_dtypes(include=["number"]).columns
@@ -402,25 +393,31 @@ def current_inventory():
         total_row["Product Name"] = "Total"
         final_df = pd.concat([final_df, pd.DataFrame([total_row])], ignore_index=True)
 
-        # --- Save & return ---
-        out_name = f"currentinventory_{user_id}_{country_key}_{month_name.lower()}{year}.xlsx"
-        out_path = os.path.join(UPLOAD_FOLDER, out_name)
-        final_df.to_excel(out_path, index=False)
         # ---------------- INVENTORY ALERTS ----------------
         try:
             inventory_alerts = generate_inventory_alerts_for_all_skus(
                 user_id=user_id,
                 country=country_key,
             )
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to generate inventory alerts in current_inventory")
             inventory_alerts = {}
 
+        # =========================================================
+        # ✅ IN-MEMORY EXCEL (NO SAVING TO UPLOAD FOLDER)
+        # =========================================================
+        filename = f"currentinventory_{user_id}_{country_key}_{month_name.lower()}{year}.xlsx"
+
+        output = BytesIO()
+        final_df.to_excel(output, index=False, engine="openpyxl")
+        output.seek(0)
+
+        excel_b64 = base64.b64encode(output.read()).decode("utf-8")
 
         return jsonify({
             "message": "Current inventory report generated successfully",
-            "data": encode_file_to_base64(out_path),
-             # ✅ NEW
+            "data": excel_b64,
+            "filename": filename,
             "inventory_alerts": inventory_alerts,
         }), 200
 
