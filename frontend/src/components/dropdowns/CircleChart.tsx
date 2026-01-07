@@ -230,7 +230,7 @@ const CircleChart: React.FC<CircleChartProps> = ({
       Math.abs(s.cm2_profit || 0),
     ];
 
-    const colors = ["#AB64B5", "#FFBE25", "#C03030", "#F47A00", "#01627F", "#2DA49A"];
+    const colors = ["#FDD36F", "#B75A5A", "#C49466", "#ED9F50", "#3A8EA4", "#7B9A6D"];
 
     const next: ChartData<"pie", number[], string> = {
       labels,
@@ -274,12 +274,12 @@ const CircleChart: React.FC<CircleChartProps> = ({
           {
             data: dummyValues,
             backgroundColor: [
-              "#AB64B5",
-              "#FFBE25",
-              "#C03030",
-              "#F47A00",
-              "#01627F",
-              "#2DA49A",
+              "#FDD36F",
+              "#B75A5A",
+              "#C49466",
+              "#ED9F50",
+              "#3A8EA4",
+              "#7B9A6D",
             ],
             borderWidth: 1,
           },

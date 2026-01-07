@@ -1754,19 +1754,18 @@ export default function DashboardPage() {
   const values = chartItems.map((i) => Number(i.raw ?? 0));
 
   const colorMapping: Record<string, string> = {
-    "Net Sales": "#2CA9E0",
-    "Amazon Fees": "#FFBE25",
-    COGS: "#AB64B5",
-    Advertisements: "#F47A00",
-    "Tax & Credits": "#C03030",
-    // "Other Charges": "#00627D",
-    Others: "#01627F",
+    "Net Sales": "#75BBDA",
+    "Amazon Fees": "#B75A5A",
+    COGS: "#FDD36F",
+    Advertisements: "#ED9F50",
+    "Tax & Credits": "#C49466",
+    Others: "#3A8EA4",
     "CM1 Profit": "#87AD12",
-    "CM2 Profit": "#2DA49A",
+    "CM2 Profit": "#7B9A6D",
 
   };
 
-  const colors = labels.map((label) => colorMapping[label] || "#2CA9E0");
+  const colors = labels.map((label) => colorMapping[label] || "#75BBDA");
 
   const allValuesZero = values.length === 0 || values.every((v) => !v || v === 0);
 
@@ -2248,7 +2247,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || biLoading}
                       formatter={fmtInt}
                       bottomLabel={prevLabel}
-                      className="border-[#FFBE25] bg-[#FFBE2526]"
+                      className="border-[#FDD36F] bg-[#FDD36F4D]"
                     />
 
                     <AmazonStatCard
@@ -2261,7 +2260,7 @@ export default function DashboardPage() {
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
 
-                      className="border-[#F47A00] bg-[#F47A0026]"
+                      className="border-[#ED9F50] bg-[#ED9F504D]"
                     />
 
 
@@ -2274,7 +2273,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#2CA9E0] bg-[#2CA9E026]"
+                      className="border-[#75BBDA] bg-[#75BBDA4D]"
                     />
 
                     <AmazonStatCard
@@ -2449,7 +2448,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
-                      className="border-[#01627F] bg-[#01627F26]"
+                      className="border-[#7B9A6D] bg-[#7B9A6D4D]"
                     />
 
 
@@ -2504,7 +2503,7 @@ export default function DashboardPage() {
                       loading={loading || biLoading}
                       formatter={fmtInt}
                       bottomLabel={prevLabel}
-                      className="border-[#FFBE25] bg-[#FFBE2526]"
+                      className="border-[#FDD36F] bg-[#FDD36F4D]"
 
                     />
 
@@ -2524,7 +2523,7 @@ export default function DashboardPage() {
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#F47A00] bg-[#F47A0026]"
+                      className="border-[#ED9F50] bg-[#ED9F504D]"
                     />
 
                     <AmazonStatCard
@@ -2543,7 +2542,7 @@ export default function DashboardPage() {
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#2CA9E0] bg-[#2CA9E026]"
+                      className="border-[#75BBDA] bg-[#75BBDA4D]"
                     />
 
 
@@ -2723,7 +2722,7 @@ export default function DashboardPage() {
                       loading={loading || (useBiCm2 ? biLoading : false)}
                       formatter={fmtPct}
                       bottomLabel={prevLabel}
-                      className="border-[#01627F] bg-[#01627F26]"
+                      className="border-[#7B9A6D] bg-[#7B9A6D4D]"
                     />
                   </div>
                 </div>
@@ -2796,7 +2795,7 @@ export default function DashboardPage() {
                         loading={shopifyLoading}
                         formatter={fmtInt}
                         bottomLabel={prevLabel}
-                        className="border-[#FFBE25] bg-[#FFBE2526]"
+                        className="border-[#FDD36F] bg-[#FDD36F4D]"
                       />
                       <AmazonStatCard
                         label="Sales"
@@ -2805,7 +2804,7 @@ export default function DashboardPage() {
                         loading={shopifyLoading}
                         formatter={formatDisplayAmount}
                         bottomLabel={prevLabel}
-                        className="border-[#2CA9E0] bg-[#2CA9E026]"
+                        className="border-[#75BBDA] bg-[#75BBDA4D]"
 
                       />
                       <AmazonStatCard

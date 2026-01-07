@@ -1727,8 +1727,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
               productSales={card6.productSales}
               units={card6.units}
               valueFmt={fmtCurrencyRounded}
-              borderColor="#2CA9E0"
-              bgColor="#2CA9E026"
+              borderColor="#75BBDA"
+              bgColor="#75BBDA4D"
             />
 
 
@@ -1768,8 +1768,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
               charged={card6.platformFees}
               applicable={card6.platformFeesApplicable}
               fmtCurrency={fmtCurrencyRounded}
-              borderColor="#FFBE25"
-              bgColor="#FFBE2526"
+              borderColor="#FDD36F"
+              bgColor="#FDD36F4D"
             />
 
             <FeeCard

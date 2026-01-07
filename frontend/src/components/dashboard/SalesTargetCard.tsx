@@ -341,7 +341,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
         <div className="flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: "#F47A00" }}
+            style={{ backgroundColor: "ED9F50" }}
           />
           <span className="text-gray-600">MTD Sale</span>
         </div>
@@ -407,7 +407,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
             <path
               d={arcPath(fullFrom, toDeg_MTD, rCurrent)}
               fill="none"
-              stroke="#F47A00"
+              stroke="#ED9F50"
               strokeWidth={strokeMain}
               strokeLinecap="round"
               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
@@ -443,7 +443,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
               cx={knobGreen.x}
               cy={knobGreen.y}
               r={10}
-              fill="#F47A00"
+              fill="#ED9F50"
               stroke="#ecfdf3"
               strokeWidth={4}
               onMouseEnter={(e) => showTip(e, tipTitle, tipLines)}
@@ -522,7 +522,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
           <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
             <div
               className="h-full rounded-full"
-              style={{ width: `${reimbNowPct}%`, backgroundColor: "#F47A00" }}
+              style={{ width: `${reimbNowPct}%`, backgroundColor: "#ED9F50" }}
             />
           </div>
         </div>

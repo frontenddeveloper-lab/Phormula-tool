@@ -752,7 +752,7 @@ const CountryCard: React.FC<CountryCardProps> = ({
       case "netSales":
         return "bg-[#2CA9E033] border-[#41404233]"; // light blue
       case "units":
-        return "bg-[#FFBE2533] border-[#41404233]"; // light yellow
+        return "bg-[#FDD36F4D] border-[#FDD36F]"; // light yellow
       case "cm1Profit":
         return "bg-[#2DA49A33] border-[#41404233]"; // light mint
       case "avgMonthlySales":

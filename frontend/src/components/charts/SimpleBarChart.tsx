@@ -38,7 +38,7 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
       {
         label: xTitle || "",
         data: values,
-        backgroundColor: colors.length ? colors : "#2CA9E0",
+        backgroundColor: colors.length ? colors : "#75BBDA",
         borderRadius: 4,
         borderWidth: 0,
       },
