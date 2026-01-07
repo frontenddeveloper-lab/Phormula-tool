@@ -83,6 +83,64 @@ const monthIndexMap: Record<string, number> = {
   july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
 };
 
+type FetchedPeriods = Record<string, string[]>; // { "2024": ["january","february"], ... }
+
+const readFetchedPeriods = (): FetchedPeriods => {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem("fetchedPeriods");
+    return raw ? (JSON.parse(raw) as FetchedPeriods) : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeFetchedPeriods = (fp: FetchedPeriods) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("fetchedPeriods", JSON.stringify(fp));
+};
+
+const markFetched = (year: string, month?: string) => {
+  if (typeof window === "undefined") return;
+  const y = String(year);
+  const m = month ? month.toLowerCase() : "";
+
+  const fp = readFetchedPeriods();
+  if (!fp[y]) fp[y] = [];
+  if (m && !fp[y].includes(m)) fp[y].push(m);
+
+  // keep months sorted
+  fp[y] = fp[y]
+    .filter(Boolean)
+    .sort((a, b) => (monthIndexMap[a] ?? 99) - (monthIndexMap[b] ?? 99));
+
+  writeFetchedPeriods(fp);
+
+  // keep latestFetchedPeriod updated (used by PeriodFiltersTable too)
+  if (m) {
+    localStorage.setItem("latestFetchedPeriod", JSON.stringify({ year: y, month: m }));
+  }
+};
+
+// ✅ default year for YEARLY view:
+// - If current year has ANY fetched month that is strictly before current month → show current year
+// - Else show previous year
+const computeDefaultYearlyYear = () => {
+  const now = new Date();
+  const cy = now.getFullYear();
+  const cm = now.getMonth(); // 0..11, current month
+
+  const fp = readFetchedPeriods();
+  const monthsFetchedThisYear = fp[String(cy)] || [];
+
+  const hasHistoricMonthInCurrentYear = monthsFetchedThisYear.some((m) => {
+    const idx = monthIndexMap[m.toLowerCase()];
+    return typeof idx === "number" && idx < cm; // strictly historic
+  });
+
+  return hasHistoricMonthInCurrentYear ? String(cy) : String(cy - 1);
+};
+
 const getPrevMonthLabel = (selectedMonth: string, selectedYear: number) => {
   const idx = monthIndexMap[selectedMonth.toLowerCase()];
   if (idx === undefined) return "Last month";
@@ -317,6 +375,22 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
       const data: UploadHistoryResponse = await res.json();
       setUploadsData(data);
+
+      // ✅ Persist fetched periods so older months/years remain selectable later
+      if (data?.summary) {
+        if (rangeType === "monthly" && yearVal && monthVal) {
+          markFetched(yearVal, monthVal);
+        }
+        if (rangeType === "quarterly" && yearVal) {
+          // optional: mark year as seen (no month)
+          markFetched(yearVal);
+        }
+        if (rangeType === "yearly" && yearVal) {
+          // optional: mark year as seen (no month)
+          markFetched(yearVal);
+        }
+      }
+
     } catch (error) {
       console.error("Error fetching data: ", error);
       // setUploadsData(null);
@@ -363,21 +437,33 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   };
 
   // Initialize range & selections from incoming params
+  // useEffect(() => {
+  //   if (ranged === "QTD") {
+  //     setRange("quarterly");
+  //     const q = getQuarterFromMonth(month);
+  //     setSelectedQuarter(q); // Quarter | ""
+  //     setSelectedYear(year);
+  //   } else if (ranged === "MTD") {
+  //     setRange("monthly");
+  //     setSelectedMonth(month);
+  //     setSelectedYear(year);
+  //   } else if (ranged === "YTD") {
+  //     setRange("yearly");
+  //     setSelectedYear(year);
+  //   }
+  // }, [ranged, month, year]);
+
   useEffect(() => {
-    if (ranged === "QTD") {
-      setRange("quarterly");
-      const q = getQuarterFromMonth(month);
-      setSelectedQuarter(q); // Quarter | ""
-      setSelectedYear(year);
-    } else if (ranged === "MTD") {
-      setRange("monthly");
-      setSelectedMonth(month);
-      setSelectedYear(year);
-    } else if (ranged === "YTD") {
-      setRange("yearly");
-      setSelectedYear(year);
-    }
-  }, [ranged, month, year]);
+    // ✅ Always open yearly by default
+    setRange("yearly");
+    setSelectedMonth("");
+    setSelectedQuarter("");
+
+    // ✅ Default yearly year based on your historic rule
+    const y = computeDefaultYearlyYear();
+    setSelectedYear(y);
+  }, []);
+
 
   // ✅ only change when global currency changes (prevents country pages going 0)
   const fetchCurrencyKey = isGlobalPage ? homeCurrency : "country";
@@ -941,7 +1027,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
         {/* RIGHT: Filters */}
         <div className="flex w-full md:w-auto justify-start md:justify-end">
           <PeriodFiltersTable
-            range={range === "" ? "monthly" : (range as "monthly" | "quarterly" | "yearly")}
+           range={range === "" ? "yearly" : (range as "monthly" | "quarterly" | "yearly")}
             selectedMonth={selectedMonth}
             selectedQuarter={selectedQuarter || ""}
             selectedYear={selectedYear}

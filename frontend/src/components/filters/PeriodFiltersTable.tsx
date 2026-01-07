@@ -2,16 +2,15 @@
 
 // import React from "react";
 // import { FaAngleDown } from "react-icons/fa";
-// import { HiOutlineCalculator } from "react-icons/hi";
 
 // export type Range = "monthly" | "quarterly" | "yearly";
 
 // interface Props {
 //   range: "monthly" | "quarterly" | "yearly" | undefined;
 //   selectedMonth: string;
-//   selectedQuarter: string; // "Q1".."Q4"
+//   selectedQuarter: string;
 //   selectedYear: string | number;
-//   yearOptions: (string | number)[];
+//   yearOptions: (string | number)[]; // kept for compatibility
 //   onRangeChange: (v: Range) => void;
 //   onMonthChange: (v: string) => void;
 //   onQuarterChange: (v: string) => void;
@@ -39,7 +38,6 @@
 
 // const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : "");
 
-// // month -> "Q1".."Q4"
 // const monthToQuarter = (m?: string) => {
 //   if (!m) return "";
 //   const idx = months.indexOf(m.toLowerCase());
@@ -47,13 +45,14 @@
 //   return `Q${Math.floor(idx / 3) + 1}`;
 // };
 
+// const MIN_YEAR = 2024;
+
 // const PeriodFiltersTable: React.FC<Props> = (props) => {
 //   const {
 //     range,
 //     selectedMonth,
 //     selectedQuarter,
 //     selectedYear,
-//     yearOptions,
 //     onRangeChange,
 //     onMonthChange,
 //     onQuarterChange,
@@ -62,24 +61,27 @@
 //   } = props;
 
 //   const safeRange: Range | "" =
-//     range && allowedRanges.includes(range as Range) ? (range as Range) : "";
+//     range && allowedRanges.includes(range as Range) ? range : "";
 
-//   const showMonthly = allowedRanges.includes("monthly");
-//   const showQuarterly = allowedRanges.includes("quarterly");
-//   const showYearly = allowedRanges.includes("yearly");
-
-//   // current month/year (client)
+//   // Current date (client)
 //   const now = new Date();
-//   const currentMonthValue = months[now.getMonth()];
 //   const currentYear = now.getFullYear();
+//   const currentMonthIndex = now.getMonth(); // 0..11
 
-//   // ----- localStorage latestFetchedPeriod -----
+//   // Year list: 2024 → current year
+//   const yearList = Array.from(
+//     { length: currentYear - MIN_YEAR + 1 },
+//     (_, i) => MIN_YEAR + i
+//   );
+
+//   const selectedYearNum = Number(selectedYear);
+
 //   const getLatestPeriod = (): LatestPeriod | null => {
 //     if (typeof window === "undefined") return null;
 //     try {
 //       const raw = localStorage.getItem("latestFetchedPeriod");
 //       if (!raw) return null;
-//       const parsed = JSON.parse(raw) as LatestPeriod;
+//       const parsed = JSON.parse(raw);
 //       if (!parsed.month || !parsed.year) return null;
 //       return { month: parsed.month.toLowerCase(), year: String(parsed.year) };
 //     } catch {
@@ -87,68 +89,142 @@
 //     }
 //   };
 
-//   // ----- apply latest period when Period changes -----
 //   const handleRangeChange = (nextRange: Range) => {
 //     onRangeChange(nextRange);
 
 //     const latest = getLatestPeriod();
 //     if (!latest) return;
 
-//     const { month, year } = latest;
+//     const y = Number(latest.year);
+//     if (!Number.isNaN(y)) {
+//       const clampedYear = Math.min(Math.max(y, MIN_YEAR), currentYear);
+//       onYearChange(String(clampedYear));
+//     }
 
-//     if (year) onYearChange(String(year));
+//     if (nextRange === "monthly" && latest.month) {
+//       onMonthChange(latest.month);
+//     }
 
-//     if (nextRange === "monthly" && month) {
-//       onMonthChange(month);
-//     } else if (nextRange === "quarterly" && month) {
-//       const q = monthToQuarter(month);
+//     if (nextRange === "quarterly" && latest.month) {
+//       const q = monthToQuarter(latest.month);
 //       if (q) onQuarterChange(q);
 //     }
-//     // yearly: only year matters (already set)
 //   };
 
-//   // ----- seed from latestFetchedPeriod once -----
+//   // Seed once from latestFetchedPeriod
 //   const initializedRef = React.useRef(false);
-//   React.useEffect(() => {
-//     if (initializedRef.current) return;
-//     initializedRef.current = true;
 
-//     const latest = getLatestPeriod();
-//     if (!latest) return;
+// React.useEffect(() => {
+//   if (initializedRef.current) return;
+//   initializedRef.current = true;
 
-//     const { month, year } = latest;
+//   const latest = getLatestPeriod();
+//   if (!latest) return;
 
-//     const hasYear = selectedYear !== "" && selectedYear !== undefined;
-//     const hasMonth = !!selectedMonth;
-//     const hasQuarter = !!selectedQuarter && selectedQuarter !== "Range";
+//   const y = Number(latest.year);
+//   if (Number.isNaN(y)) return;
 
-//     if (!hasYear && year) onYearChange(String(year));
+//   const clampedYear = Math.min(Math.max(y, MIN_YEAR), currentYear);
 
-//     if (safeRange === "monthly" && month && !hasMonth) {
-//       onMonthChange(month);
-//     } else if (safeRange === "quarterly" && month && !hasQuarter) {
-//       const q = monthToQuarter(month);
+//   // ✅ Force default year to latest fetched (only once)
+//   // If parent defaulted to 2024 (or anything else), we override on initial mount.
+//   if (String(selectedYear) !== String(clampedYear)) {
+//     onYearChange(String(clampedYear));
+//   }
+
+//   // ✅ Optionally also seed month/quarter once if empty
+//   if (safeRange === "monthly") {
+//     if (latest.month && !selectedMonth) onMonthChange(latest.month);
+//   }
+
+//   if (safeRange === "quarterly") {
+//     if (latest.month && (!selectedQuarter || selectedQuarter === "Range")) {
+//       const q = monthToQuarter(latest.month);
 //       if (q) onQuarterChange(q);
 //     }
-//   }, [
-//     safeRange,
-//     selectedMonth,
-//     selectedQuarter,
-//     selectedYear,
-//     onYearChange,
-//     onMonthChange,
-//     onQuarterChange,
-//   ]);
+//   }
+//   // yearly: year already handled
+//   // eslint-disable-next-line react-hooks/exhaustive-deps
+// }, []);
 
-//   // ---------------- UI classes (matching your QuarterlyLast12Filters look) ----------------
+
+//   /* =========================
+//      Month/Quarter disable rules
+//      ========================= */
+
+//   // In currentYear: disable current month and future months
+//   const isMonthDisabled = (m: string) => {
+//     const mIdx = months.indexOf(m);
+//     if (mIdx === -1) return false;
+
+//     if (selectedYearNum === currentYear) {
+//       return mIdx >= currentMonthIndex;
+//     }
+//     return false;
+//   };
+
+//   // In currentYear: disable quarters whose START month is current month or later
+//   const isQuarterDisabled = (q: string) => {
+//     if (selectedYearNum !== currentYear) return false;
+//     const qNum = Number(q.replace("Q", ""));
+//     const quarterStartMonth = (qNum - 1) * 3; // Q1=0, Q2=3...
+//     return quarterStartMonth >= currentMonthIndex;
+//   };
+
+//   /* =========================
+//      NEW: Year disable rules
+//      ========================= */
+
+//   const monthAllowedInYear = (y: number, m: string) => {
+//     const mIdx = months.indexOf(m.toLowerCase());
+//     if (mIdx === -1) return true;
+
+//     // If selecting current year, month must be strictly before current month
+//     if (y === currentYear) return mIdx < currentMonthIndex;
+
+//     // Past years (>= 2024) are fine
+//     return true;
+//   };
+
+//   const quarterAllowedInYear = (y: number, q: string) => {
+//     const qNum = Number(q.replace("Q", ""));
+//     if (![1, 2, 3, 4].includes(qNum)) return true;
+
+//     // If selecting current year, quarter must start strictly before current month
+//     if (y === currentYear) {
+//       const quarterStartMonth = (qNum - 1) * 3;
+//       return quarterStartMonth < currentMonthIndex;
+//     }
+
+//     return true;
+//   };
+
+//   const isYearDisabled = (y: number) => {
+//     // never allow before MIN_YEAR or after currentYear
+//     if (y < MIN_YEAR || y > currentYear) return true;
+
+//     // only enforce month/quarter rule when in monthly/quarterly mode
+//     if (safeRange === "monthly" && selectedMonth) {
+//       return !monthAllowedInYear(y, selectedMonth);
+//     }
+
+//     if (safeRange === "quarterly" && selectedQuarter) {
+//       return !quarterAllowedInYear(y, selectedQuarter);
+//     }
+
+//     // If no month/quarter selected yet, allow the year
+//     return false;
+//   };
+
+//   /* -------- UI classes -------- */
 //   const wrapCls =
 //     "relative inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs sm:text-sm shadow-sm";
 //   const selectCls =
-//     "appearance-none bg-transparent px-2 py-1 pr-6 text-center text-xs sm:text-sm text-[#414042] focus:outline-none cursor-pointer leading-tight";
+//     "appearance-none bg-transparent px-2 py-1 pr-6 text-center text-xs sm:text-sm text-[#414042] focus:outline-none cursor-pointer";
 
 //   return (
 //     <div className="flex items-center gap-2 sm:gap-3">
-//       {/* 1) Period */}
+//       {/* Period */}
 //       <div className={wrapCls}>
 //         <select
 //           value={safeRange}
@@ -158,23 +234,24 @@
 //           <option value="" disabled>
 //             Period
 //           </option>
-//           {showMonthly && <option value="monthly">Monthly</option>}
-//           {showQuarterly && <option value="quarterly">Quarterly</option>}
-//           {showYearly && <option value="yearly">Yearly</option>}
+//           {allowedRanges.includes("monthly") && (
+//             <option value="monthly">Monthly</option>
+//           )}
+//           {allowedRanges.includes("quarterly") && (
+//             <option value="quarterly">Quarterly</option>
+//           )}
+//           {allowedRanges.includes("yearly") && (
+//             <option value="yearly">Yearly</option>
+//           )}
 //         </select>
-
-//         <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
+//         <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px]">
 //           <FaAngleDown />
 //         </span>
 //       </div>
 
-//       {/* 2) Month / Quarter (only for monthly + quarterly) */}
+//       {/* Month / Quarter */}
 //       {(safeRange === "monthly" || safeRange === "quarterly") && (
 //         <div className={wrapCls}>
-//           {/* <span className="mr-2 flex items-center text-base text-[#414042]/70">
-//             <HiOutlineCalculator />
-//           </span> */}
-
 //           <select
 //             value={safeRange === "monthly" ? selectedMonth : selectedQuarter}
 //             onChange={(e) =>
@@ -187,38 +264,27 @@
 //             <option value="">Range</option>
 
 //             {safeRange === "monthly" &&
-//               months.map((m) => {
-//                 const isCurrentMonthAndYear =
-//                   m === currentMonthValue &&
-//                   String(selectedYear) === String(currentYear);
-
-//                 // disable current month for current year, unless already selected
-//                 const shouldDisableMonth =
-//                   isCurrentMonthAndYear && selectedMonth !== m;
-
-//                 return (
-//                   <option key={m} value={m} disabled={shouldDisableMonth}>
-//                     {cap(m)}
-//                   </option>
-//                 );
-//               })}
+//               months.map((m) => (
+//                 <option key={m} value={m} disabled={isMonthDisabled(m)}>
+//                   {cap(m)}
+//                 </option>
+//               ))}
 
 //             {safeRange === "quarterly" &&
 //               ["Q1", "Q2", "Q3", "Q4"].map((q) => (
-//                 <option key={q} value={q}>
+//                 <option key={q} value={q} disabled={isQuarterDisabled(q)}>
 //                   {q}
 //                 </option>
 //               ))}
 //           </select>
 
-//           <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
-
+//           <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px]">
 //             <FaAngleDown />
 //           </span>
 //         </div>
 //       )}
 
-//       {/* 3) Year */}
+//       {/* Year */}
 //       <div className={wrapCls}>
 //         <select
 //           value={selectedYear ? String(selectedYear) : ""}
@@ -227,26 +293,14 @@
 //         >
 //           <option value="">Year</option>
 
-//           {yearOptions.map((y) => {
-//             // Only block current year when MONTHLY + current month selected
-//             const isCurrentYearAndMonth =
-//               safeRange === "monthly" &&
-//               String(y) === String(currentYear) &&
-//               selectedMonth === currentMonthValue;
-
-//             const shouldDisableYear =
-//               isCurrentYearAndMonth && String(selectedYear) !== String(currentYear);
-
-//             return (
-//               <option key={y} value={y} disabled={shouldDisableYear}>
-//                 {y}
-//               </option>
-//             );
-//           })}
+//           {yearList.map((y) => (
+//             <option key={y} value={y} disabled={isYearDisabled(y)}>
+//               {y}
+//             </option>
+//           ))}
 //         </select>
 
-//         <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px] text-[#414042]">
-
+//         <span className="pointer-events-none absolute inset-y-0 right-5 flex items-center text-[10px]">
 //           <FaAngleDown />
 //         </span>
 //       </div>
@@ -255,6 +309,34 @@
 // };
 
 // export default PeriodFiltersTable;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -328,7 +410,7 @@ const PeriodFiltersTable: React.FC<Props> = (props) => {
   } = props;
 
   const safeRange: Range | "" =
-    range && allowedRanges.includes(range as Range) ? range : "";
+    range && allowedRanges.includes(range as Range) ? (range as Range) : "";
 
   // Current date (client)
   const now = new Date();
@@ -350,83 +432,123 @@ const PeriodFiltersTable: React.FC<Props> = (props) => {
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed.month || !parsed.year) return null;
-      return { month: parsed.month.toLowerCase(), year: String(parsed.year) };
+      return { month: String(parsed.month).toLowerCase(), year: String(parsed.year) };
     } catch {
       return null;
     }
   };
 
+  /* =========================
+     Helpers: historic month normalization + allowed month list
+     ========================= */
+
+  const monthIndex = (m?: string) => (m ? months.indexOf(m.toLowerCase()) : -1);
+
+  // Returns latest HISTORIC monthly period (month strictly before current month if same year)
+  const getLatestHistoricMonthly = (y: number, m: string) => {
+    let year = y;
+    let idx = monthIndex(m);
+    if (idx === -1) return null;
+
+    // clamp year bounds
+    year = Math.min(Math.max(year, MIN_YEAR), currentYear);
+
+    if (year === currentYear) {
+      // only months strictly before current month
+      if (idx >= currentMonthIndex) idx = currentMonthIndex - 1;
+
+      // If it's January (currentMonthIndex=0) -> no historic month in current year.
+      if (idx < 0) {
+        year = currentYear - 1;
+        if (year < MIN_YEAR) return null;
+        idx = 11; // december
+      }
+    }
+
+    return { year: String(year), month: months[idx] };
+  };
+
+  // For dropdown: show only historic months in current year, all months in past years
+  const getAllowedMonthsForYear = (y: number) => {
+    if (!y || Number.isNaN(y)) return months;
+    if (y === currentYear) return months.slice(0, currentMonthIndex);
+    if (y < MIN_YEAR) return [];
+    if (y > currentYear) return [];
+    return months;
+  };
+
+  /* =========================
+     Range change (seed from latestFetchedPeriod but normalized to historic)
+     ========================= */
+
   const handleRangeChange = (nextRange: Range) => {
     onRangeChange(nextRange);
 
     const latest = getLatestPeriod();
-    if (!latest) return;
+    if (!latest?.month || !latest?.year) return;
 
     const y = Number(latest.year);
-    if (!Number.isNaN(y)) {
-      const clampedYear = Math.min(Math.max(y, MIN_YEAR), currentYear);
-      onYearChange(String(clampedYear));
+    if (Number.isNaN(y)) return;
+
+    const normalized = getLatestHistoricMonthly(y, latest.month);
+    if (!normalized) return;
+
+    onYearChange(normalized.year);
+
+    if (nextRange === "monthly") {
+      onMonthChange(normalized.month);
     }
 
-    if (nextRange === "monthly" && latest.month) {
-      onMonthChange(latest.month);
-    }
-
-    if (nextRange === "quarterly" && latest.month) {
-      const q = monthToQuarter(latest.month);
+    if (nextRange === "quarterly") {
+      const q = monthToQuarter(normalized.month);
       if (q) onQuarterChange(q);
     }
   };
 
-  // Seed once from latestFetchedPeriod
+  // Seed once from latestFetchedPeriod (but normalized to historic)
   const initializedRef = React.useRef(false);
 
-React.useEffect(() => {
-  if (initializedRef.current) return;
-  initializedRef.current = true;
+  React.useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
-  const latest = getLatestPeriod();
-  if (!latest) return;
+    const latest = getLatestPeriod();
+    if (!latest?.month || !latest?.year) return;
 
-  const y = Number(latest.year);
-  if (Number.isNaN(y)) return;
+    const y = Number(latest.year);
+    if (Number.isNaN(y)) return;
 
-  const clampedYear = Math.min(Math.max(y, MIN_YEAR), currentYear);
+    const normalized = getLatestHistoricMonthly(y, latest.month);
+    if (!normalized) return;
 
-  // ✅ Force default year to latest fetched (only once)
-  // If parent defaulted to 2024 (or anything else), we override on initial mount.
-  if (String(selectedYear) !== String(clampedYear)) {
-    onYearChange(String(clampedYear));
-  }
-
-  // ✅ Optionally also seed month/quarter once if empty
-  if (safeRange === "monthly") {
-    if (latest.month && !selectedMonth) onMonthChange(latest.month);
-  }
-
-  if (safeRange === "quarterly") {
-    if (latest.month && (!selectedQuarter || selectedQuarter === "Range")) {
-      const q = monthToQuarter(latest.month);
-      if (q) onQuarterChange(q);
+    // ✅ Force default year to latest HISTORIC (only once)
+    if (String(selectedYear) !== normalized.year) {
+      onYearChange(normalized.year);
     }
-  }
-  // yearly: year already handled
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
 
+    // ✅ Optionally seed month/quarter once if empty
+    if (safeRange === "monthly") {
+      if (!selectedMonth) onMonthChange(normalized.month);
+    }
+
+    if (safeRange === "quarterly") {
+      if (!selectedQuarter || selectedQuarter === "Range") {
+        const q = monthToQuarter(normalized.month);
+        if (q) onQuarterChange(q);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* =========================
-     Month/Quarter disable rules
+     Month/Quarter disable rules (kept for safety)
      ========================= */
 
   // In currentYear: disable current month and future months
   const isMonthDisabled = (m: string) => {
     const mIdx = months.indexOf(m);
     if (mIdx === -1) return false;
-
-    if (selectedYearNum === currentYear) {
-      return mIdx >= currentMonthIndex;
-    }
+    if (selectedYearNum === currentYear) return mIdx >= currentMonthIndex;
     return false;
   };
 
@@ -439,17 +561,13 @@ React.useEffect(() => {
   };
 
   /* =========================
-     NEW: Year disable rules
+     Year disable rules
      ========================= */
 
   const monthAllowedInYear = (y: number, m: string) => {
     const mIdx = months.indexOf(m.toLowerCase());
     if (mIdx === -1) return true;
-
-    // If selecting current year, month must be strictly before current month
     if (y === currentYear) return mIdx < currentMonthIndex;
-
-    // Past years (>= 2024) are fine
     return true;
   };
 
@@ -457,20 +575,16 @@ React.useEffect(() => {
     const qNum = Number(q.replace("Q", ""));
     if (![1, 2, 3, 4].includes(qNum)) return true;
 
-    // If selecting current year, quarter must start strictly before current month
     if (y === currentYear) {
       const quarterStartMonth = (qNum - 1) * 3;
       return quarterStartMonth < currentMonthIndex;
     }
-
     return true;
   };
 
   const isYearDisabled = (y: number) => {
-    // never allow before MIN_YEAR or after currentYear
     if (y < MIN_YEAR || y > currentYear) return true;
 
-    // only enforce month/quarter rule when in monthly/quarterly mode
     if (safeRange === "monthly" && selectedMonth) {
       return !monthAllowedInYear(y, selectedMonth);
     }
@@ -479,9 +593,37 @@ React.useEffect(() => {
       return !quarterAllowedInYear(y, selectedQuarter);
     }
 
-    // If no month/quarter selected yet, allow the year
     return false;
   };
+
+  /* =========================
+     Guard: if URL/parent passes an invalid month/year, snap to allowed historic
+     ========================= */
+
+  React.useEffect(() => {
+    if (safeRange !== "monthly") return;
+    if (!selectedYearNum || Number.isNaN(selectedYearNum)) return;
+    if (!selectedMonth) return;
+
+    const allowed = getAllowedMonthsForYear(selectedYearNum);
+    const mLower = selectedMonth.toLowerCase();
+
+    if (!allowed.includes(mLower)) {
+      // Snap to last allowed month in that year (or to Dec of previous year if none)
+      if (selectedYearNum === currentYear) {
+        if (currentMonthIndex === 0) {
+          // Jan: no historic months in current year
+          onYearChange(String(currentYear - 1));
+          onMonthChange("december");
+        } else {
+          onMonthChange(months[currentMonthIndex - 1]);
+        }
+      } else if (allowed.length > 0) {
+        onMonthChange(allowed[allowed.length - 1]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeRange, selectedMonth, selectedYearNum, currentYear, currentMonthIndex]);
 
   /* -------- UI classes -------- */
   const wrapCls =
@@ -530,13 +672,15 @@ React.useEffect(() => {
           >
             <option value="">Range</option>
 
+            {/* ✅ Monthly: ONLY show allowed (historic) months */}
             {safeRange === "monthly" &&
-              months.map((m) => (
+              getAllowedMonthsForYear(selectedYearNum).map((m) => (
                 <option key={m} value={m} disabled={isMonthDisabled(m)}>
                   {cap(m)}
                 </option>
               ))}
 
+            {/* Quarterly: still show all, but disable as needed */}
             {safeRange === "quarterly" &&
               ["Q1", "Q2", "Q3", "Q4"].map((q) => (
                 <option key={q} value={q} disabled={isQuarterDisabled(q)}>
