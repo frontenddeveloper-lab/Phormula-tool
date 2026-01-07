@@ -338,8 +338,8 @@ def process_skuwise_data(user_id, country, month, year):
         # platformfeenew = sum(total) where description contains "Subscription"
         platformfeenew_total = sum_total_where_desc_contains(["Subscription"])
 
-        # platformfeeothertransection = sum(total) where description contains any of these
-        platformfeeothertransection_total = sum_total_where_desc_contains([
+        # platform_fee_inventory_storage = sum(total) where description contains any of these
+        platform_fee_inventory_storage_total = sum_total_where_desc_contains([
             "FBA Return Fee",
             "FBA Long-Term Storage Fee",
             "FBA storage fee",
@@ -821,7 +821,7 @@ def process_skuwise_data(user_id, country, month, year):
         sku_grouped["visible_ads"] = 0.0
         sku_grouped["dealsvouchar_ads"] = 0.0
         sku_grouped["platformfeenew"] = 0.0
-        sku_grouped["platformfeeothertransection"] = 0.0
+        sku_grouped["platform_fee_inventory_storage"] = 0.0
 
         # Ensure the two columns exist even if missing in source
         for _col in ("shipping_credits", "shipment_charges"):
@@ -991,7 +991,7 @@ def process_skuwise_data(user_id, country, month, year):
             "visible_ads",
             "dealsvouchar_ads",
             "platformfeenew",
-            "platformfeeothertransection",
+            "platform_fee_inventory_storage",
             "tex_and_credits",
             "cm2_profit_percentage",
         ]
@@ -1232,7 +1232,7 @@ def process_skuwise_data(user_id, country, month, year):
         sum_row["visible_ads"] = float(visible_ads_total)
         sum_row["dealsvouchar_ads"] = float(dealsvouchar_ads_total)
         sum_row["platformfeenew"] = float(platformfeenew_total)
-        sum_row["platformfeeothertransection"] = float(platformfeeothertransection_total)
+        sum_row["platform_fee_inventory_storage"] = float(platform_fee_inventory_storage_total)
         # -------------------------------------------------------------
 
         sum_row["user_id"] = user_id
@@ -1337,7 +1337,7 @@ def process_skuwise_data(user_id, country, month, year):
                     dealsvouchar_ads REAL,
                     advertising_total REAL,
                     platformfeenew REAL,
-                    platformfeeothertransection REAL,
+                    platform_fee_inventory_storage REAL,
                     platform_fee REAL,
                     cm2_profit REAL,
                     cm2_profit_percentage REAL,
@@ -1456,9 +1456,9 @@ def process_skuwise_data(user_id, country, month, year):
                     id SERIAL PRIMARY KEY,
                     sku TEXT,
                     product_name TEXT,
+                    quantity INTEGER,
+                    return_quantity INTEGER,
                     total_quantity INTEGER,
-                    product_sales REAL,
-                    
                     asp REAL,
                     gross_sales REAL,
                     refund_sales REAL,
@@ -1481,8 +1481,8 @@ def process_skuwise_data(user_id, country, month, year):
                     dealsvouchar_ads REAL,
                     advertising_total REAL,
                     platformfeenew REAL,
-                    platformfeeothertransection REAL,
-                    platform_fee REAL,
+                    platformfee REAL,
+                    platform_fee_inventory_storage REAL,
                     cm2_profit REAL,
                     cm2_profit_percentage REAL,
                     acos REAL,
@@ -1609,7 +1609,7 @@ def process_skuwise_data(user_id, country, month, year):
                     visible_ads REAL,
                     dealsvouchar_ads REAL,
                     platformfeenew REAL,
-                    platformfeeothertransection REAL,
+                    platformfeeothertransectionplatform_fee_inventory_storage REAL,
                     tex_and_credits REAL,
                     cm2_profit_percentage REAL,
 
@@ -1671,8 +1671,7 @@ def process_skuwise_data(user_id, country, month, year):
             'cross_check_analysis_backup', 'text_credit_increase', 'final_total_analysis', 'postage_credits', 'refund_sales', 'gross_sales', 'sales_tax_refund', 'sales_credit_refund', 'refund_rebate', 'lost_total',
             'misc_transaction', 'promotional_rebates_percentage','visible_ads' ,
             'dealsvouchar_ads',
-            'platformfeenew',
-            'platformfeeothertransection',
+            'platform_fee_inventory_storage',
             "tex_and_credits",       
             "cm2_profit_percentage",  
 
@@ -1824,7 +1823,7 @@ def process_skuwise_data(user_id, country, month, year):
                     visible_ads REAL,
                     dealsvouchar_ads REAL,
                     platformfeenew REAL,
-                    platformfeeothertransection REAL,
+                    platform_fee_inventory_storage REAL,
 
 
 
@@ -1940,7 +1939,7 @@ def process_skuwise_data(user_id, country, month, year):
             "advertising_total",
 
             "platformfeenew",
-            "platformfeeothertransection",
+            "platform_fee_inventory_storage",
             "platform_fee",
 
             "cm2_profit",
