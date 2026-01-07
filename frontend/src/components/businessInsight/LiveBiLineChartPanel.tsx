@@ -269,7 +269,7 @@ export default function LiveBiLineChartPanel({
         </div>
       </div>
 
-      <div className="mt-3">
+      <div className="" style={{marginTop:"-5px"}}>
         {loading && <div className="text-sm text-gray-500">Loading chart…</div>}
         {error && <div className="text-sm text-red-500">{error}</div>}
 
