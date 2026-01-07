@@ -921,9 +921,15 @@ MARKETPLACE_TO_COUNTRY = {
 @inventory_bp.route("/amazon_api/inventory/aged", methods=["GET"])
 def sync_inventory_aged():
     """
-    Fetch GET_FBA_INVENTORY_PLANNING_DATA and store into inventory_aged.
-    Old data for same snapshot_date + user_id + marketplace is deleted
-    before inserting new rows (prevents duplicates).
+    Fetch GET_FBA_INVENTORY_PLANNING_DATA and store ONLY the latest snapshot_date
+    into inventory_aged.
+
+    Behavior:
+    - Parses the report TSV
+    - Detects the latest snapshot_date present in the report (treated as "current")
+    - Deletes ALL previous snapshot_date data for this user + marketplace
+    - Deletes any existing rows for the current snapshot_date (to prevent duplicates)
+    - Inserts only rows from the current snapshot_date
     """
 
     # ---------------- AUTH ----------------
@@ -951,7 +957,7 @@ def sync_inventory_aged():
 
     mp = request.args.get("marketplace_id", amazon_client.marketplace_id)
 
-    logger.info("Starting InventoryAged sync for marketplace %s", mp)
+    logger.info("Starting InventoryAged sync for marketplace %s (user_id=%s)", mp, user_id)
 
     # ---------------- REQUEST REPORT ----------------
     report_id = _request_inventory_age_report(mp)
@@ -986,7 +992,7 @@ def sync_inventory_aged():
             "error": "Inventory health report has no header row",
         }), 500
 
-    objs: list[InventoryAged] = []
+    parsed_objs: list[InventoryAged] = []
     rows_count = 0
     snapshot_dates: set[date] = set()
 
@@ -1000,22 +1006,51 @@ def sync_inventory_aged():
         inv.user_id = user_id
         inv.marketplace = mp
 
-        objs.append(inv)
+        parsed_objs.append(inv)
 
         if inv.snapshot_date:
             snapshot_dates.add(inv.snapshot_date)
 
-    # ---------------- DELETE OLD DATA (CRITICAL FIX) ----------------
+    # ---------------- DETERMINE "CURRENT" SNAPSHOT DATE ----------------
+    # Prefer the report's latest snapshot_date (best definition of "current")
+    if snapshot_dates:
+        current_snapshot = max(snapshot_dates)
+    else:
+        # fallback if Amazon doesn't provide snapshot-date in the file
+        current_snapshot = date.today()
+
+    # Keep only current snapshot rows
+    objs = [o for o in parsed_objs if o.snapshot_date == current_snapshot]
+
+    logger.info(
+        "InventoryAged parsed rows=%d, snapshot_dates=%s, current_snapshot=%s, keeping_rows=%d",
+        rows_count,
+        sorted([d.isoformat() for d in snapshot_dates]),
+        current_snapshot.isoformat(),
+        len(objs),
+    )
+
+    # ---------------- DELETE OLD DATA (KEEP ONLY CURRENT SNAPSHOT) ----------------
     try:
-        if snapshot_dates:
-            db.session.execute(
-                delete(InventoryAged).where(
-                    InventoryAged.user_id == user_id,
-                    InventoryAged.marketplace == mp,
-                    InventoryAged.snapshot_date.in_(snapshot_dates)
-                )
+        # 1) delete all other snapshot dates for this user+marketplace
+        db.session.execute(
+            delete(InventoryAged).where(
+                InventoryAged.user_id == user_id,
+                InventoryAged.marketplace == mp,
+                InventoryAged.snapshot_date != current_snapshot,
             )
-            db.session.commit()
+        )
+
+        # 2) delete current snapshot too (so re-sync doesn't duplicate)
+        db.session.execute(
+            delete(InventoryAged).where(
+                InventoryAged.user_id == user_id,
+                InventoryAged.marketplace == mp,
+                InventoryAged.snapshot_date == current_snapshot,
+            )
+        )
+
+        db.session.commit()
     except Exception as e:
         db.session.rollback()
         logger.exception("Failed to delete old InventoryAged data")
@@ -1025,7 +1060,10 @@ def sync_inventory_aged():
         }), 500
 
     # ---------------- ATTACH PRODUCT NAMES ----------------
-    _attach_sku_product_names(objs, user_id)
+    try:
+        _attach_sku_product_names(objs, user_id)
+    except Exception as e:
+        logger.exception("Failed to attach SKU product names: %s", e)
 
     # ---------------- INSERT NEW DATA ----------------
     try:
@@ -1040,19 +1078,19 @@ def sync_inventory_aged():
             "success": False,
             "error": f"Failed to save rows: {str(e)}",
         }), 500
-    
-        # ---------------- INVENTORY ALERTS ----------------
+
+    # ---------------- INVENTORY ALERTS ----------------
     try:
         country = MARKETPLACE_TO_COUNTRY.get(mp, "uk")
         inventory_alerts = generate_inventory_alerts_for_all_skus(
             user_id=user_id,
             country=country,
         )
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to generate inventory alerts")
         inventory_alerts = {}
-    # ---------------- RESPONSE ----------------
 
+    # ---------------- RESPONSE ----------------
     return jsonify({
         "success": True,
         "marketplace_id": mp,
@@ -1060,7 +1098,7 @@ def sync_inventory_aged():
         "document_id": doc_id,
         "rows_in_report": rows_count,
         "rows_saved": saved,
-        "snapshot_dates": [d.isoformat() for d in snapshot_dates],
+        "current_snapshot_date": current_snapshot.isoformat(),
         "inventory_alerts": inventory_alerts,
     }), 200
 
