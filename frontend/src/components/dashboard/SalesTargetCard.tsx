@@ -335,9 +335,9 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
     !Number.isNaN(reimbursementDeltaPct);
 
   return (
-    <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
+    <div className="rounded-2xl border p-3 2xl:p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
       {/* Legend */}
-      <div className="mt-3 flex items-center justify-center gap-6 text-xs">
+      <div className="mt-2 2xl:mt-3 flex items-center justify-center gap-6 text-[10px] 2xl:text-xs">
         <div className="flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-sm"
@@ -346,18 +346,9 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
           <span className="text-gray-600">MTD Sale</span>
         </div>
 
-        {/* <div className="flex items-center gap-2">
-          <span
-            className="h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: "#9ca3af" }}
-          />
-          <span className="text-gray-600">Dec Target</span>
-        </div> */}
-
         <div className="flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-sm"
-            // style={{ backgroundColor: "#9ca3af" }}
             style={{ backgroundColor: "#5EA68E" }}
 
           />
@@ -367,7 +358,6 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
         <div className="flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-sm"
-            // style={{ backgroundColor: "#F59E0B" }}
             style={{ backgroundColor: "#9ca3af" }}
           />
           <span className="text-gray-600">{prevLabel} Sale</span>
@@ -485,9 +475,9 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
         </div>
 
         {/* Percentage */}
-        <div className="mt-2 text-center">
+        <div className="mt-1 2xl:mt-2 text-center">
           <div className="text-3xl font-semibold">{pctDisplay.toFixed(1)}%</div>
-          <div className="text-xs text-gray-500 mt-1">Target Achieved</div>
+          <div className="text-[10px] 2xl:text-xs text-gray-500 mt-1">Target Achieved</div>
           {/* <div className="text-xs text-gray-600 mt-1">
             Target:{" "}
             <span className="font-medium">{formatHomeK(targetHomeResolved)}</span>
@@ -496,15 +486,15 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
       </div>
 
       {/* Reimbursement Section */}
-      <div className="mt-4 p-3 ">
+      <div className="mt-1 2xl:mt-4 p-3 ">
         <div className="flex items-center justify-center gap-2">
-          <div className="text-xs text-gray-500">
+          <div className="text-[10px] 2xl:text-xs text-gray-500">
             Monthly Reimbursement
           </div>
 
           {showReimbDelta && (
             <div
-              className={`text-[11px] font-medium px-2 py-0.5 rounded ${reimbursementDeltaPct! >= 0
+              className={`text-[10px] 2xl:text-xs font-medium px-2 py-0.5 rounded ${reimbursementDeltaPct! >= 0
                 ? "bg-green-50 text-green-700"
                 : "bg-rose-50 text-rose-700"
                 }`}
@@ -517,7 +507,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
         </div>
 
         <div className="mt-3">
-          <div className="flex items-center justify-between text-xs ">
+          <div className="flex items-center justify-between text-[10px] 2xl:text-xs">
             <span className="text-gray-600">
               {toApostropheLabel(reimbNowLabel)}{' '}
             </span>
@@ -538,7 +528,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
         </div>
 
         <div className="mt-3">
-          <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center justify-between text-[10px] 2xl:text-xs">
             <span className="text-gray-600">
               {toApostropheLabel(reimbPrevLabel)}{' '}
             </span>

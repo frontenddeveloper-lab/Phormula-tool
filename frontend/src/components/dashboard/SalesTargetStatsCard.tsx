@@ -254,7 +254,7 @@ export default function SalesTargetStatsCard({
   }, [regions]);
 
   return (
-    <div className="rounded-2xl border p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
+    <div className="rounded-2xl border p-3 2xl:p-5 shadow-sm h-full flex flex-col bg-[#D9D9D933]">
       <div className="relative flex flex-col items-center gap-2">
         <PageBreadcrumb pageTitle="Sales Target" textSize="2xl" variant="page" align="center" />
 
@@ -289,12 +289,12 @@ export default function SalesTargetStatsCard({
           ].map((t) => (
             <div
               key={t.title}
-              className="rounded-xl p-3 text-center h-full flex flex-col items-center justify-center"
+              className="rounded-xl 2xl:p-3 text-center h-full flex flex-col items-center justify-start"
             >
-              <div className="text-charcoal-500 whitespace-nowrap leading-none">{t.title}</div>
-              <div className="mt-2 font-semibold whitespace-nowrap leading-none">{t.value}</div>
+              <div className="text-charcoal-500 whitespace-nowrap leading-none  text-[10px] 2xl:text-xs">{t.title}</div>
+              <div className="mt-2 text-sm 2xl:text-lg font-semibold whitespace-nowrap leading-none">{t.value}</div>
               <div
-                className={`mt-1 text-[11px] leading-none ${
+                className={`mt-1 text-[10px] 2xl:text-xs leading-none ${
                   t.helper === "\u00A0" ? "text-transparent select-none" : "text-gray-500"
                 }`}
               >

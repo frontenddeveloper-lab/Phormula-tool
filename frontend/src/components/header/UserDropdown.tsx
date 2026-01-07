@@ -74,7 +74,7 @@ const handleLogout = async () => {
           <Image width={44} height={44} src="/images/user/owner.jpg" alt="User" />
         </span> */}
 
-        <span className="block mr-1 font-normal text-base ">Welcome, <span className="font-bold italic ">{userFromStore?.brand_name}!</span></span>
+        <span className="block mr-1 font-normal text-xs lg:text-sm 2xl:text-base">Welcome, <span className="font-bold italic ">{userFromStore?.brand_name}!</span></span>
 
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${

@@ -83,6 +83,64 @@ const monthIndexMap: Record<string, number> = {
   july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
 };
 
+type FetchedPeriods = Record<string, string[]>; // { "2024": ["january","february"], ... }
+
+const readFetchedPeriods = (): FetchedPeriods => {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem("fetchedPeriods");
+    return raw ? (JSON.parse(raw) as FetchedPeriods) : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeFetchedPeriods = (fp: FetchedPeriods) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("fetchedPeriods", JSON.stringify(fp));
+};
+
+const markFetched = (year: string, month?: string) => {
+  if (typeof window === "undefined") return;
+  const y = String(year);
+  const m = month ? month.toLowerCase() : "";
+
+  const fp = readFetchedPeriods();
+  if (!fp[y]) fp[y] = [];
+  if (m && !fp[y].includes(m)) fp[y].push(m);
+
+  // keep months sorted
+  fp[y] = fp[y]
+    .filter(Boolean)
+    .sort((a, b) => (monthIndexMap[a] ?? 99) - (monthIndexMap[b] ?? 99));
+
+  writeFetchedPeriods(fp);
+
+  // keep latestFetchedPeriod updated (used by PeriodFiltersTable too)
+  if (m) {
+    localStorage.setItem("latestFetchedPeriod", JSON.stringify({ year: y, month: m }));
+  }
+};
+
+// ✅ default year for YEARLY view:
+// - If current year has ANY fetched month that is strictly before current month → show current year
+// - Else show previous year
+const computeDefaultYearlyYear = () => {
+  const now = new Date();
+  const cy = now.getFullYear();
+  const cm = now.getMonth(); // 0..11, current month
+
+  const fp = readFetchedPeriods();
+  const monthsFetchedThisYear = fp[String(cy)] || [];
+
+  const hasHistoricMonthInCurrentYear = monthsFetchedThisYear.some((m) => {
+    const idx = monthIndexMap[m.toLowerCase()];
+    return typeof idx === "number" && idx < cm; // strictly historic
+  });
+
+  return hasHistoricMonthInCurrentYear ? String(cy) : String(cy - 1);
+};
+
 const getPrevMonthLabel = (selectedMonth: string, selectedYear: number) => {
   const idx = monthIndexMap[selectedMonth.toLowerCase()];
   if (idx === undefined) return "Last month";
@@ -317,6 +375,22 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
       const data: UploadHistoryResponse = await res.json();
       setUploadsData(data);
+
+      // ✅ Persist fetched periods so older months/years remain selectable later
+      if (data?.summary) {
+        if (rangeType === "monthly" && yearVal && monthVal) {
+          markFetched(yearVal, monthVal);
+        }
+        if (rangeType === "quarterly" && yearVal) {
+          // optional: mark year as seen (no month)
+          markFetched(yearVal);
+        }
+        if (rangeType === "yearly" && yearVal) {
+          // optional: mark year as seen (no month)
+          markFetched(yearVal);
+        }
+      }
+
     } catch (error) {
       console.error("Error fetching data: ", error);
       // setUploadsData(null);
@@ -363,21 +437,33 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   };
 
   // Initialize range & selections from incoming params
+  // useEffect(() => {
+  //   if (ranged === "QTD") {
+  //     setRange("quarterly");
+  //     const q = getQuarterFromMonth(month);
+  //     setSelectedQuarter(q); // Quarter | ""
+  //     setSelectedYear(year);
+  //   } else if (ranged === "MTD") {
+  //     setRange("monthly");
+  //     setSelectedMonth(month);
+  //     setSelectedYear(year);
+  //   } else if (ranged === "YTD") {
+  //     setRange("yearly");
+  //     setSelectedYear(year);
+  //   }
+  // }, [ranged, month, year]);
+
   useEffect(() => {
-    if (ranged === "QTD") {
-      setRange("quarterly");
-      const q = getQuarterFromMonth(month);
-      setSelectedQuarter(q); // Quarter | ""
-      setSelectedYear(year);
-    } else if (ranged === "MTD") {
-      setRange("monthly");
-      setSelectedMonth(month);
-      setSelectedYear(year);
-    } else if (ranged === "YTD") {
-      setRange("yearly");
-      setSelectedYear(year);
-    }
-  }, [ranged, month, year]);
+    // ✅ Always open yearly by default
+    setRange("yearly");
+    setSelectedMonth("");
+    setSelectedQuarter("");
+
+    // ✅ Default yearly year based on your historic rule
+    const y = computeDefaultYearlyYear();
+    setSelectedYear(y);
+  }, []);
+
 
   // ✅ only change when global currency changes (prevents country pages going 0)
   const fetchCurrencyKey = isGlobalPage ? homeCurrency : "country";
@@ -933,7 +1019,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             </span>
           </div>
 
-          <p className="text-sm text-charcoal-500 mt-1">
+          <p className=" text-sm text-charcoal-500 mt-1">
             Track your profitability and key metrics
           </p>
         </div>
@@ -941,7 +1027,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
         {/* RIGHT: Filters */}
         <div className="flex w-full md:w-auto justify-start md:justify-end">
           <PeriodFiltersTable
-            range={range === "" ? "monthly" : (range as "monthly" | "quarterly" | "yearly")}
+           range={range === "" ? "yearly" : (range as "monthly" | "quarterly" | "yearly")}
             selectedMonth={selectedMonth}
             selectedQuarter={selectedQuarter || ""}
             selectedYear={selectedYear}
@@ -1000,82 +1086,92 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               })}%`;
 
 
-         const renderRoasComparisons = () => {
-  const yNum = Number(selectedYear);
+            const renderTacosComparisons = () => {
+              const yNum = Number(selectedYear);
 
-  const label =
-    range === "monthly"
-      ? selectedMonth && yNum
-        ? getPrevMonthLabel(selectedMonth, yNum)
-        : "Prev month"
-      : range === "quarterly"
-        ? selectedQuarter && yNum
-          ? getPrevQuarterLabel(selectedQuarter as Quarter, yNum)
-          : "Prev quarter"
-        : yNum
-          ? getPrevYearLabel(yNum)
-          : "Prev year";
+              const label =
+                range === "monthly"
+                  ? selectedMonth && yNum
+                    ? getPrevMonthLabel(selectedMonth, yNum)
+                    : "Prev month"
+                  : range === "quarterly"
+                    ? selectedQuarter && yNum
+                      ? getPrevQuarterLabel(selectedQuarter as Quarter, yNum)
+                      : "Prev quarter"
+                    : yNum
+                      ? getPrevYearLabel(yNum)
+                      : "Prev year";
 
-  const prevVal =
-    range === "monthly"
-      ? comparisons?.lastMonth
-        ? getRoas(comparisons.lastMonth)
-        : undefined
-      : range === "quarterly"
-        ? comparisons?.lastQuarter
-          ? getRoas(comparisons.lastQuarter)
-          : undefined
-        : comparisons?.lastYear
-          ? getRoas(comparisons.lastYear)
-          : undefined;
+              const prevVal =
+                range === "monthly"
+                  ? comparisons?.lastMonth
+                    ? getRoas(comparisons.lastMonth)
+                    : undefined
+                  : range === "quarterly"
+                    ? comparisons?.lastQuarter
+                      ? getRoas(comparisons.lastQuarter)
+                      : undefined
+                    : comparisons?.lastYear
+                      ? getRoas(comparisons.lastYear)
+                      : undefined;
 
-  const hasPrev = typeof prevVal === "number" && !isNaN(prevVal);
+              const hasPrev = typeof prevVal === "number" && !isNaN(prevVal);
 
-  // ✅ Absolute difference (simple subtraction), NOT percent-change formula
-  // e.g. 25.09 - 22.72 = 2.37
-  const diffAbs = hasPrev ? roas - prevVal! : null;
+              // ✅ absolute delta in percentage points
+              const delta = hasPrev ? roas - prevVal! : null;
 
-  // ✅ For TACoS: higher is worse (RED), lower is better (GREEN)
-  const diffClass =
-    typeof diffAbs === "number"
-      ? diffAbs > 0
-        ? "text-red-600"
-        : diffAbs < 0
-          ? "text-emerald-600"
-          : "text-gray-400"
-      : "text-gray-400";
+              // ✅ good/bad classes (TACoS is inverse)
+              const deltaColor =
+                typeof delta === "number"
+                  ? delta > 0
+                    ? "text-red-600"        // higher TACoS = worse
+                    : delta < 0
+                      ? "text-emerald-600"  // lower TACoS = better
+                      : "text-gray-400"
+                  : "text-gray-400";
 
-  const formatDelta = (v: number) =>
-    `${Math.abs(v).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}%`;
+              // delta = current - prev
+              const arrow =
+                typeof delta === "number"
+                  ? delta > 0
+                    ? "▼" // ✅ TACoS increased (bad) -> show DOWN
+                    : delta < 0
+                      ? "▲" // ✅ TACoS decreased (good) -> show UP
+                      : ""
+                  : "";
 
-  return (
-    <div className="mt-3 space-y-1.5">
-      <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
-        <div className="min-w-0">
-          <div className="font-semibold text-gray-600 whitespace-nowrap">
-            {label}:
-          </div>
-          <div className="font-semibold text-gray-800 whitespace-nowrap">
-            {hasPrev ? formatRoas(prevVal!) : "-"}
-          </div>
-        </div>
 
-        <span className={`font-bold whitespace-nowrap ${diffClass}`}>
-          {typeof diffAbs === "number" ? (
-            <>
-              {diffAbs > 0 ? "▲" : diffAbs < 0 ? "▼" : ""} {formatDelta(diffAbs)}
-            </>
-          ) : (
-            "-"
-          )}
-        </span>
-      </div>
-    </div>
-  );
-};
+              const formatDelta = (v: number) =>
+                `${Math.abs(v).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}%`;
+
+              return (
+                <div className="mt-3 space-y-1.5">
+                  <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-600 whitespace-nowrap">
+                        {label}:
+                      </div>
+                      <div className="font-semibold text-gray-800 whitespace-nowrap">
+                        {hasPrev ? formatRoas(prevVal!) : "-"}
+                      </div>
+                    </div>
+
+                    <span className={`font-bold whitespace-nowrap ${deltaColor}`}>
+                      {typeof delta === "number" ? (
+                        <>
+                          {arrow} {formatDelta(delta)}
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </span>
+                  </div>
+                </div>
+              );
+            };
 
 
 
@@ -1430,7 +1526,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                     {formatRoas(roas)}
                   </div>
 
-                  {renderRoasComparisons()}
+                  {renderTacosComparisons()}
                 </div>
 
 

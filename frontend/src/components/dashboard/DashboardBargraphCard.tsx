@@ -27,7 +27,7 @@ const DashboardBargraphCard: React.FC<DashboardBargraphCardProps> = ({
   allValuesZero = false,
 }) => {
   return (
-    <div className="relative w-full rounded-xl p-4 sm:p-5">
+    <div className="relative w-full rounded-xl">
       <div
         className={
           allValuesZero && !loading
@@ -35,10 +35,11 @@ const DashboardBargraphCard: React.FC<DashboardBargraphCardProps> = ({
             : "opacity-100"
         }
       >
-        <div className="mt-4 w-full h-[46vh] sm:h-[48vh] md:h-[50vh] transition-opacity duration-300">
+        <div className="mt-4 w-full h-[46vh] sm:h-[48vh] md:h-[50vh] 
+                transition-opacity duration-300
+                text-[10px] 2xl:text-xs">
           {loading ? (
             <div className="flex h-full items-center justify-center">
-              {/* Reuse your Loader */}
               <div className="flex items-center justify-center text-sm text-gray-500">
                 Loading chart…
               </div>

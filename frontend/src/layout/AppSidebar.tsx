@@ -749,8 +749,8 @@ const AppSidebar: React.FC = () => {
         ${isMobileOpen
           ? "w-full"
           : showText
-            ? "w-[clamp(190px,18vw,280px)]"
-            : "w-[64px] sm:w-[72px]"
+          ? "w-[clamp(155px,13vw,210px)] xl:w-[clamp(180px,16vw,250px)]"
+            : "w-[56px] sm:w-[64px] xl:w-[72px]"
         }
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full"}
         lg:translate-x-0 font-lato
@@ -826,7 +826,7 @@ const AppSidebar: React.FC = () => {
       )}
 
       {/* Navigation Sections */}
-      <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar px-2">
+      <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
         <nav className="mb-6">
           <div className="flex flex-col gap-1">
             {sections.map((section) => {

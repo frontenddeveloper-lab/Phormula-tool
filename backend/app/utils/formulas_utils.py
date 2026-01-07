@@ -377,6 +377,8 @@ def uk_advertising(
         "CouponPerformanceEvent",
         "CouponParticipationEvent",
         "SellerDealComplete",
+       "VineCharge", "DealParticipationEvent",
+       "DealPerformanceEvent",
     ),
     desc_col: str = "description",
     amount_col: str = "total",
