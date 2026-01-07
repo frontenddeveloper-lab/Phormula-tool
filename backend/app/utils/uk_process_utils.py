@@ -1481,7 +1481,7 @@ def process_skuwise_data(user_id, country, month, year):
                     dealsvouchar_ads REAL,
                     advertising_total REAL,
                     platformfeenew REAL,
-                    platformfee REAL,
+                    platform_fee REAL,
                     platform_fee_inventory_storage REAL,
                     cm2_profit REAL,
                     cm2_profit_percentage REAL,
@@ -1906,13 +1906,14 @@ def process_skuwise_data(user_id, country, month, year):
         NSE_COLS = [
             "sku",
             "product_name",
+
+            "quantity",
+            "return_quantity",
             "total_quantity",
 
-            "product_sales",
             "asp",
             "gross_sales",
             "refund_sales",
-
             "tex_and_credits",
 
             "net_sales",
@@ -1939,8 +1940,8 @@ def process_skuwise_data(user_id, country, month, year):
             "advertising_total",
 
             "platformfeenew",
+            "platform_fee",  # ✅ NEW (as per your desired schema)
             "platform_fee_inventory_storage",
-            "platform_fee",
 
             "cm2_profit",
             "cm2_profit_percentage",
@@ -1952,6 +1953,7 @@ def process_skuwise_data(user_id, country, month, year):
 
             "user_id"
         ]
+
 
 
 
