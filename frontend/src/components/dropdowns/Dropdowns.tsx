@@ -1019,7 +1019,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             </span>
           </div>
 
-          <p className=" text-sm text-charcoal-500 mt-1">
+          <p className="text-xs 2xl:text-sm text-charcoal-500 mt-1">
             Track your profitability and key metrics
           </p>
         </div>
@@ -1027,7 +1027,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
         {/* RIGHT: Filters */}
         <div className="flex w-full md:w-auto justify-start md:justify-end">
           <PeriodFiltersTable
-           range={range === "" ? "yearly" : (range as "monthly" | "quarterly" | "yearly")}
+            range={range === "" ? "yearly" : (range as "monthly" | "quarterly" | "yearly")}
             selectedMonth={selectedMonth}
             selectedQuarter={selectedQuarter || ""}
             selectedYear={selectedYear}
@@ -1059,12 +1059,17 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               ? (rawComparisons as SummaryComparisons)
               : undefined;
 
-            // ✅ define formatters FIRST (used below)
-            const formatMoney = (val: number) =>
-              `${currencySymbol} ${val.toLocaleString(undefined, {
+            const formatMoney = (val: number, opts?: { showPlus?: boolean }) => {
+              const num = Number(val || 0);
+              const sign = num < 0 ? "-" : opts?.showPlus && num > 0 ? "+" : "";
+              const abs = Math.abs(num);
+
+              return `${sign}${currencySymbol}${abs.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}`;
+            };
+
 
             // ✅ Cost of Ads
             const costOfAds = summary.advertising_total ?? 0;
@@ -1117,10 +1122,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
               const hasPrev = typeof prevVal === "number" && !isNaN(prevVal);
 
-              // ✅ absolute delta in percentage points
               const delta = hasPrev ? roas - prevVal! : null;
 
-              // ✅ good/bad classes (TACoS is inverse)
               const deltaColor =
                 typeof delta === "number"
                   ? delta > 0
@@ -1149,12 +1152,12 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
               return (
                 <div className="mt-3 space-y-1.5">
-                  <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
+                  <div className="flex items-end justify-between text-charcoal-500 gap-3 text-[10px] 2xl:text-xs leading-tight tabular-nums">
                     <div className="min-w-0">
-                      <div className="font-semibold text-gray-600 whitespace-nowrap">
+                      <div className="whitespace-nowrap">
                         {label}:
                       </div>
-                      <div className="font-semibold text-gray-800 whitespace-nowrap">
+                      <div className="whitespace-nowrap">
                         {hasPrev ? formatRoas(prevVal!) : "-"}
                       </div>
                     </div>
@@ -1184,7 +1187,6 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 maximumFractionDigits: 2,
               })}%`;
 
-            // ✅ gross sales accessor (uses backend total_product_sales)
             const getGrossSales = (s?: Summary) =>
               s?.total_product_sales ?? s?.gross_sales ?? 0;
 
@@ -1199,10 +1201,6 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
             const cm2Percent =
               netSales > 0 ? (summary.cm2_profit / netSales) * 100 : 0;
-
-            console.log("SUMMARY KEYS:", Object.keys(summary as any));
-            console.log("SUMMARY RAW:", summary);
-
 
             // ---------- generic comparisons helper ----------
             const getComparisons = (metric: keyof Summary): ComparisonItem[] => {
@@ -1260,13 +1258,13 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                     return (
                       <div
                         key={item.label}
-                        className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums"
+                        className="flex items-end text-charcoal-500 justify-between gap-3 text-[10px] 2xl:text-xs leading-tight tabular-nums"
                       >
                         <div className="min-w-0">
-                          <div className="font-semibold text-gray-600 whitespace-nowrap">
+                          <div className=" whitespace-nowrap">
                             {item.label}:
                           </div>
-                          <div className="font-semibold text-gray-800 whitespace-nowrap">
+                          <div className=" whitespace-nowrap">
                             {hasValue ? formatter(item.value!) : "-"}
                           </div>
                         </div>
@@ -1353,13 +1351,13 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                     return (
                       <div
                         key={item.label}
-                        className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums"
+                        className="flex items-end text-charcoal-500 justify-between gap-3 text-[10px] 2xl:text-xs leading-tight tabular-nums"
                       >
                         <div className="min-w-0">
-                          <div className="font-semibold text-gray-600 whitespace-nowrap">
+                          <div className="whitespace-nowrap">
                             {item.label}:
                           </div>
-                          <div className="font-semibold text-gray-800 whitespace-nowrap">
+                          <div className="whitespace-nowrap">
                             {hasValue ? formatMoney(item.value!) : "-"}
                           </div>
                         </div>
@@ -1427,12 +1425,12 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
               return (
                 <div className="mt-3 space-y-1.5">
-                  <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
+                  <div className="flex items-end text-charcoal-500 justify-between gap-3 text-[10px] 2xl:text-xs leading-tight tabular-nums">
                     <div className="min-w-0">
-                      <div className="font-semibold text-gray-600 whitespace-nowrap">
+                      <div className="whitespace-nowrap">
                         {label}:
                       </div>
-                      <div className="font-semibold text-gray-800 whitespace-nowrap">
+                      <div className="whitespace-nowrap">
                         {hasPrev ? formatPercent(prevVal!) : "-"}
                       </div>
                     </div>
@@ -1456,29 +1454,26 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               <div
                 className={[
                   "w-full grid gap-4",
-                  "grid-cols-2 xl:grid-cols-8",
+                  "grid-cols-2 sm:grid-cols-4 2xl:grid-cols-8",
                   isSummaryZero ? "opacity-30" : "opacity-100",
                 ].join(" ")}
               >
                 {/* Units */}
                 <div className="w-full rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Units</span>
-                    {/* <FaBoxArchive color="#87AD12" size={16} /> */}
+                    <span className="text-[10px] 2xl:text-xs text-charcoal-500">Units</span>
                   </div>
-                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatUnits(summary.unit_sold)}
                   </div>
                   {renderComparisons("unit_sold", formatUnits)}
                 </div>
 
-                {/* Gross Sales (✅ uses homeCurrency symbol when global because currencySymbol comes from homeCurrency) */}
                 <div className="w-full rounded-2xl border border-[#F47A00] bg-[#F47A0026] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Gross Sales</span>
-                    {/* <FcSalesPerformance fill="000" color="#000" size={16} /> */}
+                    <span className="text-[10px] 2xl:text-xs text-charcoal-500">Gross Sales</span>
                   </div>
-                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(getGrossSales(summary))}
                   </div>
                   {renderGrossSalesComparisons()}
@@ -1486,8 +1481,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
                 {/* Net Sales */}
                 <div className="w-full rounded-2xl border border-[#2CA9E0] bg-[#2CA9E026] shadow-sm px-4 py-3 flex flex-col justify-between">
-                  <span className="text-xs text-charcoal-500">Net Sales</span>
-                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                  <span className="text-[10px] 2xl:text-xs text-charcoal-500">Net Sales</span>
+                  <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(netSales)}
                   </div>
                   {renderComparisons("total_sales", formatMoney)}
@@ -1497,10 +1492,9 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 {/* Expenses */}
                 <div className="w-full rounded-2xl border border-[#FF5C5C] bg-[#FF5C5C26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Expenses</span>
-                    {/* <MdEditDocument color="#FF5C5C" size={16} /> */}
+                    <span className="text-[10px] 2xl:text-xs text-charcoal-500">Expenses</span>
                   </div>
-                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(summary.total_expense)}
                   </div>
                   {renderComparisons("total_expense", formatMoney)}
@@ -1509,9 +1503,9 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 {/* Cost of Advertisement */}
                 <div className="w-full rounded-2xl border border-[#A78BFA] bg-[#A78BFA26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">Cost of Advertisement</span>
+                    <span className="text-[10px] 2xl:text-xs text-charcoal-500">Cost of Advertisement</span>
                   </div>
-                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(costOfAds)}
                   </div>
                   {renderComparisons("advertising_total", formatMoney)}
@@ -1520,9 +1514,9 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 {/* ROAS */}
                 <div className="w-full rounded-2xl border border-[#10B981] bg-[#10B98126] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">TACoS</span>
+                    <span className="text-[10px] 2xl:text-xs text-charcoal-500">TACoS</span>
                   </div>
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatRoas(roas)}
                   </div>
 
@@ -1533,10 +1527,9 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 {/* CM2 Profit */}
                 <div className="w-full rounded-2xl border border-[#2DA49A] bg-[#2DA49A26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">CM2 Profit</span>
-                    {/* <TbMoneybag fill="#AB64B5" color="#AB64B5" size={16} /> */}
+                    <span className="text-[10px] 2xl:text-xs text-charcoal-500">CM2 Profit</span>
                   </div>
-                  <div className="text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(summary.cm2_profit)}
                   </div>
                   {renderComparisons("cm2_profit", formatMoney)}
@@ -1545,10 +1538,9 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 {/* CM2 Profit % */}
                 <div className="w-full rounded-2xl border border-[#01627F] bg-[#01627F26] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-charcoal-500">CM2 Profit %</span>
-                    {/* <FaMoneyBillTrendUp color="#00627B" size={16} /> */}
+                    <span className="text-[10px] 2xl:text-xs text-charcoal-500">CM2 Profit %</span>
                   </div>
-                  <div className="text-lg font-extrabold text-charcoal-500 leading-tight tabular-nums">
+                  <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatPercent(cm2Percent)}
                   </div>
                   {renderCm2PercentComparisons()}

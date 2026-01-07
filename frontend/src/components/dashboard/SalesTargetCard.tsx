@@ -365,7 +365,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
       </div>
 
       {/* Gauge */}
-      <div className="mt-6 flex flex-col items-center justify-center">
+      <div className="mt-5 flex flex-col items-center justify-center">
         <div
           ref={wrapRef}
           className="relative"
@@ -477,7 +477,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
         {/* Percentage */}
         <div className="mt-1 2xl:mt-2 text-center">
           <div className="text-3xl font-semibold">{pctDisplay.toFixed(1)}%</div>
-          <div className="text-[10px] 2xl:text-xs text-gray-500 mt-1">Target Achieved</div>
+          <div className="text-[10px] 2xl:text-xs text-gray-500">Target Achieved</div>
           {/* <div className="text-xs text-gray-600 mt-1">
             Target:{" "}
             <span className="font-medium">{formatHomeK(targetHomeResolved)}</span>

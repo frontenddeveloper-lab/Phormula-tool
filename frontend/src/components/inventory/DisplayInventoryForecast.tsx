@@ -339,24 +339,31 @@ const chartOptions = useMemo(
   [countryName]
 );
 
-  const forecastPlugin = {
-    id: 'forecastBackground',
-    beforeDraw(chart: any) {
-      const { ctx, chartArea, data, scales } = chart;
-      const scaleX = scales?.x;
-      if (!scaleX || !data?.labels?.length) return;
-      const idx = Math.max(0, Math.min(data.labels.length - 1, forecastStartIndex));
-      if (data.labels.length <= idx) return;
-      const xNow = scaleX.getPixelForValue(idx);
-      const hasPrev = idx - 1 >= 0;
-      const xPrev = hasPrev ? scaleX.getPixelForValue(idx - 1) : null;
-      const startX = xPrev != null ? (xPrev + xNow) / 2 : xNow;
-      ctx.save();
-      ctx.fillStyle = 'rgba(217,217,217,0.35)';
-      ctx.fillRect(startX, chartArea.top, chartArea.right - startX, chartArea.bottom - chartArea.top);
-      ctx.restore();
-    },
-  };
+ const forecastPlugin = {
+  id: 'forecastBackground',
+  beforeDraw(chart: any) {
+    const { ctx, chartArea, data, scales } = chart;
+    const scaleX = scales?.x;
+    if (!scaleX || !data?.labels?.length) return;
+
+    const idx = forecastStartIndex;
+    if (idx >= data.labels.length) return;
+
+    // 🔥 EXACT forecast start boundary
+    const startX = scaleX.getPixelForTick(idx);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(217,217,217,0.35)';
+    ctx.fillRect(
+      startX,
+      chartArea.top,
+      chartArea.right - startX,
+      chartArea.bottom - chartArea.top
+    );
+    ctx.restore();
+  },
+};
+
 
   // Optional month range
   useEffect(() => {
@@ -557,7 +564,7 @@ const chartOptions = useMemo(
 
   return (
     <div>
-      <h3 className="text-2xl font-bold text-[#414042]">
+      <h3 className="2xl:text-2xl text-[18px] font-bold text-[#414042]">
         Forecasted Data -{' '}
         {monthRange && (
           <span className="text-[#5EA68E]">
@@ -571,10 +578,10 @@ const chartOptions = useMemo(
         
         <div className='flex justify-between items-center '>
  <div>
-          <h2 className='text-xl text-[#414042] font-semibold'>Top 5 SKUs Inventory Trend</h2>
-        <p className='text-sm '>Historical data vs forecasted trends</p>
+          <h2 className='2xl:text-2xl text-[18px] text-[#414042] font-semibold'>Top 5 SKUs Inventory Trend</h2>
+        <p className='2xl:text-sm text-xs '>Historical data vs forecasted trends</p>
         </div>
-        <div className="mt-2 flex flex-wrap gap-6 text-xs">
+        <div className="mt-2 flex flex-wrap gap-6 2xl:text-xs text-[10px]">
         <div className="flex items-center gap-2">
           <span className="inline-block w-8 border-b-2 border-black" />
           <span>Last 3 months (Actual)</span>
@@ -607,19 +614,19 @@ const chartOptions = useMemo(
        
         <Line ref={chartRef} data={chartData} options={chartOptions} plugins={[forecastPlugin]} />
      
-<h2 className='text-2xl font-bold text-[#414042]'>Detailed Forecast Data (All SKUs)</h2>
+<h2 className='2xl:text-2xl text-[18px] font-bold text-[#414042]'>Detailed Forecast Data (All SKUs)</h2>
       {/* Table with two-row header and totals row */}
    <div className="overflow-x-auto mt-6">
-  <table className="min-w-full text-sm border border-[#e1e5ea] rounded-lg text-[#414042]">
+  <table className="min-w-full 2xl:text-sm text-xs border border-[#e1e5ea] rounded-lg text-[#414042]">
     <thead>
   <tr className="font-normal">
-   <th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#D9D9D9] font-semibold text-center align-middle">
+   <th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#5EA68E] text-[#F8EDCE] font-semibold text-center align-middle">
   S.No
 </th>
-<th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#D9D9D9] font-semibold text-left align-middle">
+<th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#5EA68E] text-[#F8EDCE]  font-semibold text-left align-middle">
   Product Name
 </th>
-<th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#D9D9D9] font-semibold text-left align-middle">
+<th rowSpan={2} className="p-3 border border-[#e1e5ea] bg-[#5EA68E] text-[#F8EDCE] font-semibold text-center align-middle">
   SKU
 </th>
 
@@ -652,7 +659,7 @@ const chartOptions = useMemo(
         <tr key={i} className="text-center border-t border-[#e1e5ea] bg-white">
           <td className="p-2 border border-[#e1e5ea]">{row.sNo}</td>
           <td className="p-2 border border-[#e1e5ea] text-left">{row.product}</td>
-          <td className="p-2 border border-[#e1e5ea] text-left">{row.sku}</td>
+          <td className="p-2 border border-[#e1e5ea] ">{row.sku}</td>
           <td className="p-2 border border-[#e1e5ea]">{row.sold1}</td>
           <td className="p-2 border border-[#e1e5ea]">{row.sold2}</td>
           <td className="p-2 border border-[#e1e5ea]">{row.sold3}</td>

@@ -177,6 +177,20 @@ const pageScope = (countryName || "global").toLowerCase();
 //   return `${c}_${baseCurrencyLower}`;
 // };
 
+const backendKeyFor = (country: string) => {
+  const c = country.toLowerCase();
+
+  // ✅ API already returns uk & us directly
+  if (c === "uk") return "uk";
+  if (c === "us") return "us";
+
+  // Global is currency-specific
+  if (c === "global") {
+    return baseCurrency === "GBP" ? "global_gbp" : "global_usd";
+  }
+
+  return c;
+};
 
 
   const fetchProductData = async () => {
@@ -289,28 +303,30 @@ const prepareChartData = () => {
   if (!labels.length) return []; 
 
   const getMetric = (country: string, month: string) => {
-    const countryBlock: any = (data.data as any)[country];
-    if (!countryBlock) return 0;
+  const backendKey = backendKeyFor(country);
+  const countryBlock: any = (data.data as any)[backendKey];
+  if (!countryBlock) return 0;
 
-    let rows: any[] = [];
+  let rows: any[] = [];
 
-    if (Array.isArray(countryBlock)) {
-      rows = countryBlock;
+  if (Array.isArray(countryBlock)) {
+    rows = countryBlock;
+  } else {
+    const preferred = countryBlock?.[timeRange];
+    if (Array.isArray(preferred)) {
+      rows = preferred;
     } else {
-      // pick first array inside the object
-const preferred = (countryBlock as any)?.[timeRange];
-if (Array.isArray(preferred)) {
-  rows = preferred;
-} else {
-  const firstArr = Object.values(countryBlock).find((v: any) => Array.isArray(v)) as any[] | undefined;
-  if (firstArr) rows = firstArr;
-}
-
+      const firstArr = Object.values(countryBlock).find(
+        (v: any) => Array.isArray(v)
+      ) as any[] | undefined;
+      if (firstArr) rows = firstArr;
     }
+  }
 
-const found = rows.find((m: any) => String(m.month) === String(month));
-    return found ? Number(found.net_sales || 0) : 0;
-  };
+  const found = rows.find((m: any) => String(m.month) === String(month));
+  return found ? Number(found.net_sales || 0) : 0;
+};
+
 
   return labels.map((month) => {
 const ukRaw = getMetric("uk", month);
@@ -369,14 +385,16 @@ return point;
     const labels = raw.map(item => item.month);
   const datasets = Object.keys(selectedCountries)
   .filter(country => selectedCountries[country])
-.filter(country => {
-  const block = (data?.data as any)?.[country];
+.filter((country) => {
+  const key = backendKeyFor(country);                 // ✅ uk -> uk_gbp
+  const block = (data?.data as any)?.[key];
   if (!block) return false;
 
-  // block can be an array OR { Yearly: [...], Quarterly: [...] }
   if (Array.isArray(block)) return block.length > 0;
 
-  return Object.values(block).some((v: any) => Array.isArray(v) && v.length > 0);
+  return Object.values(block).some(
+    (v: any) => Array.isArray(v) && v.length > 0
+  );
 })
       .map(country => ({
         label: country.toUpperCase(),

@@ -2581,7 +2581,7 @@ const MonthsforBI: React.FC = () => {
  
   .total-row td{ background-color:#ccc; font-weight:bold; }
   .styled-button, .compare-button{
-    padding:8px 16px; font-size:.9rem; border:none; border-radius:6px; cursor:pointer;
+    padding:8px 16px;  border:none; border-radius:6px; cursor:pointer;
     transition:background-color .2s ease; box-shadow:0 3px 6px rgba(0,0,0,.15);
     background-color:#2c3e50; color:#f8edcf; font-weight:bold;
   }
@@ -2812,7 +2812,7 @@ const MonthsforBI: React.FC = () => {
 
       <div className='w-full'>
         {/* Month selectors */}
-        <h2 className="sm:text-2xl text-xl font-bold text-[#414042] mb-2">
+        <h2 className="2xl:text-2xl text-[18px] font-bold text-[#414042] ">
           Business Insights - AI Analyst&nbsp;-
           <span className="text-[#5EA68E] pl-1">
             {countryName && formatCountryLabel(countryName)}<span className="text-[#5EA68E] px-2">
@@ -2870,7 +2870,7 @@ const MonthsforBI: React.FC = () => {
             </span>
           </span>
         </h2>
-        <p><i className="sm:text-base text-sm">Select the year and month for both periods to compare growth metrics.</i></p>
+        <p><i className="2xl:text-sm text-xs">Select the year and month for both periods to compare growth metrics.</i></p>
         <form onSubmit={handleSubmit} className="month-form ">
           {/* Row 1 */}
           <div className="month-row">
@@ -2951,7 +2951,7 @@ const MonthsforBI: React.FC = () => {
             onClick={(e) => {
               handleSubmit(e);
             }}
-            className="compare-button"
+            className="compare-button 2xl:text-sm text-xs"
             ref={compareBtnRef}
           >
             Compare
@@ -2961,7 +2961,7 @@ const MonthsforBI: React.FC = () => {
         {error && <p style={{ color: 'red' }}>{error}</p>}
 
         <div className="mt-4 mb-3 rounded-xl border border-gray-200  p-3 w-full bg-[#D9D9D933]">
-          <div className="sm:text-2xl text-xl font-bold text-[#414042]">Profitability</div>
+          <div className="2xl:text-2xl text-[18px] font-bold text-[#414042]">Profitability</div>
 
           {/* Center labels like GraphPage */}
           <div className="mt-3 sm:mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-5 w-full mx-auto transition-opacity duration-300">
@@ -2980,7 +2980,7 @@ const MonthsforBI: React.FC = () => {
                   className={[
                     "shrink-0 flex items-center gap-1 sm:gap-1.5",
                     "font-semibold select-none whitespace-nowrap",
-                    "text-[9px] sm:text-[10px] md:text-[11px] lg:text-xs xl:text-sm",
+                    "text-[10px] 2xl:text-xs",
                     "text-charcoal-500",
                     isChecked ? "opacity-100" : "opacity-40",
                     "cursor-pointer",
@@ -3023,30 +3023,30 @@ const MonthsforBI: React.FC = () => {
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             <div>
-              <div className="sm:text-2xl text-xl font-bold text-[#414042]">Units Sold</div>
+              <div className="2xl:text-2xl text-[18px] font-bold text-[#414042]">Units Sold</div>
               <div ref={unitsChartRef} className="h-[320px] w-full" />
             </div>
 
             <div>
-              <div className="sm:text-2xl text-xl font-bold text-[#414042]">Net Sales</div>
+              <div className="2xl:text-2xl text-[18px] font-bold text-[#414042]">Net Sales</div>
               <div ref={chartRef} className="h-[320px] w-full" />
             </div>
 
 
             {/* Row 2: Profit */}
             <div className="mt-3">
-              <div className="sm:text-2xl text-xl font-bold text-[#414042]">CM1 Profit</div>
+              <div className="2xl:text-2xl text-[18px] font-bold text-[#414042]">CM1 Profit</div>
               <div ref={profitChartRef} className="h-[320px] w-full" />
             </div>
 
             <div className="mt-3">
-              <div className="sm:text-2xl text-xl font-bold text-[#414042]">Average Selling Price</div>
+              <div className="2xl:text-2xl text-[18px] font-bold text-[#414042]">Average Selling Price</div>
               <div ref={aspChartRef} className="h-[320px] w-full" />
             </div>
           </div>
 
           {/* Shared legend bottom center */}
-          <div className="mt-3 flex flex-wrap justify-center gap-4 sm:text-sm text-xs font-semibold text-[#414042]">
+          <div className="mt-3 flex flex-wrap justify-center gap-4 2xl:text-xs text-[10px] font-semibold text-[#414042]">
             <span className="inline-flex items-center gap-2">
               <span className="inline-block h-[10px] w-[10px]  bg-[#F47A00]" />
               Top 80%
@@ -3073,7 +3073,7 @@ const MonthsforBI: React.FC = () => {
             <div className='border border-gray-200 rounded-xl p-4 mt-6 w-full bg-white'>
               <div className='flex xl:flex-row flex-col lg:justify-between justify-start xl:items-center items-start '>
                 <div className='flex 2xl:flex-row flex-col justify-between  2xl:items-center  items-start w-full xl:gap-0 gap-3'>
-                  <h2 className="xl:text-2xl text-xl font-bold text-[#414042] text-nowrap">SKU Analysis MTD</h2>
+                  <h2 className="2xl:text-2xl text-[18px] font-bold text-[#414042] text-nowrap">SKU Analysis MTD</h2>
                   <div className='flex flex-col md:flex-row 2xl:justify-end justify-between 2xl:gap-3 mt-2 2xl:mt-0 w-full'>
 
                     <div
@@ -3128,7 +3128,7 @@ const MonthsforBI: React.FC = () => {
     bg-custom-effect shin text-[#F8EDCE]
     rounded-sm xl:px-4 px-3
     text-nowrap flex items-center gap-1 justify-end 
-
+2xl:text-sm text-xs
     transition-all duration-200 ease-out
     hover:-translate-y-[2px]
     hover:shadow-lg

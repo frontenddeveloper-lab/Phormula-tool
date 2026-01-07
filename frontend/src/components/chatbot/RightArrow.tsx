@@ -16,7 +16,7 @@ const RightArrow = ({ onClick, disabled, title, className }: RightArrowProps) =>
     >
       <img
         src="/images/chatbot/Ellipse.png"
-        className="absolute w-9 h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:h-12 lg:w-12"
+        className="absolute w-9 h-9 sm:w-10 sm:h-10  2xl:h-12 2xl:w-12"
         alt="Ellipse"
       />
       <img
