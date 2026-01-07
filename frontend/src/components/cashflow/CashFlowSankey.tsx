@@ -17,7 +17,7 @@ import {
 
 type SummaryShape = {
   quantity_total?: number;
-  product_sales?: number;
+  gross_sales?: number;
   net_sales?: number;
   taxncredit?: number;
   amazon_fee?: number;
@@ -115,8 +115,8 @@ const CashFlowSankey: React.FC<Props> = ({
     },
     {
       label: "Gross Sales",
-      value: data.product_sales,
-      prev: previous_summary?.product_sales,
+      value: data.gross_sales,
+      prev: previous_summary?.gross_sales,
       icon: <FaMoneyBillTrendUp size={16} />,
       bg: "bg-[#E3F2FD]",
       border: "border-[#2CA9E0]",
@@ -184,7 +184,7 @@ const CashFlowSankey: React.FC<Props> = ({
   /* ---------- SANKEY ---------- */
 
  const rows = [
-  { name: "Gross Sales", value: data.product_sales || 0, sign: "+", barColor: "#2CA9E0" },
+  { name: "Gross Sales", value: data.gross_sales || 0, sign: "+", barColor: "#2CA9E0" },
   { name: "Tax and Credit", value: data.taxncredit || 0, sign: "+", barColor: "#2CA9E0" },
  { name: "Promotional Discount", value: data.promotional_rebates || 0, sign: "-", barColor: "#AB63B5" },
   { name: "FBA Fees", value: data.fba_fees || 0, sign: "-", barColor: "#ff5c5c" },
@@ -304,7 +304,7 @@ links: rows.map((r) => ({
     <span className="ml-1 text-xs font-medium text-charcoal-500">
       (
       {(
-        ((Math.abs(c.value || 0)) / (data.product_sales || 1)) *
+        ((Math.abs(c.value || 0)) / (data.gross_sales || 1)) *
         100
       ).toFixed(1)}
       %)
@@ -346,7 +346,7 @@ links: rows.map((r) => ({
             (
             {(
               ((Math.abs(c.prev || 0)) /
-                (previous_summary?.product_sales || 1)) *
+                (previous_summary?.gross_sales || 1)) *
               100
             ).toFixed(1)}
             %)
