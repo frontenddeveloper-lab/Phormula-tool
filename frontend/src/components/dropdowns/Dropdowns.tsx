@@ -933,7 +933,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
             </span>
           </div>
 
-          <p className="text-sm text-charcoal-500 mt-1">
+          <p className=" text-sm text-charcoal-500 mt-1">
             Track your profitability and key metrics
           </p>
         </div>
@@ -1000,82 +1000,92 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               })}%`;
 
 
-         const renderRoasComparisons = () => {
-  const yNum = Number(selectedYear);
+            const renderTacosComparisons = () => {
+              const yNum = Number(selectedYear);
 
-  const label =
-    range === "monthly"
-      ? selectedMonth && yNum
-        ? getPrevMonthLabel(selectedMonth, yNum)
-        : "Prev month"
-      : range === "quarterly"
-        ? selectedQuarter && yNum
-          ? getPrevQuarterLabel(selectedQuarter as Quarter, yNum)
-          : "Prev quarter"
-        : yNum
-          ? getPrevYearLabel(yNum)
-          : "Prev year";
+              const label =
+                range === "monthly"
+                  ? selectedMonth && yNum
+                    ? getPrevMonthLabel(selectedMonth, yNum)
+                    : "Prev month"
+                  : range === "quarterly"
+                    ? selectedQuarter && yNum
+                      ? getPrevQuarterLabel(selectedQuarter as Quarter, yNum)
+                      : "Prev quarter"
+                    : yNum
+                      ? getPrevYearLabel(yNum)
+                      : "Prev year";
 
-  const prevVal =
-    range === "monthly"
-      ? comparisons?.lastMonth
-        ? getRoas(comparisons.lastMonth)
-        : undefined
-      : range === "quarterly"
-        ? comparisons?.lastQuarter
-          ? getRoas(comparisons.lastQuarter)
-          : undefined
-        : comparisons?.lastYear
-          ? getRoas(comparisons.lastYear)
-          : undefined;
+              const prevVal =
+                range === "monthly"
+                  ? comparisons?.lastMonth
+                    ? getRoas(comparisons.lastMonth)
+                    : undefined
+                  : range === "quarterly"
+                    ? comparisons?.lastQuarter
+                      ? getRoas(comparisons.lastQuarter)
+                      : undefined
+                    : comparisons?.lastYear
+                      ? getRoas(comparisons.lastYear)
+                      : undefined;
 
-  const hasPrev = typeof prevVal === "number" && !isNaN(prevVal);
+              const hasPrev = typeof prevVal === "number" && !isNaN(prevVal);
 
-  // ✅ Absolute difference (simple subtraction), NOT percent-change formula
-  // e.g. 25.09 - 22.72 = 2.37
-  const diffAbs = hasPrev ? roas - prevVal! : null;
+              // ✅ absolute delta in percentage points
+              const delta = hasPrev ? roas - prevVal! : null;
 
-  // ✅ For TACoS: higher is worse (RED), lower is better (GREEN)
-  const diffClass =
-    typeof diffAbs === "number"
-      ? diffAbs > 0
-        ? "text-red-600"
-        : diffAbs < 0
-          ? "text-emerald-600"
-          : "text-gray-400"
-      : "text-gray-400";
+              // ✅ good/bad classes (TACoS is inverse)
+              const deltaColor =
+                typeof delta === "number"
+                  ? delta > 0
+                    ? "text-red-600"        // higher TACoS = worse
+                    : delta < 0
+                      ? "text-emerald-600"  // lower TACoS = better
+                      : "text-gray-400"
+                  : "text-gray-400";
 
-  const formatDelta = (v: number) =>
-    `${Math.abs(v).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}%`;
+              // delta = current - prev
+              const arrow =
+                typeof delta === "number"
+                  ? delta > 0
+                    ? "▼" // ✅ TACoS increased (bad) -> show DOWN
+                    : delta < 0
+                      ? "▲" // ✅ TACoS decreased (good) -> show UP
+                      : ""
+                  : "";
 
-  return (
-    <div className="mt-3 space-y-1.5">
-      <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
-        <div className="min-w-0">
-          <div className="font-semibold text-gray-600 whitespace-nowrap">
-            {label}:
-          </div>
-          <div className="font-semibold text-gray-800 whitespace-nowrap">
-            {hasPrev ? formatRoas(prevVal!) : "-"}
-          </div>
-        </div>
 
-        <span className={`font-bold whitespace-nowrap ${diffClass}`}>
-          {typeof diffAbs === "number" ? (
-            <>
-              {diffAbs > 0 ? "▲" : diffAbs < 0 ? "▼" : ""} {formatDelta(diffAbs)}
-            </>
-          ) : (
-            "-"
-          )}
-        </span>
-      </div>
-    </div>
-  );
-};
+              const formatDelta = (v: number) =>
+                `${Math.abs(v).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}%`;
+
+              return (
+                <div className="mt-3 space-y-1.5">
+                  <div className="flex items-end justify-between gap-3 text-xs leading-tight tabular-nums">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-600 whitespace-nowrap">
+                        {label}:
+                      </div>
+                      <div className="font-semibold text-gray-800 whitespace-nowrap">
+                        {hasPrev ? formatRoas(prevVal!) : "-"}
+                      </div>
+                    </div>
+
+                    <span className={`font-bold whitespace-nowrap ${deltaColor}`}>
+                      {typeof delta === "number" ? (
+                        <>
+                          {arrow} {formatDelta(delta)}
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </span>
+                  </div>
+                </div>
+              );
+            };
 
 
 
@@ -1430,7 +1440,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                     {formatRoas(roas)}
                   </div>
 
-                  {renderRoasComparisons()}
+                  {renderTacosComparisons()}
                 </div>
 
 

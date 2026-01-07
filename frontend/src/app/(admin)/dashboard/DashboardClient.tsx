@@ -239,16 +239,16 @@ function RangePicker({
       <button
         type="button"
         onClick={() => setShowCalendar((s) => !s)}
-        className="flex items-center gap-2"
+        className="flex items-center gap-2 text-xs 2xl:text-sm"
         style={{
           padding: "6px 10px",
           borderRadius: 8,
           border: "1px solid #D9D9D9E5",
           backgroundColor: "#ffffff",
-          fontSize: 12,
+          // fontSize: 12,
         }}
       >
-        <FaCalendarAlt size={15} />
+        <FaCalendarAlt className="text-sm 2xl:text-md"/>
         {selectedStartDay && selectedEndDay
           ? `Day ${selectedStartDay} – ${selectedEndDay}`
           : "Select Date Range"}
@@ -2168,11 +2168,11 @@ export default function DashboardPage() {
         </>
       )}
 
-      <div className="mx-auto w-full max-w-full px-4 lg:px-6">
+      <div className="mx-auto w-full max-w-full ">
 
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-2 2xl:mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col leading-tight">
-            <p className="text-lg text-charcoal-500 mb-1">
+            <p className="text-sm 2xl:text-lg text-charcoal-500 mb-1">
               Let&apos;s get started,{" "}
               <span className="text-green-500">{brandName}!</span>
             </p>
@@ -2182,10 +2182,10 @@ export default function DashboardPage() {
                 pageTitle="Sales Dashboard -"
                 variant="page"
                 textSize="2xl"
-                className="text-2xl font-semibold"
+              // className="text-2xl font-semibold"
               />
 
-              <span className="text-lg sm:text-2xl md:text-2xl font-semibold text-[#5EA68E]">
+              <span className="text-base sm:text-xl lg:text-lg 2xl:text-2xl font-semibold text-[#5EA68E]">
                 {formattedMonthYear}
               </span>
             </div>
@@ -2194,7 +2194,7 @@ export default function DashboardPage() {
           <button
             onClick={refreshAll}
             disabled={loading || shopifyLoading || biLoading}
-            className={`w-full rounded-md border px-3 py-1.5 text-sm shadow-sm active:scale-[.99] sm:w-auto ${loading || shopifyLoading || biLoading
+            className={`w-full rounded-md border px-3 py-1.5 text-xs 2xl:text-sm shadow-sm active:scale-[.99] sm:w-auto ${loading || shopifyLoading || biLoading
               ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
               : "border-gray-300 bg-white hover:bg-gray-50"
               }`}
@@ -2204,15 +2204,15 @@ export default function DashboardPage() {
         </div>
 
         {/* <div className={`grid grid-cols-12 gap-6 items-stretch`}> */}
-        <div id="live-sales" className="grid grid-cols-12 gap-6 items-stretch scroll-mt-[80px]">
+        <div id="live-sales" className="grid grid-cols-12 gap-4 lg:gap-4 2xl:gap-6 items-stretch scroll-mt-[80px]">
 
           {/* LEFT COLUMN */}
-          <div className={`col-span-12 lg:col-span-8 order-2 lg:order-1 flex flex-col gap-6 ${leftColumnHeightClass}`}>
+          <div className={`col-span-12 lg:col-span-8 order-2 lg:order-1 flex flex-col gap-4 lg:gap-4 2xl:gap-6 ${leftColumnHeightClass}`}>
 
             {/* GLOBAL CARD */}
             {!isCountryMode && hasGlobalCard && (
               <div className="flex">
-                <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
+                <div className="w-full rounded-2xl border bg-white p-4 lg:p-3 2xl:p-5 shadow-sm">
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div className="flex items-baseline gap-2">
                       <PageBreadcrumb pageTitle="Global" variant="page" align="left" />
@@ -2462,8 +2462,8 @@ export default function DashboardPage() {
             {hasAmazonCard && (
               <div className="flex flex-col lg:flex-1 gap-4">
                 {/* Amazon KPI Box */}
-                <div className="w-full rounded-2xl border bg-white p-5 shadow-sm">
-                  <div className="mb-4 flex flex-row gap-3 items-start md:items-start md:justify-between">
+                <div className="w-full rounded-2xl border bg-white p-3 2xl:p-5 shadow-sm">
+                  <div className="mb-3 lg:mb-2 2xl:mb-4 flex flex-row gap-3 items-start md:items-start md:justify-between">
                     <div className="flex flex-col flex-1 min-w-0">
                       <div className="flex flex-wrap items-baseline gap-2">
                         <PageBreadcrumb pageTitle="Amazon" variant="page" align="left" />
@@ -2494,7 +2494,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 2xl:grid-cols-4 gap-3 auto-rows-fr">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 2xl:grid-cols-4 gap-2 lg:gap-2 2xl:gap-3 auto-rows-fr">
 
                     <AmazonStatCard
                       label="Units"
@@ -2746,7 +2746,7 @@ export default function DashboardPage() {
 
                 {/* Live BI graph */}
                 {showLiveBI && isCountryMode && (
-                  <div className="w-full rounded-2xl border bg-white p-4 sm:p-5 shadow-sm overflow-x-hidden">
+                  <div className="w-full rounded-2xl border bg-white p-3 lg:p-3 2xl:p-5 shadow-sm overflow-x-hidden">
                     <div className="w-full max-w-full min-w-0">
                       <LiveBiLineGraph
                         dailySeries={biDailySeriesHome}
@@ -2834,7 +2834,7 @@ export default function DashboardPage() {
           </div>
 
           {/* RIGHT COLUMN – Sales Target */}
-          <aside className="col-span-12 lg:col-span-4 order-1 lg:order-2 flex flex-col gap-6 h-full">
+          <aside className="col-span-12 lg:col-span-4 order-1 lg:order-2 flex flex-col gap-4 lg:gap-4 2xl:gap-6 h-full">
             <div className="w-full">
               <SalesTargetStatsCard
                 regions={regions}
@@ -2855,7 +2855,7 @@ export default function DashboardPage() {
               />
             </div>
 
-            <div className="w-full lg:sticky lg:top-6">
+            <div className="w-full lg:sticky lg:top-4 2xl:top-6">
               <SalesTargetCard
                 data={targetData}
                 regions={regions}
@@ -2923,7 +2923,7 @@ export default function DashboardPage() {
             {/* <div className="mt-6 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm"> */}
             <div
               id="mtd-pl"
-              className="mt-6 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm scroll-mt-[80px]"
+              className="mt-4 rounded-2xl border bg-[#D9D9D933] p-5 shadow-sm scroll-mt-[80px]"
             >
 
               <div className="mb-3 flex items-center justify-between">

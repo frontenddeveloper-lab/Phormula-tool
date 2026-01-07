@@ -1,226 +1,3 @@
-// // // components/dashboard/AmazonStatCard.tsx
-// // "use client";
-
-// // import React from "react";
-// // import ValueOrSkeleton from "@/components/common/ValueOrSkeleton";
-// // import {
-// //   calcDeltaPct,
-// //   fmtGBP,
-// //   fmtInt,
-// //   fmtPct,
-// //   toNumberSafe,
-// // } from "@/lib/dashboard/format";
-
-// // export type AmazonStatCardProps = {
-// //   label: string;
-// //   current: number | null | undefined;
-// //   previous: number | null | undefined;
-// //   loading: boolean;
-// //   formatter?: (v: any) => string;
-// //   bottomLabel: string; // e.g. "Nov'25"
-// //   className?: string;
-// //   deltaPct?: number;
-// // };
-
-// // export default function AmazonStatCard({
-// //   label,
-// //   current,
-// //   previous,
-// //   loading,
-// //   formatter = fmtGBP,
-// //   bottomLabel,
-// //   className,
-// // }: AmazonStatCardProps) {
-// //   const currVal = toNumberSafe(current);
-// //   const prevVal = previous != null ? toNumberSafe(previous) : 0;
-
-// //   const delta = calcDeltaPct(currVal, prevVal); // may be null
-// //   const isUp = delta != null && delta >= 0;
-
-// //   let deltaContent: React.ReactNode = "—";
-// //   if (delta != null) {
-// //     deltaContent = (
-// //       <>
-// //         <span className="mr-0.5">{isUp ? "▲" : "▼"}</span>
-// //         {Math.abs(delta).toFixed(2)}%
-// //       </>
-// //     );
-// //   }
-
-// //   const deltaColor =
-// //     delta == null
-// //       ? "text-gray-500"
-// //       : isUp
-// //       ? "text-emerald-600"
-// //       : "text-rose-600";
-
-// //   return (
-// //     <div
-// //       className={`rounded-2xl border p-4 shadow-sm flex flex-col justify-between ${
-// //         className || ""
-// //       }`}
-// //     >
-// //       <div className="text-sm font-medium text-charcoal-500">{label}</div>
-
-// //       <div className="mt-1 text-lg font-semibold">
-// //         <ValueOrSkeleton loading={loading} mode="inline" compact>
-// //           {formatter(currVal)}
-// //         </ValueOrSkeleton>
-// //       </div>
-
-// //       <div className="mt-3 flex items-end justify-between text-xs text-charcoal-500">
-// //         <div className="flex flex-col">
-// //           <span>{bottomLabel}:</span>
-// //           <span className="font-medium">
-// //             {previous == null ? "—" : formatter(prevVal)}
-// //           </span>
-// //         </div>
-
-// //         <div
-// //           className={`inline-flex items-center font-semibold ${deltaColor}`}
-// //         >
-// //           {deltaContent}
-// //         </div>
-// //       </div>
-// //     </div>
-// //   );
-// // }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// // components/dashboard/AmazonStatCard.tsx
-// "use client";
-
-// import React from "react";
-// import ValueOrSkeleton from "@/components/common/ValueOrSkeleton";
-// import { calcDeltaPct, fmtGBP, toNumberSafe } from "@/lib/dashboard/format";
-
-// export type AmazonStatCardProps = {
-//   label: string;
-//   current: number | null | undefined;
-//   previous: number | null | undefined;
-//   loading: boolean;
-//   formatter?: (v: any) => string;
-//   bottomLabel: string; // e.g. "Nov'25"
-//   className?: string;
-
-//   /**
-//    * Optional override for delta display.
-//    * - If omitted: uses existing behavior calcDeltaPct(current, previous)
-//    * - If provided (including null): uses this value (null => show "—")
-//    * Use this for Profit % to show percentage-points (pp) deltas.
-//    */
-//   deltaPct?: number | null;
-// };
-
-// export default function AmazonStatCard({
-//   label,
-//   current,
-//   previous,
-//   loading,
-//   formatter = fmtGBP,
-//   bottomLabel,
-//   className,
-//   deltaPct,
-// }: AmazonStatCardProps) {
-//   const currVal = toNumberSafe(current);
-//   const prevVal = previous != null ? toNumberSafe(previous) : 0;
-
-//   // ✅ Preserve old behavior by default
-//   const computedDelta = calcDeltaPct(currVal, prevVal); // may be null
-
-//   // ✅ If deltaPct is passed, override display delta
-//   const deltaToShow =
-//     deltaPct === undefined ? computedDelta : deltaPct == null ? null : Number(deltaPct);
-
-//   const isUp = deltaToShow != null && deltaToShow >= 0;
-
-//   // ✅ If delta is overridden AND label is percent-ish, show "pp" (percentage points)
-//   const isPercentLabel = label.trim().toLowerCase().includes("%");
-//   const suffix = deltaPct !== undefined && isPercentLabel ? "pp" : "%";
-
-//   let deltaContent: React.ReactNode = "—";
-//   if (deltaToShow != null) {
-//     deltaContent = (
-//       <>
-//         <span className="mr-0.5">{isUp ? "▲" : "▼"}</span>
-//         {Math.abs(deltaToShow).toFixed(2)}
-//         {suffix}
-//       </>
-//     );
-//   }
-
-//   const deltaColor =
-//     deltaToShow == null
-//       ? "text-gray-500"
-//       : isUp
-//       ? "text-emerald-600"
-//       : "text-rose-600";
-
-//   return (
-//     <div
-//       className={`rounded-2xl border p-4 shadow-sm flex flex-col justify-between ${
-//         className || ""
-//       }`}
-//     >
-//       <div className="text-sm font-medium text-charcoal-500">{label}</div>
-
-//       <div className="mt-1 text-lg font-semibold">
-//         <ValueOrSkeleton loading={loading} mode="inline" compact>
-//           {formatter(currVal)}
-//         </ValueOrSkeleton>
-//       </div>
-
-//       <div className="mt-3 flex items-end justify-between text-xs text-charcoal-500">
-//         <div className="flex flex-col">
-//           <span>{bottomLabel}:</span>
-//           <span className="font-medium">
-//             {previous == null ? "—" : formatter(prevVal)}
-//           </span>
-//         </div>
-
-//         <div className={`inline-flex items-center font-semibold ${deltaColor}`}>
-//           {deltaContent}
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
 "use client";
 
 import React from "react";
@@ -260,7 +37,9 @@ export default function AmazonStatCard({
   const deltaToShow =
     deltaPct === undefined ? computedDelta : deltaPct == null ? null : Number(deltaPct);
 
-  const isUp = deltaToShow != null && deltaToShow >= 0;
+const visualIsUp =
+  deltaToShow != null &&
+  (inverseDelta ? deltaToShow < 0 : deltaToShow >= 0);
 
   const isPercentLabel = label.toLowerCase().includes("%");
   const suffix = "%";
@@ -270,7 +49,7 @@ export default function AmazonStatCard({
   if (deltaToShow != null) {
     deltaContent = (
       <>
-        <span className="mr-0.5">{isUp ? "▲" : "▼"}</span>
+        <span className="mr-0.5">{visualIsUp  ? "▲" : "▼"}</span>
         {Math.abs(deltaToShow).toFixed(2)}
         {suffix}
       </>
@@ -284,31 +63,26 @@ export default function AmazonStatCard({
   //       ? "text-emerald-600"
   //       : "text-rose-600";
 
-  const isDown = deltaToShow != null && deltaToShow < 0;
-
-// ✅ normal meaning: up = good (green), down = bad (red)
-// ✅ inverse meaning: up = bad (red), down = good (green)
-const upClass = inverseDelta ? "text-rose-600" : "text-emerald-600";
-const downClass = inverseDelta ? "text-emerald-600" : "text-rose-600";
+const goodClass = "text-emerald-600";
+const badClass = "text-rose-600";
 
 const deltaColor =
   deltaToShow == null
     ? "text-gray-400"
-    : isUp
-      ? upClass
-      : downClass;
+    : (visualIsUp ? goodClass : badClass);
+
 
 
   return (
     <div
-      className={`w-full min-w-0 rounded-2xl border p-3 sm:p-4 shadow-sm flex flex-col justify-between ${className}`}
+      className={`w-full min-w-0 rounded-xl border p-2.5 sm:p-3 shadow-sm flex flex-col justify-between ${className}`}
     >
       {/* Label */}
-      <div className="text-[11px] sm:text-xs font-medium text-charcoal-500 truncate">
+      <div className="text-[10px] sm:text-[10px] 2xl:text-xs leading-tight font-medium text-charcoal-500 truncate">
         {label}
       </div>
 
-      <div className="mt-1 text-lg font-semibold min-w-0 truncate">
+      <div className="mt-1 text-sm 2xl:text-lg font-semibold leading-tight min-w-0 truncate">
         <ValueOrSkeleton loading={loading} mode="inline" compact>
           <span className="block min-w-0 truncate">
             {formatter(currVal)}
@@ -317,7 +91,7 @@ const deltaColor =
       </div>
 
       {/* Bottom row */}
-      <div className="mt-3 flex items-end justify-between gap-2 text-[10px] sm:text-xs text-charcoal-500 min-w-0">
+      <div className="mt-2 flex items-end justify-between gap-2 text-[9.5px] sm:text-[10px] 2xl:text-xs leading-tight text-charcoal-500 min-w-0">
         {/* Previous value */}
         <div className="flex flex-col min-w-0">
           <span className="truncate">{bottomLabel}:</span>
