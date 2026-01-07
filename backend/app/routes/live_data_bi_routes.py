@@ -9,9 +9,10 @@ from datetime import date, datetime, timedelta
 from openai import OpenAI
 import json
 import pandas as pd
+from dateutil.relativedelta import relativedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.utils.live_bi_utils import (build_inventory_signals, get_mtd_and_prev_ranges,fetch_previous_period_data,fetch_current_mtd_data,calculate_growth,aggregate_totals,build_segment_total_row,build_sku_context,build_ai_summary,generate_live_insight,fetch_historical_skus_last_6_months,round_numeric_values,totals_from_daily_series,construct_prev_table_name,compute_sku_metrics_from_df,
-                                     compute_inventory_coverage_ratio,fetch_estimated_storage_cost_next_month)
+                                     compute_inventory_coverage_ratio,fetch_estimated_storage_cost_next_month,fetch_first_seen_sku_date,)
 from app.utils.email_utils import (send_live_bi_email,get_user_email_by_id,has_recent_bi_email,mark_bi_email_sent,)
 
 
@@ -45,9 +46,16 @@ def align_prev_curr_by_sku(prev_data, curr_data):
     prev_df = pd.DataFrame(prev_data)
     curr_df = pd.DataFrame(curr_data)
 
-    # Guard
+    # ---------------------------
+    # HARD GUARD: SKU not ready yet
+    # ---------------------------
+    if "sku" not in prev_df.columns or "sku" not in curr_df.columns:
+        # Data is still warming up (async pipelines)
+        return [], []
+
+    # Guard: both empty after ensuring sku exists
     if prev_df.empty and curr_df.empty:
-        return prev_data, curr_data
+        return [], []
 
     def normalize_sku(x):
         if x is None:
@@ -63,14 +71,17 @@ def align_prev_curr_by_sku(prev_data, curr_data):
 
     # ---- normalize SKU safely ----
     for df in (prev_df, curr_df):
-        if "sku" in df.columns:
-            df["sku"] = df["sku"].apply(normalize_sku)
+        df["sku"] = df["sku"].apply(normalize_sku)
 
     prev_df = prev_df[prev_df["sku"].notna()]
     curr_df = curr_df[curr_df["sku"].notna()]
 
     # ---- UNION of SKUs ----
     all_skus = set(prev_df["sku"]) | set(curr_df["sku"])
+
+    # Guard: no valid SKUs yet
+    if not all_skus:
+        return [], []
 
     base = pd.DataFrame({"sku": list(all_skus)})
 
@@ -97,6 +108,7 @@ def align_prev_curr_by_sku(prev_data, curr_data):
         prev_df.to_dict(orient="records"),
         curr_df.to_dict(orient="records"),
     )
+
 
 
 
@@ -173,6 +185,14 @@ def live_mtd_vs_previous():
             prev_data_aligned,
             curr_data,
         )
+        # ---------------------------
+        # DATA STILL WARMING UP
+        # ---------------------------
+        if not curr_data:
+            return jsonify({
+                "status": "loading",
+                "message": "Data is still syncing. Please wait a few seconds."
+            }), 202
 
         # ---------------------------
         # FULL PREVIOUS MONTH (for charts)
@@ -199,23 +219,33 @@ def live_mtd_vs_previous():
             prev_data_aligned,
             curr_data,
             key=key_column,
+            
         )
 
         prev_keys = {r.get(key_column) for r in prev_data_aligned if r.get(key_column)}
         curr_keys = {r.get(key_column) for r in curr_data if r.get(key_column)}
 
         # ---------------------------
-        # NEW / REVIVING
+        # NEW / REVIVING (AGE-BASED)
         # ---------------------------
-        historical_6m_keys = fetch_historical_skus_last_6_months(
-            user_id=user_id,
-            country=country,
-            ref_date=curr_start,
-        )
 
-        reviving_keys = curr_keys - prev_keys
-        newly_launched_keys = curr_keys - historical_6m_keys
-        new_reviving_keys = reviving_keys | newly_launched_keys
+        # 1) First-seen date per SKU
+        first_seen_map = fetch_first_seen_sku_date(user_id, country)
+
+        # 2) Cutoff = 6 months before current period start
+        six_months_cutoff = curr_start - relativedelta(months=6)
+
+        # 3) New / Reviving = launched within last 6 months
+        new_reviving_keys = {
+            sku
+            for sku in curr_keys
+            if first_seen_map.get(sku) and first_seen_map[sku] >= six_months_cutoff
+        }
+
+        # safety: always treat current SKUs without history as new
+        new_reviving_keys |= {
+            sku for sku in curr_keys if sku not in first_seen_map
+        }
 
         new_reviving = [
             r for r in growth_data
