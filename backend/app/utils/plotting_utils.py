@@ -28,9 +28,6 @@ db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:543
 db_url1= os.getenv('DATABASE_ADMIN_URL')
 
 
-
- 
-
 def aggregate_upload_data(uploads):
     total_sales = sum(upload.total_sales or 0 for upload in uploads)
     cm2_profit = sum(upload.cm2_profit or 0 for upload in uploads)

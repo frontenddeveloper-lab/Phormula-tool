@@ -1,5 +1,3 @@
-#############################################################################################################################3333
-
 from flask import jsonify
 from sqlalchemy import create_engine, MetaData, Table, text, inspect
 from sqlalchemy.orm import sessionmaker
@@ -108,61 +106,129 @@ def _expand_two_digit_years(s: pd.Series) -> pd.Series:
     )
     return s
 
-def parse_order_datetime_series(raw: pd.Series, source_month_hint: pd.Series | None = None) -> pd.Series:
+def parse_order_datetime_series(
+    raw: pd.Series,
+    source_month_hint: pd.Series | None = None
+) -> pd.Series:
     """
     Returns a Series of naive UTC pandas Timestamps.
-    Steps:
-      1) Normalize tokens: 'Sept'->'Sep', collapse spaces, trim.
-      2) Replace TZ abbreviations with numeric offsets.
-      3) First pass: to_datetime(..., utc=True, dayfirst=True).
-      4) Second pass: expand two-digit years and try again.
-      5) Third pass: use source_month_hint ("August2025") + day guess.
-      6) Convert tz-aware UTC to naive UTC.
+
+    GUARANTEES:
+    - Output length == input length
+    - No rows are dropped
+    - Index alignment is preserved
     """
+
+    
+    # ------------------
+    # Normalize raw strings
+    # ------------------
     s = raw.astype(str).str.strip()
     s = s.str.replace(r'\bSept\.?\b', 'Sep', regex=True)
     s = _replace_tz_abbrev_with_offset(s)
     s = s.str.replace(r'\s{2,}', ' ', regex=True)
 
+    # ------------------
     # Pass 1
-    dt1 = pd.to_datetime(s, errors='coerce', utc=True, dayfirst=True, infer_datetime_format=True)
+    # ------------------
+    dt1 = pd.to_datetime(
+        s,
+        errors='coerce',
+        utc=True,
+        dayfirst=True,
+        infer_datetime_format=True
+    )
 
-    # Pass 2
+   
+    # ------------------
+    # Pass 2 (two-digit years)
+    # ------------------
     needs2 = dt1.isna()
+   
+
     if needs2.any():
         s2 = _expand_two_digit_years(s[needs2])
         s2 = _replace_tz_abbrev_with_offset(s2)
-        dt2 = pd.to_datetime(s2, errors='coerce', utc=True, dayfirst=True, infer_datetime_format=True)
+
+        print(
+            "[PARSE]   s2 rows:",
+            len(s2),
+            "| index aligned:",
+            s2.index.equals(dt1.index[needs2])
+        )
+
+        dt2 = pd.to_datetime(
+            s2,
+            errors='coerce',
+            utc=True,
+            dayfirst=True,
+            infer_datetime_format=True
+        )
+
+       
+
+        # 🔥 CRITICAL FIX: force index alignment
+        dt2.index = dt1.index[needs2]
         dt1.loc[needs2] = dt2
 
-    # Pass 3 (fallback with _source_month)
+    
+
+    # ------------------
+    # Pass 3 (fallback using source_month_hint)
+    # ------------------
     needs3 = dt1.isna()
+    
+
     if needs3.any() and source_month_hint is not None:
         src = source_month_hint.astype(str)
+
         day_guess = (
-            s[needs3].str.extract(r'\b([0-3]?\d)\b', expand=False)
-            .astype('float').fillna(1).clip(lower=1, upper=28).astype('int')
+            s[needs3]
+            .str.extract(r'\b([0-3]?\d)\b', expand=False)
+            .astype('float')
+            .fillna(1)
+            .clip(lower=1, upper=28)
+            .astype('int')
         )
+
         srcm = src[needs3].str.extract(r'([A-Za-z]+)', expand=False)
-        srcy = src[needs3].str.extract(r'(\d{4})',   expand=False)
+        srcy = src[needs3].str.extract(r'(\d{4})', expand=False)
+
         rebuilt = day_guess.astype(str) + " " + srcm + " " + srcy
         rebuilt = _replace_tz_abbrev_with_offset(rebuilt)
-        dt3 = pd.to_datetime(rebuilt, errors='coerce', utc=True, dayfirst=True)
+
+        dt3 = pd.to_datetime(
+            rebuilt,
+            errors='coerce',
+            utc=True,
+            dayfirst=True
+        )
+
+      
+        # 🔥 CRITICAL FIX: force index alignment
+        dt3.index = dt1.index[needs3]
         dt1.loc[needs3] = dt3
 
-    # Convert tz-aware UTC to naive UTC
-    try:
-        if getattr(dt1.dt, "tz", None) is not None:
-            dt1 = dt1.dt.tz_convert("UTC").dt.tz_localize(None)
-    except Exception:
-        # If some entries are naive already, only convert the aware ones
-        mask = dt1.notna()
-        try:
-            dt1.loc[mask] = dt1.loc[mask].dt.tz_convert("UTC").dt.tz_localize(None)
-        except Exception:
-            pass
+   
+    # ------------------
+    # Convert tz-aware UTC → naive UTC
+    # ------------------
+    if dt1.dt.tz is not None:
+        dt1 = dt1.dt.tz_localize(None)
 
+    
+
+    # ------------------
+    # HARD SAFETY GUARDRAIL
+    # ------------------
+    assert len(dt1) == len(raw), (
+        f"[PARSE][FATAL] Row count changed "
+        f"{len(raw)} → {len(dt1)}"
+    )
+
+    
     return dt1
+
 
 # ============================== GROWTH HELPER ==============================
 def _compute_growth_from_history(recent_hist):
@@ -361,8 +427,7 @@ def debug_month_integrity(global_df, months_to_fetch):
     else:
         print("\n[PF DEBUG] ✅ All expected months have some orders/shipments after parsing.")
 
-
-
+# ============================== FORECAST PIPELINE ==============================
 
 
 def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="user"):
@@ -431,23 +496,35 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
     # Month integrity debug
     debug_month_integrity(global_df, months_to_fetch)
 
-    # --- Dedupe ---
-    dedupe_keys = [k for k in ['order_id', 'date_time', 'sku', 'quantity', 'type'] if k in global_df.columns]
-    if dedupe_keys:
-        before = len(global_df)
-        global_df = global_df.drop_duplicates(subset=dedupe_keys)
 
-    # ✅ Orders + Shipments (THIS IS THE KEY CHANGE)
-    valid_types = {'Order', 'Shipment'}
-
+    # ============================================================
+    # ✅ ORDER vs SHIPMENT — PRIORITY LOGIC (CRITICAL FIX)
+    # ============================================================
     if 'type' in global_df.columns:
-        filtered_df = global_df[global_df['type'].isin(valid_types)].copy()
+        type_norm = (
+            global_df['type']
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+
+        if (type_norm == 'shipment').any():
+            filtered_df = global_df[type_norm == 'shipment'].copy()
+            print("[PF] Using SHIPMENT rows only (preferred)")
+        elif (type_norm == 'order').any():
+            filtered_df = global_df[type_norm == 'order'].copy()
+            print("[PF] No shipments found — using ORDER rows")
+        else:
+            print("[PF][WARN] No Order/Shipment rows found — using all rows")
+            filtered_df = global_df.copy()
     else:
-        print("[PF][WARN] 'type' column missing; assuming all rows are demand.")
+        print("[PF][WARN] 'type' column missing — assuming all rows are demand")
         filtered_df = global_df.copy()
 
+    
+
     if filtered_df.empty:
-        return jsonify({"error": "No demand data available for forecasting."}), 400
+        return jsonify({"error": "No usable demand rows available for forecasting."}), 400
 
     if 'date_time' not in filtered_df.columns:
         return jsonify({"error": "[PF][FATAL] 'date_time' column missing after fetch."}), 400
@@ -456,28 +533,78 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
     # Robust date parsing
     # =======================
     source_hint = filtered_df['_source_month'] if '_source_month' in filtered_df.columns else None
-    filtered_df['date_time'] = parse_order_datetime_series(filtered_df['date_time'], source_hint)
-    filtered_df = filtered_df.dropna(subset=['date_time'])
+
+    filtered_df['date_time'] = parse_order_datetime_series(
+        filtered_df['date_time'],
+        source_hint
+    )
+ 
+
+    # Normalize valid timestamps
+    filtered_df.loc[filtered_df['date_time'].notna(), 'date_time'] = (
+        filtered_df.loc[filtered_df['date_time'].notna(), 'date_time']
+        .dt.floor("D")
+    )
+
+
+    # 🔥 CRITICAL FIX: impute missing dates using source month
+    mask_missing_dt = filtered_df['date_time'].isna() & filtered_df['_source_month'].notna()
+
+    if mask_missing_dt.any():
+        filtered_df.loc[mask_missing_dt, 'date_time'] = (
+            pd.to_datetime(
+                filtered_df.loc[mask_missing_dt, '_source_month'],
+                format='%B%Y',
+                errors='coerce'
+            )
+            .dt.to_period('M')
+            .dt.to_timestamp()
+        )
+
+    # Final safety drop (should be near-zero now)
+    # 🔥 IMPUTE missing date_time using source month
+    mask_missing_dt = filtered_df['date_time'].isna()
+
+    if mask_missing_dt.any():
+        filtered_df.loc[mask_missing_dt, 'date_time'] = (
+            pd.to_datetime(
+                filtered_df.loc[mask_missing_dt, '_source_month'],
+                format='%B%Y',
+                errors='coerce'
+            )
+            .dt.to_period('M')
+            .dt.to_timestamp()
+        )
+
 
     # Ensure required columns exist
-    keep_cols = ['sku', 'date_time', 'quantity', 'price_in_gbp']
+    keep_cols = ['sku', 'date_time', 'quantity', 'price_in_gbp', 'type']
     for c in keep_cols:
         if c not in filtered_df.columns:
             filtered_df[c] = np.nan
 
     new_df = filtered_df[keep_cols].copy()
-    new_df['quantity'] = pd.to_numeric(new_df['quantity'], errors='coerce').fillna(0).astype(int)
+    new_df['quantity'] = (
+        pd.to_numeric(new_df['quantity'], errors='coerce')
+        .fillna(0)
+        .astype(int)
+    )
+
     new_df = new_df.sort_values(by='date_time').set_index('date_time')
+
 
     # 🔴 Clip to 12M window
     new_df = new_df.loc[
-        (new_df.index >= pd.Timestamp(start_date)) &
-        (new_df.index <= pd.Timestamp(end_date))
+        (new_df.index >= start_date) &
+        (new_df.index <= end_date)
     ]
+
+    
 
     if new_df.empty:
         return jsonify({"error": "No usable data inside the 12-month window."}), 400
 
+   
     # ---- Compute contiguous-month streak ----
     def _contiguous_streak_ending_at(end_period: pd.Period, month_index: pd.Index) -> int:
         months_present = set(pd.PeriodIndex(month_index.to_period('M')))
@@ -514,119 +641,6 @@ def process_forecasting(user_id, country, mv, year, engine, table_name_prefix="u
         year,
         hybrid_allowed=hybrid_allowed
     )
-
-
-
-
-
-def classify_skus_from_inventory(user_id, country, mv, year, engine, sales_df=None, table_name_prefix="user"):
-
-    sku_info = {}
-
-    engine1 = create_engine(db_url2)
-    meta = MetaData()
-    
-    meta.reflect(bind=engine1)
-
-    # ----- reference months -----
-    ref_month = datetime(int(year), datetime.strptime(mv[:3].title(), "%b").month, 1)
-    last_5_months = [ref_month - relativedelta(months=i) for i in range(5)]
-    month_labels = [dt.strftime("%b%Y") for dt in last_5_months]
-    month_keys = [f"{month_name[dt.month]}{dt.year}" for dt in last_5_months]
-
-    # ================== Inventory presence (from DB) ==================
-    for ref_date, month_label in zip(last_5_months, month_labels):
-        month_start = ref_date.replace(day=1)
-        month_end = (ref_date + relativedelta(months=1)).replace(day=1)
-
-        # Pull inventory rows for the month
-        sql = """
-            SELECT
-                seller_sku AS "SKU",
-                fulfillable_quantity AS "Ending Warehouse Balance",
-                synced_at
-            FROM public.inventory
-            WHERE synced_at >= %(start)s AND synced_at < %(end)s
-        """
-        df_inv = pd.read_sql(sql, con=engine1, params={"start": month_start, "end": month_end})
-
-        # If your inventory table has scoping columns (e.g., user_id/country/marketplace_id),
-        # add them in the SQL above and params here.
-
-        if not df_inv.empty:
-            # Keep the latest snapshot per SKU within the month
-            df_inv = df_inv.sort_values("synced_at", ascending=False).drop_duplicates(subset=["SKU"], keep="first")
-
-            for _, row in df_inv.iterrows():
-                sku = row["SKU"]
-                balance = row["Ending Warehouse Balance"]
-
-                if sku not in sku_info:
-                    sku_info[sku] = {
-                        "inv_months": 0,
-                        "inv_positive_months": 0,
-                        "latest": False,
-                        "sales_days": 0,
-                    }
-
-                sku_info[sku]["inv_months"] += 1
-                if pd.notna(balance) and balance > 0:
-                    sku_info[sku]["inv_positive_months"] += 1
-                if month_label == month_labels[0]:
-                    sku_info[sku]["latest"] = True
-        else:
-            # No rows for that month—skip silently or log if you prefer
-            pass
-
-    # ================== Sales processing (unchanged) ==================
-    sku_sales_days_tracker = {}
-
-    if sales_df is not None:
-        sales_df = sales_df.copy()
-        sales_df["date"] = sales_df.index.date
-        for sku, group in sales_df.groupby("sku"):
-            sku_sales_days_tracker[sku] = set(group["date"].unique())
-    else:
-        meta = MetaData()
-        meta.reflect(bind=create_engine(db_url))
-        normalized_tables = {name.lower(): name for name in meta.tables.keys()}
-        with create_engine(db_url).connect() as conn:
-            for month_key in month_keys:
-                table_name = f"{table_name_prefix}_{user_id}_{country}_{month_key}_data"
-                if table_name.lower() in normalized_tables:
-                    table = Table(normalized_tables[table_name.lower()], meta, autoload_with=create_engine(db_url))
-                    df_sales = pd.read_sql(table.select(), conn)
-                    df_sales = df_sales[df_sales["type"] == "Order"]
-                    df_sales["date"] = pd.to_datetime(df_sales["date_time"], errors="coerce").dt.date
-                    for _, row in df_sales.iterrows():
-                        sku = row["sku"]
-                        date = row["date"]
-                        if pd.isna(date):
-                            continue
-                        if sku not in sku_sales_days_tracker:
-                            sku_sales_days_tracker[sku] = set()
-                        if row["quantity"] > 0:
-                            sku_sales_days_tracker[sku].add(date)
-                else:
-                    print(f"Missing sales table: {table_name}")
-
-    for sku, day_set in sku_sales_days_tracker.items():
-        if sku not in sku_info:
-            sku_info[sku] = {"inv_months": 0, "inv_positive_months": 0, "latest": False, "sales_days": 0}
-        sku_info[sku]["sales_days"] = len(day_set)
-
-    # ================== Final classification ==================
-    classifications = {}
-    for sku, info in sku_info.items():
-        if info["inv_months"] == 1 and info["latest"]:
-            classifications[sku] = "New"
-        elif info["sales_days"] >= 90:
-            classifications[sku] = "Regular"
-        else:
-            classifications[sku] = "Irregular"
-
-    return classifications
-
 
 
 # ============================== ARIMA (3-MONTH FORECAST with DEBUG LOGS) ==============================
@@ -1052,15 +1066,6 @@ def call_chatgpt_adjudicator(lastN_months: list, arima_months: list, hybrid_mont
 
 
 
-    
-
-
-
-
-# --- put these imports near your other imports ---
-import re
-from sqlalchemy import text
-
 def _norm_sku(x: str) -> str:
     if x is None:
         return ""
@@ -1083,16 +1088,17 @@ def fetch_and_merge_inventory_monthwise_sellable(
     Rules:
     - Source table: public.monthwise_inventory (msku, disposition, ending_warehouse_balance, date, marketplace_id)
     - Only SELLABLE rows
-    - If inventory_date is provided: use that exact snapshot date
-      else: pick the latest snapshot per key
-        * key = (msku) if forecast_marketplace_col is None
-        * key = (msku, marketplace_id) if forecast_marketplace_col is provided
+    - If inventory_date is provided:
+        -> pick the LATEST snapshot with date <= inventory_date
+      else:
+        -> pick the latest snapshot per key
+          * key = (msku) if forecast_marketplace_col is None
+          * key = (msku, marketplace_id) if forecast_marketplace_col is provided
 
     Merge:
     - Merge on normalized SKU (_norm_sku) always
     - If forecast_marketplace_col is provided, also merge marketplace_id
     """
-
 
     # --- validate inputs ---
     if forecast_sku_col not in forecast_totals.columns:
@@ -1107,33 +1113,35 @@ def fetch_and_merge_inventory_monthwise_sellable(
     use_marketplace = forecast_marketplace_col is not None
 
     # --- build SQL ---
-    # If inventory_date given, we don't need DISTINCT ON / ordering logic.
     if inventory_date:
+        # ✅ FIX: latest snapshot ON OR BEFORE inventory_date
         if use_marketplace:
             sql = """
-                SELECT
+                SELECT DISTINCT ON (msku, marketplace_id)
                     msku AS "SKU",
                     marketplace_id AS "marketplace_id",
                     ending_warehouse_balance AS "Ending Warehouse Balance",
                     date AS snapshot_date
                 FROM public.monthwise_inventory
                 WHERE disposition = 'SELLABLE'
-                  AND date = :inv_date
+                  AND date <= :inv_date
+                ORDER BY msku, marketplace_id, date DESC
             """
         else:
             sql = """
-                SELECT
+                SELECT DISTINCT ON (msku)
                     msku AS "SKU",
                     ending_warehouse_balance AS "Ending Warehouse Balance",
                     date AS snapshot_date
                 FROM public.monthwise_inventory
                 WHERE disposition = 'SELLABLE'
-                  AND date = :inv_date
+                  AND date <= :inv_date
+                ORDER BY msku, date DESC
             """
         params = {"inv_date": inventory_date}
 
     else:
-        # Latest snapshot per key
+        # Latest snapshot per key (original behavior, unchanged)
         if use_marketplace:
             sql = """
                 SELECT DISTINCT ON (msku, marketplace_id)
@@ -1159,7 +1167,7 @@ def fetch_and_merge_inventory_monthwise_sellable(
 
     # --- fetch inventory ---
     inv_df = pd.read_sql(text(sql), con=engine1, params=params)
-    
+
     if not inv_df.empty:
         print(inv_df.head(10).to_string(index=False))
 
@@ -1188,7 +1196,6 @@ def fetch_and_merge_inventory_monthwise_sellable(
 
     # --- merge ---
     if use_marketplace:
-        # forecast marketplace col might not be named exactly marketplace_id
         merge_left_cols = ["sku_norm", forecast_marketplace_col]
         inv_merge = inventory_totals[["sku_norm", "marketplace_id", "Ending Warehouse Balance"]].copy()
 
@@ -1198,7 +1205,6 @@ def fetch_and_merge_inventory_monthwise_sellable(
             right_on=["sku_norm", "marketplace_id"],
             how="left"
         )
-        # clean up right-side join key
         out.drop(columns=["sku_norm", "marketplace_id"], inplace=True, errors="ignore")
 
     else:
@@ -1216,11 +1222,34 @@ def fetch_and_merge_inventory_monthwise_sellable(
           .astype(int)
     )
 
-    preview_cols = [forecast_sku_col, "Inventory at Month End"]
-    if use_marketplace:
-        preview_cols.insert(1, forecast_marketplace_col)
-
     return out
+
+def fetch_skuwise_monthly_sales(engine, meta, user_id, country, dt):
+    """
+    Fetch sku-wise monthly quantity and ADD label in-memory
+    """
+    table_name = f"skuwisemonthly_{user_id}_{country}_{dt.strftime('%B').lower()}{dt.year}"
+    table_key = table_name.lower()
+
+    if table_key not in {t.lower(): t for t in meta.tables}:
+        print(f"[SOLD][WARN] Table not found: {table_name}")
+        return pd.DataFrame(columns=['sku', 'quantity', 'Label'])
+
+    try:
+        tbl = Table(table_key, meta, autoload_with=engine)
+        with engine.connect() as conn:
+            df = pd.read_sql(tbl.select(), conn)
+
+        df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
+
+        # ✅ CREATE LABEL HERE
+        df['Label'] = month_label(dt)   # e.g. "Sep'25"
+
+        return df[['sku', 'quantity', 'Label']]
+
+    except Exception as e:
+        print(f"[SOLD][ERROR] {table_name}: {e}")
+        return pd.DataFrame(columns=['sku', 'quantity', 'Label'])
 
 
 def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool = True):
@@ -1252,25 +1281,7 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     meta.reflect(bind=engine)
     meta.reflect(bind=engine1)
 
-    # --- Debug: list all tables for both DBs ---
-    def debug_list_tables(engine, label):
-        try:
-            insp = inspect(engine)
-            schemas = insp.get_schema_names()
-            for sch in schemas:
-                try:
-                    tables = insp.get_table_names(schema=sch)
-                    if tables:
-                        print(f"Schema: {sch}")
-                        for t in tables:
-                            print(f"  - {sch}.{t}")
-                except Exception as e:
-                    print(f"  [!] Could not list tables for schema {sch}: {e}")
-        except Exception as e:
-            print(f"  [!] Could not inspect {label}: {e}")
-
-    debug_list_tables(engine,  "Main DB (db_url)")
-    debug_list_tables(engine1, "Amazon DB (db_url2)")
+   
 
     # ----------------- helpers -----------------
     def _norm_sku(x: str) -> str:
@@ -1311,7 +1322,7 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
 
     # ✅ last month sold logic = current month - 1 (last full calendar month)
     today = pd.Timestamp.today().normalize()
-    sold_anchor_period = today.to_period('M') - 1
+    # sold_anchor_period = today.to_period('M') - 1
 
     unique_skus = new_df['sku'].unique()
     all_forecasts = pd.DataFrame()
@@ -1423,10 +1434,10 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
 
             if gpt_choice in ("ARIMA", "HYBRID"):
                 winner = gpt_choice
-                print(f"[GPT] Winner for {sku}: {winner}")
+                
             else:
                 winner = _adjudicate_by_history_trend(lastN_daily, arima_series, hybrid_series)
-                print(f"[Expert] Winner for {sku}: {winner}")
+                
 
             model_winner[sku] = winner
             chosen_df = h_monthly_df if winner == 'HYBRID' else a_monthly_df
@@ -1580,13 +1591,9 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     inventory_forecast = inventory_forecast.merge(sales_summary, on='sku', how='left').fillna(0)
     inventory_forecast = inventory_forecast.merge(product_names, on='sku', how='left').fillna("")
 
-    # ----------------- Classification -----------------
-    sku_classification = classify_skus_from_inventory(
-        user_id, country, mv, year, engine1, sales_df=new_df
-    )
-    inventory_forecast['SKU Type'] = inventory_forecast['sku'].map(sku_classification).fillna('Irregular')
+   
 
-    # ----------------- Recent monthly actuals -----------------
+    # ----------------- Recent monthly actuals (ONLY for trend logic) -----------------
     monthly_actuals = (
         new_df.groupby('sku')['quantity']
         .resample('M')
@@ -1601,6 +1608,7 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
         if len(last4) >= 2:
             recent_hist_map[sku] = last4
 
+
     # ============================================================
     # SOLD COLUMNS - dynamically anchored to (first forecasted month - 1)
     # ============================================================
@@ -1613,19 +1621,56 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     sold_labels = [sold_m3, sold_m2, sold_m1]
 
 
-    monthly_actuals['Label'] = pd.to_datetime(monthly_actuals['Month']).dt.strftime("%b'%y")
+    # ============================================================
+    # SOLD COLUMNS — FETCH FROM skuwisemonthly_* TABLES (DB)
+    # ============================================================
+
+    sold_month_dts = [
+        add_months(sold_anchor_dt, -2),
+        add_months(sold_anchor_dt, -1),
+        sold_anchor_dt
+    ]
+
+    sold_frames = []
+
+    for dt in sold_month_dts:
+        df_m = fetch_skuwise_monthly_sales(
+            engine=engine,
+            meta=meta,
+            user_id=user_id,
+            country=country,
+            dt=dt
+        )
+        if not df_m.empty:
+            sold_frames.append(df_m)
+
+    if sold_frames:
+        sold_df = pd.concat(sold_frames, ignore_index=True)
+    else:
+        sold_df = pd.DataFrame(columns=['sku', 'quantity', 'Label'])
+
     last3_sold_pivot = (
-        monthly_actuals[monthly_actuals['Label'].isin(sold_labels)]
-        .pivot_table(index='sku', columns='Label', values='quantity', aggfunc='sum')
+        sold_df
+        .pivot_table(
+            index='sku',
+            columns='Label',
+            values='quantity',
+            aggfunc='sum'
+        )
         .reset_index()
         .fillna(0)
     )
+
+    # Ensure all months exist
     for lbl in sold_labels:
         if lbl not in last3_sold_pivot.columns:
-            last3_sold_pivot[lbl] = 0.0
+            last3_sold_pivot[lbl] = 0
 
-    rename_map = {lbl: f"{lbl} Sold" for lbl in sold_labels}
-    last3_sold_pivot = last3_sold_pivot.rename(columns=rename_map)
+    # Rename to "Sep'25 Sold" format
+    last3_sold_pivot = last3_sold_pivot.rename(
+        columns={lbl: f"{lbl} Sold" for lbl in sold_labels}
+    )
+
 
     inventory_forecast = inventory_forecast.merge(
         last3_sold_pivot[['sku', f"{sold_m3} Sold", f"{sold_m2} Sold", f"{sold_m1} Sold"]],
@@ -1634,20 +1679,7 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
 
     last_month_col = f"{sold_m1} Sold"
 
-    # Compare values from new_df vs database
-    if 'Last Month Sales(Units)' in inventory_forecast.columns and last_month_col in inventory_forecast.columns:
-        for idx, row in inventory_forecast.iterrows():
-            if row['sku'] != 'Total':
-                from_df = row[last_month_col]
-                from_db = row['Last Month Sales(Units)']
-                if abs(from_df - from_db) > 0:
-                    print(f"[DEBUG] SKU {row['sku']}: new_df={from_df}, database={from_db}")
-
-        # Keep the new_df value (your original behavior)
-        inventory_forecast.drop(columns=['Last Month Sales(Units)'], inplace=True)
-    else:
-        if last_month_col not in inventory_forecast.columns:
-            inventory_forecast[last_month_col] = 0
+   
 
     # ----------------- Remaining months -----------------
     extra_months = max(transit_time + stock_unit - 3, 0)
@@ -1720,10 +1752,15 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     # ----------------- Totals row -----------------
     sold_cols = [f"{sold_m3} Sold", f"{sold_m2} Sold", f"{sold_m1} Sold"]
     numeric_columns = (
-        ['Projected Sales Total', 'Inventory at Month End', last_month_col]
-        + sold_cols + monthwise_forecast_cols + future_month_columns
+    ['Projected Sales Total','Inventory at Month End','Dispatch','Current Inventory + Dispatch', last_month_col]
+    + sold_cols
+    + monthwise_forecast_cols
+    + future_month_columns
     )
-    numeric_columns = _unique_cols([c for c in numeric_columns if c in inventory_forecast.columns])
+
+    numeric_columns = _unique_cols(
+        [c for c in numeric_columns if c in inventory_forecast.columns]
+    )
 
     sums = pd.to_numeric(inventory_forecast[numeric_columns].stack(), errors='coerce').unstack().fillna(0).sum()
     total_row = pd.DataFrame([np.rint(sums).astype(int)], columns=numeric_columns)
