@@ -9,9 +9,10 @@ from datetime import date, datetime, timedelta
 from openai import OpenAI
 import json
 import pandas as pd
+from dateutil.relativedelta import relativedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.utils.live_bi_utils import (build_inventory_signals, get_mtd_and_prev_ranges,fetch_previous_period_data,fetch_current_mtd_data,calculate_growth,aggregate_totals,build_segment_total_row,build_sku_context,build_ai_summary,generate_live_insight,fetch_historical_skus_last_6_months,round_numeric_values,totals_from_daily_series,construct_prev_table_name,compute_sku_metrics_from_df,
-                                     compute_inventory_coverage_ratio,fetch_estimated_storage_cost_next_month)
+                                     compute_inventory_coverage_ratio,fetch_estimated_storage_cost_next_month,fetch_first_seen_sku_date,)
 from app.utils.email_utils import (send_live_bi_email,get_user_email_by_id,has_recent_bi_email,mark_bi_email_sent,)
 
 
@@ -218,23 +219,33 @@ def live_mtd_vs_previous():
             prev_data_aligned,
             curr_data,
             key=key_column,
+            
         )
 
         prev_keys = {r.get(key_column) for r in prev_data_aligned if r.get(key_column)}
         curr_keys = {r.get(key_column) for r in curr_data if r.get(key_column)}
 
         # ---------------------------
-        # NEW / REVIVING
+        # NEW / REVIVING (AGE-BASED)
         # ---------------------------
-        historical_6m_keys = fetch_historical_skus_last_6_months(
-            user_id=user_id,
-            country=country,
-            ref_date=curr_start,
-        )
 
-        reviving_keys = curr_keys - prev_keys
-        newly_launched_keys = curr_keys - historical_6m_keys
-        new_reviving_keys = reviving_keys | newly_launched_keys
+        # 1) First-seen date per SKU
+        first_seen_map = fetch_first_seen_sku_date(user_id, country)
+
+        # 2) Cutoff = 6 months before current period start
+        six_months_cutoff = curr_start - relativedelta(months=6)
+
+        # 3) New / Reviving = launched within last 6 months
+        new_reviving_keys = {
+            sku
+            for sku in curr_keys
+            if first_seen_map.get(sku) and first_seen_map[sku] >= six_months_cutoff
+        }
+
+        # safety: always treat current SKUs without history as new
+        new_reviving_keys |= {
+            sku for sku in curr_keys if sku not in first_seen_map
+        }
 
         new_reviving = [
             r for r in growth_data

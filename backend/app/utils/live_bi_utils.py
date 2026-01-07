@@ -227,6 +227,57 @@ def fetch_historical_skus_last_6_months(user_id: int, country: str, ref_date: da
 
     return skus
 
+def fetch_first_seen_sku_date(user_id: int, country: str) -> dict:
+    """
+    Returns { sku: first_seen_date } by scanning historic monthly tables.
+    Safe, explicit, and matches your existing architecture.
+    """
+    first_seen = {}
+
+    with engine_hist.connect() as conn:
+        # 1) get all matching tables
+        res = conn.execute(text("""
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name LIKE :pattern
+        """), {
+            "pattern": f"user_{user_id}_{country}_%_data"
+        })
+
+        table_names = [r[0] for r in res]
+
+        # 2) scan each table
+        for table in table_names:
+            try:
+                q = text(f"""
+                    SELECT sku,
+                           MIN(NULLIF(NULLIF(date_time, '0'), '')::date) AS first_seen
+                    FROM {table}
+                    WHERE sku IS NOT NULL
+                    GROUP BY sku
+                """)
+
+                rows = conn.execute(q).fetchall()
+
+                for sku, d in rows:
+                    if not sku or not d:
+                        continue
+
+                    sku = str(sku).strip()
+
+                    # keep EARLIEST date across all tables
+                    if sku not in first_seen or d < first_seen[sku]:
+                        first_seen[sku] = d
+
+            except Exception:
+                # skip broken / missing tables safely
+                continue
+
+    return first_seen
+
+
+
 def normalize_sales_mix(df: pd.DataFrame, mix_col="sales_mix", digits=2):
     """
     Forces sales_mix to sum exactly to 100.00 after rounding.
@@ -396,6 +447,7 @@ def fetch_last_30_days_units(user_id: int, country: str, as_of: date = None) -> 
         .sum()
         .rename(columns={"quantity": "last_30_days_units"})
     )
+
 def fetch_available_inventory(user_id: int) -> pd.DataFrame:
     q = text("""
         SELECT sku, available
@@ -1688,6 +1740,24 @@ def build_ai_summary(
         }
 
     # ===============================
+    # DETERMINE MAX ACTION COUNT (DATA-DRIVEN)
+    # ===============================
+    eligible_products = set()
+
+    for row in top_80_skus or []:
+        name = row.get("product_name")
+        if name and "total" not in name.lower():
+            eligible_products.add(name.strip())
+
+    for row in new_reviving or []:
+        name = row.get("product_name")
+        if name and "total" not in name.lower():
+            eligible_products.add(name.strip())
+
+    max_actions = min(5, len(eligible_products))
+    
+
+    # ===============================
     # PAYLOAD (unchanged)
     # ===============================
     payload = {
@@ -1784,7 +1854,8 @@ inventory_signals[sku] may include:
 GOAL
 Produce:
 1) A short overall business summary (3–5 bullets)
-2) Exactly 5 detailed SKU-wise recommendations.
+2) Exactly {max_actions} detailed SKU-wise recommendations.
+
 
 ====================
 SUMMARY (3–5 bullets)
@@ -1812,22 +1883,25 @@ IMPORTANT (SUMMARY ONLY):
 
 
 ====================
-ACTIONS (exactly 5)
+ACTIONS (exactly {max_actions})
 ====================
 
 Pick SKUs only from:
 - sku_tables.top_80_skus
 - sku_tables.new_reviving_skus
 
-Return EXACTLY 5 action bullets.
+Return EXACTLY {max_actions} action bullets.
+
 
 ✅ EACH action bullet MUST follow this exact layout with line breaks:
 
 Line 1: "Product name - <product_name>"
 Line 2-3: One paragraph of exactly 2 sentences (metrics + causal chain + mix)
 Line 4: (blank line)
-Line 5: One action sentence ONLY
-Line 6 (OPTIONAL): ONE inventory alert sentence ONLY IF inventory_signals[sku] indicate an issue
+Line 5: One PRIMARY action sentence ONLY
+Line 6 (OPTIONAL): One SECONDARY strategy sentence ONLY IF a clear trade-off exists (rank vs margin)
+Line 7 (OPTIONAL): ONE inventory alert sentence ONLY IF inventory_signals[sku] indicate an issue
+
 
 So the action_bullet string must look like:
 Product name - Classic
@@ -1835,6 +1909,7 @@ Product name - Classic
 The increase in ASP by 13.27% resulted in a dip in units by 25.91%, which also resulted in sales falling by 16.08%. The sales mix is down by 15.93%, reducing its contribution, and profit is up by 10.74%.
 
 Reduce ASP slightly to improve traction.
+If your objective is to boost rank, you may continue with the current pricing setup but monitor performance closely.
 Inventory: Initiate inventory replenishment as current cover is below lead time.
 
 -----------------------------
@@ -1863,10 +1938,63 @@ Metrics paragraph rules (Line 2-3)
 - Do NOT invent numbers and do NOT add extra reasons.
 
 -----------------------------
-Inventory alert rules (Line 6 ONLY, OPTIONAL)
+ACTION DECISION RULES (CRITICAL)
+-----------------------------
+
+PRICING PRIORITY RULE:
+- If absolute ASP change is greater than 10% (increase or decrease),
+  pricing must be treated as the PRIMARY driver.
+- In such cases:
+  ❌ Do NOT recommend ads or visibility actions.
+  ✅ Prefer ASP-related actions or monitoring actions.
+
+MARGIN PROTECTION RULE:
+- If units are up but profit is down,
+  do NOT suggest further ASP reduction.
+- Prefer:
+  - "Increase ASP slightly to strengthen margins."
+  - OR "Monitor performance closely for now."
+
+PRICE RESISTANCE RULE:
+- If ASP is up AND units and sales are both down,
+  interpret this as price resistance.
+- Do NOT attribute decline to ads or visibility.
+- Prefer ASP reduction or monitoring actions.
+
+ADS / VISIBILITY ELIGIBILITY RULE:
+- Ads or visibility actions may be suggested ONLY IF:
+  - ASP change is within ±5%
+  AND
+  - Units and sales are down.
+
+GROWTH STABILITY RULE:
+- If units, sales, and profit are all growing strongly (>30%),
+  prefer:
+  - "Maintain current ASP and monitor performance."
+
+SECONDARY STRATEGY RULE (MANDATORY, RANK-ONLY):
+
+- A SECONDARY strategy sentence MUST be included IF AND ONLY IF:
+  - Units are UP (positive unit growth)
+  AND
+  - ASP and Units are moving in opposite directions
+  AND
+  - SKU-level Profit (%) is NEGATIVE.
+
+- If any of the above conditions are NOT met, DO NOT add a secondary strategy sentence.
+
+- When the rule is triggered, use ONLY this sentence:
+  "If your objective is to boost rank, you may continue with the current pricing setup but monitor performance closely."
+
+
+
+
+
+-----------------------------
+Inventory alert rules (Line 7 ONLY, OPTIONAL)
 -----------------------------
 - NEVER create a separate bullet for inventory.
-- Inventory sentence must start with "⚠ Inventory:".
+- Inventory sentence must start with "Inventory:".
 - If no inventory issue exists, DO NOT add Line 6.
 - Do NOT repeat product name.
 - Do NOT mention inventory anywhere else.
@@ -1884,7 +2012,16 @@ Use exactly ONE of these sentences, verbatim:
 - "Check Amazon fees or taxes for this product as profit is down despite growth."
 
 -----------------------------
-Allowed inventory alerts (Line 6 only, OPTIONAL)
+Allowed secondary strategy sentences (Line 6 only, OPTIONAL)
+-----------------------------
+Use exactly ONE of these sentences, verbatim:
+- "If your objective is to boost rank, you may continue with the current pricing setup but monitor performance closely."
+
+
+
+
+-----------------------------
+Allowed inventory alerts (Line 7 only, OPTIONAL)
 -----------------------------
 - "Inventory: Initiate inventory replenishment as current cover is below lead time."
 - "Inventory: Push promotions or ads to clear around <aged_units> units of aged inventory and reduce storage costs."
@@ -1914,8 +2051,9 @@ DATA
                         "Return only valid JSON. "
                         "You are a senior ecommerce analyst. "
                         "Return only valid JSON with summary_bullets and action_bullets. "
-                        "Each action_bullet must follow the exact 3-block layout: "
-                        "Product name line, blank line, 2-sentence metrics paragraph, blank line, one action line."
+                        "Each action_bullet must follow the exact layout: "
+                        "Product name line, blank line, 2-sentence metrics paragraph, blank line, "
+                        "one primary action line, optional secondary strategy line, optional inventory line."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -1929,26 +2067,52 @@ DATA
         
         def _fix_action_bullet_format(s: str) -> str:
             """
-            Ensures Inventory line is on a new line
-            and always AFTER the action sentence.
+            Ensures:
+            - Metrics stay together
+            - Primary action first
+            - Secondary strategy next (if any)
+            - Inventory always last
             """
 
             if not s:
                 return s
 
-            # 1️⃣ Force newline before Inventory
-            s = s.replace(".Inventory:", ".\n\n⚠ Inventory:")
-            s = s.replace(" Inventory:", "\n\n⚠ Inventory:")
+            # Normalize Inventory line
+            s = s.replace(".Inventory:", ".\n\nInventory:")
+            s = s.replace("Inventory:", "\n\nInventory:")
 
-            # 2️⃣ Ensure Inventory comes AFTER action line
             lines = [l.strip() for l in s.split("\n") if l.strip()]
+            if not lines:
+                return s
 
             product = lines[0]
             rest = lines[1:]
 
-            inventory = [l for l in rest if l.lower().startswith("⚠ inventory")]
-            action = [l for l in rest if l.lower().startswith(("check ", "review ", "reduce ", "increase ", "maintain ", "monitor "))]
-            metrics = [l for l in rest if l not in inventory and l not in action]
+            inventory = [
+                l for l in rest
+                if l.lower().startswith("inventory")
+            ]
+
+            primary_action = [
+                l for l in rest
+                if l.lower().startswith(
+                    ("check ", "review ", "reduce ", "increase ", "maintain ", "monitor ")
+                )
+            ]
+
+            secondary_action = [
+                l for l in rest
+                if l.lower().startswith(
+                    ("if your objective", "if maintaining")
+                )
+            ]
+
+            metrics = [
+                l for l in rest
+                if l not in inventory
+                and l not in primary_action
+                and l not in secondary_action
+            ]
 
             final_lines = [product, ""]
 
@@ -1956,8 +2120,11 @@ DATA
                 final_lines.append(" ".join(metrics))
                 final_lines.append("")
 
-            if action:
-                final_lines.append(action[0])
+            if primary_action:
+                final_lines.append(primary_action[0])
+
+            if secondary_action:
+                final_lines.append(secondary_action[0])
 
             if inventory:
                 final_lines.append(inventory[0])
@@ -1965,13 +2132,33 @@ DATA
             return "\n".join(final_lines)
 
 
+        # ===============================
+        # ENFORCE UNIQUE PRODUCTS + MAX ACTIONS
+        # ===============================
+        unique_actions = []
+        seen_products = set()
+
+        for b in parsed.get("action_bullets", []):
+            text = str(b)
+            first_line = text.split("\n")[0].strip().lower()
+
+            if first_line in seen_products:
+                continue
+
+            seen_products.add(first_line)
+            unique_actions.append(_fix_action_bullet_format(text))
+
+            if len(unique_actions) == max_actions:
+                break
+
         return {
-        "summary_bullets": [str(b).strip() for b in parsed.get("summary_bullets", [])][:5],
-        "action_bullets": [
-            _fix_action_bullet_format(str(b))
-            for b in parsed.get("action_bullets", [])
-        ][:5],
-    }
+            "summary_bullets": [
+                str(b).strip()
+                for b in parsed.get("summary_bullets", [])
+            ][:5],
+            "action_bullets": unique_actions,
+        }
+
 
     except Exception as e:
         print("[ERROR] AI summary generation failed, falling back:", e)
