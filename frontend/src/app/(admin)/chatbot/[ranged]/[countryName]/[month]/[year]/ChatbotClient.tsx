@@ -386,17 +386,17 @@ function convertPlainTextToMarkdown(text: string): string {
   return (
     <div className="flex flex-col bg-white font-[Lato] chatbot-container h-full ">
       <div className="text-white bg-gradient-to-r from-[#5ea68e] to-[#37455f] rounded-t-xl message-header py-[2vw] px-[2vw] md:py-[2vw] md:px-[3.5vw] lg:py-[1vw] lg:px-[1.25vw]">
-        <h1 className="text-base sm:text-lg md:text-xl lg:text-[1.625rem] font-bold">
+        <h1 className="2xl:text-2xl text-[18px] font-bold">
           Hi <i>{userData?.company_name?.split(' ')[0] || 'User'}!</i>
         </h1>
-        <p style={{ fontFamily: "Lato, sans-serif" }} className="text-xs sm:text-sm md:text-base  mt-1 ">
+        <p style={{ fontFamily: "Lato, sans-serif" }} className="2xl:text-sm text-xs  mt-1 ">
         I'm your Analytics Assistant, here to help you understand your business data, generate insights, and make informed decisions. What would you like to explore today?
         </p>
       </div>
 
       <div className="flex-1 border border-black/25 rounded-b-xl chat-container flex flex-col">
         {/* Chat messages container */}
-        <div ref={scrollRef} className="w-full mx-auto h-[63vh] sm:h-[65vh] lg:h-[60vh] 2xl:h-[65vh] overflow-y-auto p-3">
+        <div ref={scrollRef} className="w-full mx-auto h-[63vh] sm:h-[65vh] lg:h-[60vh] 2xl:h-[65vh] overflow-y-auto 2xl:p-3 p-1">
           {/* Bottom-anchoring wrapper: keeps content at the bottom until it overflows */}
           <div className="min-h-full flex flex-col justify-end space-y-3">
             {validMessages.length > 0 ? (
@@ -414,7 +414,7 @@ function convertPlainTextToMarkdown(text: string): string {
   >
                     <div className="flex flex-col mx-4">
                       <div
-                        className={`px-4 py-2 rounded-2xl text-xs sm:text-sm md:text-[0.75] lg:text-[0.875rem] break-words max-w-full sm:max-w-[50vw] md:max-w-[50vw] lg:max-w-full ${msg.sender === 'user' ? 'bg-[#5EA68E] text-[#F8EDCE] mb-2' : 'bg-[#D9D9D9] text-gray-800 mb-1'}`}
+                        className={`px-4 2xl:py-2 py-1 rounded-2xl text-xs sm:text-sm md:text-[0.75] lg:text-[0.875rem] break-words max-w-full sm:max-w-[50vw] md:max-w-[50vw] lg:max-w-full ${msg.sender === 'user' ? 'bg-[#5EA68E] text-[#F8EDCE] mb-2' : 'bg-[#D9D9D9] text-gray-800 mb-1'}`}
                       >
                         {msg.sender !== 'user' && msg.text ? (
                           (() => {
@@ -585,9 +585,9 @@ return (
 
         {/* Input area */}
 
-        <div className="border-t border-gray-200 p-2 sm:p-3 md:p-4 flex flex-col gap-2">
+        <div className="border-t border-gray-200 p-2 sm:p-2 2xl:p-4 flex flex-col gap-2">
           <div className="flex items-center gap-4">
-            <div className="flex-1 flex items-center bg-[#D9D9D9] rounded-full px-3 py-3">
+            <div className="flex-1 flex items-center bg-[#D9D9D9] rounded-full px-3 2xl:py-3 py-2">
               <input
                 type="text"
                 value={inputValue}
@@ -615,7 +615,7 @@ return (
             <Delete className="cursor-pointer mr-2 mt-1" onClick={clearChat} />
            
           </div>
-         <p className='md:text-xs text-[10px] flex justify-center items-center text-center text-gray-400'>Responses are AI-generated and may contain inaccuracies.Please verify critical information before use.</p>
+         <p className='2xl:text-xs text-[10px] flex justify-center items-center text-center text-gray-400'>Responses are AI-generated and may contain inaccuracies.Please verify critical information before use.</p>
         </div>
       </div>
     </div>

@@ -480,7 +480,7 @@ const urlYear = (params?.year as string) || '';
 
   return (
     <div className='flex flex-col gap-8'>
-      <h2 style={{ marginBottom: 10, color: '#414042' }} className='text-2xl text-[#414042] font-bold'>
+      <h2 style={{ marginBottom: 10, color: '#414042' }} className='2xl:text-2xl text-lg text-[#414042] font-bold'>
         P &amp; L Forecast -{' '}
         <span style={{ color: '#60a68e' }}>
         {countryName.toUpperCase()}  ({formatMonthYear(currentMonth, currentYear)} to {formatMonthYear(nextToNextMonth, nextToNextMonthYear)} )

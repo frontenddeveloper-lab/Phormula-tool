@@ -289,7 +289,7 @@ export default function InventoryForecastPage() {
   // -------------- Render --------------
   return (
   
-  <div className="p-4">
+  <div className="">
     <style>{`
       .alert-container {
         display: flex; align-items: center; background-color: #f2f2f2;
