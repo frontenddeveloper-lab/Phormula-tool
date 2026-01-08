@@ -66,7 +66,7 @@ def agg_by(df: pd.DataFrame, by_col: str, cols: List[str]) -> pd.DataFrame:
 # Sales (UK) = product_sales + promotional_rebates + other
 def uk_sales(df: pd.DataFrame, *, country: Optional[str] = None,
              want_breakdown: Optional[bool] = None, **kwargs) -> Tuple[float, pd.DataFrame, List[str]]:
-    parts = ["product_sales", "promotional_rebates", "other"]
+    parts = ["product_sales", "promotional_rebates"]
 
     # Totals use ALL rows (UK scope keeps all rows)
     totals = [safe_num(df.get(c, 0.0)).sum() for c in parts]
@@ -245,9 +245,9 @@ def uk_profit(df: pd.DataFrame, *, country: str | None = None,
 
     # UK sign rules
     per["__metric__"] = (
-        per["sales"].abs()
+          per["sales"].abs()
         + per["credits"].abs()
-        + abs(per["taxes"])
+        - (per["taxes"])
         - per["amazon_fee"]          # already positive metric
         - safe_num(per["cost"]).abs()
     )
@@ -444,6 +444,3 @@ __all__ = [
     "uk_sales", "uk_tax", "uk_credits", "uk_amazon_fee", "uk_profit",
     "uk_all",
 ]
-
-
-#  gfgfhnjfgn fjk
