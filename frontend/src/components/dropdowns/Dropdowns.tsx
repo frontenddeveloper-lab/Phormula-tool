@@ -1183,9 +1183,16 @@ setAiPanel({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Summary */}
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-sm font-semibold text-charcoal-500 mb-2">
+            {/* <div className="text-sm font-semibold text-charcoal-500 mb-2">
               Month-end Business Summary
-            </div>
+            </div> */}
+<PageBreadcrumb
+              pageTitle="Month-end Business Summary"
+              variant="page"
+              align="left"
+              textSize="2xl"
+            />
+
 
             {showLoading ? (
               <div className="text-xs text-charcoal-500">Loading…</div>
@@ -1216,9 +1223,15 @@ setAiPanel({
 
           {/* Recommendations */}
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="text-sm font-semibold text-charcoal-500 mb-2">
+            {/* <div className="text-sm font-semibold text-charcoal-500 mb-2">
               Recommendations
-            </div>
+            </div> */}
+            <PageBreadcrumb
+              pageTitle="Recommendations"
+              variant="page"
+              align="left"
+              textSize="2xl"
+            />
 
             {showLoading ? (
               <div className="text-xs text-charcoal-500">Loading…</div>
