@@ -3512,7 +3512,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
             <div className="overflow-x-auto rounded-xl border border-gray-300">
               <table className="w-full table-auto border-collapse">
                 <thead>
-                  <tr className="bg-[#ff5c5c] font-bold text-[#f8edcf]">
+                  <tr className="bg-[#B75A5A] font-bold text-[#f8edcf]">
                     <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
                       Product Name
                     </th>

@@ -1501,7 +1501,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 </div>
 
                 {/* Cost of Advertisement */}
-                <div className="w-full rounded-2xl border border-[#A78BFA] bg-[#A78BFA26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#C49466] bg-[#C494664D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">Cost of Advertisement</span>
                   </div>
@@ -1512,7 +1512,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 </div>
 
                 {/* ROAS */}
-                <div className="w-full rounded-2xl border border-[#10B981] bg-[#10B98126] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#3A8EA4] bg-[#3A8EA44D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">TACoS</span>
                   </div>
@@ -1525,7 +1525,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
 
                 {/* CM2 Profit */}
-                <div className="w-full rounded-2xl border border-[#2DA49A] bg-[#2DA49A26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#B8C78C] bg-[#B8C78C4D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">CM2 Profit</span>
                   </div>

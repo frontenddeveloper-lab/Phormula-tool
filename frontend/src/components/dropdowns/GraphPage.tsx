@@ -409,12 +409,12 @@ const GraphPage: React.FC<GraphPageProps> = ({
       const colorMap: Record<string, string> = {
         sales: "#75BBDA",
         AmazonExpense: "#B75A5A",
-        taxncredit: "#C49466",
+        taxncredit: "#ED9F50",
         total_cous: "#FDD36F",
-        profit: "#2DA49A",
-        advertisingCosts: "#ED9F50",
-        Other: "#00627D",
-        profit2: "#87AD12",
+        profit: "#B8C78C",
+        advertisingCosts: "#C49466",
+        Other: "#3A8EA4",
+        profit2: "#7B9A6D",
       };
 
       const datasets = Object.entries(selectedGraphs)
@@ -682,11 +682,11 @@ const GraphPage: React.FC<GraphPageProps> = ({
               { name: "sales", label: "Net Sales", color: "#75BBDA" },
               { name: "total_cous", label: "COGS", color: "#FDD36F" },
               { name: "AmazonExpense", label: "Amazon Fees", color: "#B75A5A" },
-              { name: "taxncredit", label: "Taxes & Credits", color: "#C49466" },
-              { name: "profit2", label: "CM1 Profit", color: "#87AD12" },
-              { name: "advertisingCosts", label: "Advertising Costs", color: "#ED9F50" },
+              { name: "taxncredit", label: "Taxes & Credits", color: "#ED9F50" },
+              { name: "profit2", label: "CM1 Profit", color: "#7B9A6D" },
+              { name: "advertisingCosts", label: "Advertising Costs", color: "#C49466" },
               { name: "Other", label: "Other", color: "#3A8EA4" },
-              { name: "profit", label: "CM2 Profit", color: "#2DA49A" },
+              { name: "profit", label: "CM2 Profit", color: "#B8C78C" },
             ].map(({ name, label, color }) => {
               const isChecked = !!selectedGraphs[name];
 

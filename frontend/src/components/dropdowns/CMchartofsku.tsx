@@ -150,11 +150,7 @@ const CMchartofsku: React.FC<CmChartOfSkuProps> = ({
       {
         data: [25, 30, 20, 15, 10],
         backgroundColor: [
-          "#FDD36F",
-          "#5EA49B",
-          "#ED9F50",
-          "#00627D",
-          "#87AD12",
+          "#FDD36F", "#B75A5A", "#ED9F50", "#C49466", "#3A8EA4", "#B8C78C"
         ],
         borderWidth: 1,
       },
@@ -233,7 +229,7 @@ const CMchartofsku: React.FC<CmChartOfSkuProps> = ({
             datasets: [
               {
                 data: values,
-                backgroundColor: ["#FDD36F", "#5EA49B", "#ED9F50", "#00627D", "#87AD12", "#D35400"],
+                backgroundColor: ["#FDD36F", "#B75A5A", "#ED9F50", "#C49466", "#3A8EA4", "#B8C78C"],
                 borderWidth: 0,
                 borderColor: "transparent",
                 spacing: 0,

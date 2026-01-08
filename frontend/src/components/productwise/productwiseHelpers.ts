@@ -669,14 +669,14 @@ export const formatCurrencyByCountry = (countryOrKey: string, value: number) => 
 export const getCountryColor = (country: CountryKey) => {
   const lower = (country || "").toLowerCase();
   const colors: Record<string, string> = {
-    uk: "#AB64B5",
-    us: "#87AD12",
-    ca: "#0EA5E9",
-    global: "#F47A00",
-    global_gbp: "#F47A00",
-    global_inr: "#F47A00",
-    global_cad: "#F47A00",
-    global_usd: "#F47A00",
+    uk: "#7B9A6D",
+    us: "#3A8EA4",
+    ca: "#FDD36F",
+    global: "#ED9F50",
+    global_gbp: "#ED9F50",
+    global_inr: "#ED9F50",
+    global_cad: "#ED9F50",
+    global_usd: "#ED9F50",
   };
   return colors[lower] || "#ff7c7c";
 };
