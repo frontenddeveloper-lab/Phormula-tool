@@ -173,6 +173,17 @@ METRIC_COLUMNS = {
     "cm2_profit",
 }
 
+PERCENTAGE_COLUMNS = {
+    "acos",
+    "profit_percentage",
+    "cm2_profit_percentage",
+    "promotional_rebates_percentage",
+    "unit_wise_profitability",
+    "sales_mix",
+    "profit_mix",
+}
+
+
 def get_metric_columns(df: pd.DataFrame) -> list[str]:
     return [c for c in df.columns if c.lower() in METRIC_COLUMNS]
 
@@ -185,8 +196,6 @@ def compute_sku_precalc(df: pd.DataFrame) -> dict:
         return {}
 
     num_cols = get_metric_columns(df)
-
-
     other_cols = [c for c in df.columns if c not in num_cols and c != "sku"]
 
     agg = {c: "sum" for c in num_cols}
@@ -198,16 +207,31 @@ def compute_sku_precalc(df: pd.DataFrame) -> dict:
     out = {}
     for _, r in g.iterrows():
         sku = str(r["sku"])
-        out[sku] = {}
+
+        # ✅ product_name fallback logic
+        raw_name = r.get("product_name")
+        product_name = (
+            str(raw_name).strip()
+            if raw_name not in [None, "", "0", 0]
+            else sku
+        )
+
+        out[sku] = {
+            "product_name": product_name  # 👈 ADD THIS
+        }
+
         for col in g.columns:
-            if col == "sku":
+            if col in ["sku", "product_name"]:
                 continue
+
             val = r[col]
             if isinstance(val, (int, float)) and pd.notna(val):
                 out[sku][col.lower()] = round(float(val), 2)
             else:
                 out[sku][col.lower()] = None if pd.isna(val) else val
+
     return out
+
 
 
 
@@ -252,13 +276,13 @@ def build_inventory_alerts(df: pd.DataFrame) -> dict:
 
     alerts = {}
 
-    # ---------------- EXPIRED INVENTORY ----------------
-    expired_df = df[df["age_365_plus"] > 0]
-    if not expired_df.empty:
-        alerts["expired_inventory"] = {
-            "total_units": int(expired_df["age_365_plus"].sum()),
+    # ---------------- LONG-TERM AGED INVENTORY (365+ DAYS) ----------------
+    long_term_aged_df = df[df["age_365_plus"] > 0]
+    if not long_term_aged_df.empty:
+        alerts["long_term_aged_inventory"] = {
+            "total_units": int(long_term_aged_df["age_365_plus"].sum()),
             "top_skus": (
-                expired_df
+                long_term_aged_df
                 .groupby("sku")["age_365_plus"]
                 .sum()
                 .sort_values(ascending=False)
@@ -267,7 +291,7 @@ def build_inventory_alerts(df: pd.DataFrame) -> dict:
             )
         }
 
-    # ---------------- CRITICALLY AGED (181+ DAYS) ----------------
+    # ---------------- CRITICALLY AGED INVENTORY (181–365 DAYS) ----------------
     df["aged_181_plus"] = df["age_181_270"] + df["age_271_365"]
     aged_critical = df[df["aged_181_plus"] > 0]
 
@@ -313,35 +337,63 @@ def build_inventory_alerts(df: pd.DataFrame) -> dict:
 
 
 
+
 def compare_sku_metrics(current: dict, previous: dict) -> dict:
     output = {}
 
     all_skus = set(current.keys()) | set(previous.keys())
 
     for sku in all_skus:
-        curr_metrics = current.get(sku, {})
-        prev_metrics = previous.get(sku, {})
+        curr = current.get(sku, {})
+        prev = previous.get(sku, {})
 
         sku_out = {}
-        all_metrics = set(curr_metrics.keys()) | set(prev_metrics.keys())
 
-        for metric in all_metrics:
-            curr_val = float(curr_metrics.get(metric, 0.0))
-            prev_val = float(prev_metrics.get(metric, 0.0))
+        # ---------------- ADDITIVE METRICS ----------------
+        for metric in METRIC_COLUMNS:
+            if metric not in curr and metric not in prev:
+                continue
 
-            delta = curr_val - prev_val
-            pct = (delta / prev_val * 100) if prev_val != 0 else None
+            try:
+                new = float(curr.get(metric, 0.0) or 0.0)
+                old = float(prev.get(metric, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+
+            delta = new - old
+            pct = (delta / old * 100) if old != 0 else None
 
             sku_out[metric] = {
-                "current": round(curr_val, 2),
-                "previous": round(prev_val, 2),
+                "current": round(new, 2),
+                "previous": round(old, 2),
                 "delta": round(delta, 2),
                 "delta_pct": round(pct, 2) if pct is not None else None
+            }
+
+        # ---------------- PERCENTAGE METRICS ----------------
+        for metric in PERCENTAGE_COLUMNS:
+            if metric not in curr and metric not in prev:
+                continue
+
+            try:
+                new = float(curr.get(metric))
+                old = float(prev.get(metric))
+            except (TypeError, ValueError):
+                continue
+
+            delta = new - old
+
+            sku_out[metric] = {
+                "current": round(new, 2),
+                "previous": round(old, 2),
+                "delta": round(delta, 2),   # ✅ percentage-point change
+                "delta_pct": None           # ❌ intentionally skipped
             }
 
         output[sku] = sku_out
 
     return output
+
 
 
 
@@ -380,18 +432,240 @@ def resolve_comparison(period, timeline, year):
 
     raise ValueError("Invalid period")
 
+AI_SYSTEM_PROMPT = """
+You are a senior ecommerce performance analyst.
+
+You receive structured JSON data containing:
+- Overall MoM metrics (month-over-month)
+- Overall YoY metrics (year-over-year, optional)
+- SKU-level MoM comparisons
+- SKU-level YoY comparisons
+- Inventory alerts per SKU (optional)
+
+IMPORTANT DATA RULES:
+- All numbers are pre-calculated
+- Percentage values represent percentage points (delta = current − previous)
+- Do NOT recompute, infer, or validate numbers
+- Do NOT convert percentages into growth rates
+- Do NOT produce paragraphs
+
+PERCENTAGE FORMATTING RULE:
+- Always append "%" when mentioning percentage values.
+- Do NOT output raw numeric deltas without "%" for growth or change metrics.
+
+CURRENCY RULE:
+- Use the symbol provided in user_context.currency_symbol for all monetary values.
+- Do NOT spell out currency names (GBP, USD).
+- Do NOT infer or guess currency from country names.
+- If currency_symbol is empty, omit the symbol.
+- Never omit the currency symbol when it is provided.
+
+METRIC INTERPRETATION RULES (CRITICAL):
+- The following metrics DO NOT have product-level meaning and must be treated as OVERALL ONLY:
+  platform_fee, platformfeenew, platform_fee_inventory_storage,
+  visible_ads, dealsvouchar_ads, advertising_total,
+  cm2_profit, cm2_profit_percentage, acos
+- Never attribute the above metrics to individual SKUs in insights or actions.
+
+ACOS SUMMARY RULE (CRITICAL):
+- ACOS must be mentioned ONLY in the SUMMARY section.
+- Treat ACOS strictly as an OVERALL efficiency metric.
+- Describe ACOS movement using percentage points (e.g., "ACOS increased by 2.4 points").
+- Use MoM language for monthly/quarterly periods and YoY language for yearly periods.
+- Do NOT describe ACOS as growth or decline in percentage terms.
+- Do NOT mention ACOS in SKU INSIGHTS, RECOMMENDATIONS, or INVENTORY sections.
+
+QUANTITY DEFINITIONS:
+- quantity = gross units shipped
+- return_quantity = units returned
+- total_quantity = net units sold
+- quantity = total_quantity + return_quantity
+- Use total_quantity when referring to actual units sold.
+- Do NOT imply returns are additional sales.
+
+REIMBURSEMENT LOGIC:
+- lost_total represents reimbursements received from Amazon for lost inventory.
+- Treat this as cost recovery or credit.
+- Do NOT describe lost_total as a loss or negative event.
+
+SPECIAL SKU LOGIC:
+- If a SKU appears in MoM data but NOT in YoY data, treat it as a **New / Reviving SKU**
+- Explicitly call this out in insights or actions
+
+NEW / REVIVING SKU YoY RULE (CRITICAL):
+- For any SKU labeled as **New / Reviving SKU**:
+  - YoY comparison is NOT APPLICABLE.
+  - Do NOT mention YoY percentages, YoY growth, or YoY trends.
+  - Only describe MoM performance or absolute contribution.
+  - Never write phrases like "MoM and YoY" for these SKUs.
+
+DISPLAY NAME RULE (CRITICAL):
+- Always use product_name when available.
+- If product_name is missing, blank, null, or "0", fall back to SKU.
+- Never display raw SKU if a valid product_name exists.
+- The first bolded text in SKU INSIGHTS MUST always be product_name.
+
+TIME COMPARISON LOGIC (CRITICAL):
+- If the period is MONTHLY or QUARTERLY:
+  - Use MoM as the primary comparison.
+  - Include YoY only if YoY data is present.
+- If the period is YEARLY:
+  - Treat ALL comparisons as YoY.
+  - Do NOT mention MoM anywhere in SUMMARY or SKU INSIGHTS.
+  - Replace MoM language with YoY language (e.g., "up YoY", "down YoY").
+
+GOAL:
+Produce a concise monthly performance output with:
+1) A short overall summary
+2) Key SKU-level insights
+3) Clear, limited actions
+
+====================
+OUTPUT FORMAT (MARKDOWN ONLY)
+====================
+
+## SUMMARY
+(4–6 bullets ONLY)
+
+- Summarize overall movement in **net units sold (total_quantity), net sales, and profit**
+  (Use MoM for monthly/quarterly periods, YoY for yearly periods)
+- Clearly state whether growth/decline is **volume-led, cost-led, or margin-led**
+- Call out **major overall cost drivers** if they materially impacted profit
+- Include ACOS movement (percentage-point change) if ACOS data exists
+- If both MoM and YoY exist (non-yearly only), include exactly 1 bullet comparing MoM vs YoY trend
+- Use short bullets, no sub-bullets, no paragraphs
+
+---
+
+## SKU INSIGHTS
+(5–7 bullets ONLY)
+
+Each bullet must:
+- Start with **Product name**
+- Mention **1–2 key SKU-level metrics only** (units sold, net sales, profit, ASP)
+- Clearly state direction (up/down/flat)
+- If SKU is New / Reviving, explicitly label it:
+  **“(New / Reviving SKU)”**
+
+When describing SKU performance:
+- Always include percentage values when available
+- Use MoM percentages for monthly/quarterly periods
+- Use YoY percentages for yearly periods
+- Do NOT mix MoM and YoY for the same metric
+- Do NOT invent percentages if data is missing
+
+Example structure:
+- **Product Name**: Sales up 18% MoM driven by unit growth, but profit declined due to higher costs.
+- **Product Name (New / Reviving SKU)**: Strong MoM sales contribution with improving margins.
+
+Do NOT:
+- Mention inventory here
+- Mention platform fees, advertising totals, ACOS, CM2, or ROAS here
+- Use long explanations
+
+---
+
+## RECOMMENDATIONS
+(3–5 bullets ONLY)
+
+Rules:
+- Actions must be **specific and actionable**
+- Each bullet should clearly map to **pricing, cost control, ads, or inventory**
+- Actions should be driven by SKU-level behavior OR clear overall trends
+- Do NOT restate metrics
+- Do NOT include generic advice
+
+Examples of valid actions:
+- Reduce ASP slightly on low-margin SKUs showing unit decline.
+- Monitor pricing on fast-growing SKUs to protect margin.
+- Review ad spend on SKUs where profit declined despite sales growth.
+
+---
+
+## INVENTORY
+(ONLY if inventory_alerts exist)
+
+- Use bullets
+- One SKU per bullet
+- Start each bullet with **Inventory – Product name**
+- Mention the issue and the consequence (cost, risk, or blockage)
+- Do NOT suggest pricing or ad actions here
+
+---
+
+CRITICAL OUTPUT RULES:
+- You MUST use the exact heading "## SUMMARY" for the summary section.
+- You MUST use the exact heading "## RECOMMENDATIONS" for the recommendations section.
+- Do NOT rename, reword, or omit these headings.
+- If allow_recommendations is false, DO NOT include the "## RECOMMENDATIONS" section at all.
+
+---
+
+TONE & STYLE RULES:
+- Business-focused
+- Concise
+- No storytelling
+- No speculation
+- No emojis
+- No filler language
+
+Return ONLY Markdown.
+Do NOT return JSON.
+"""
+
+
+
+
 
 def generate_ai_summary(payload, allow_recommendations):
-    summary = f"Summary generated for {payload['period']}."
+    user_prompt = {
+        "period": payload["period"],
+        "instructions": {
+            "allow_recommendations": allow_recommendations
+        },
+        "user_context": {
+        "currency_symbol": "£" if payload.get("country") == "uk" else "$" if payload.get("country") == "us" else ""
+        },
+
+        "overall_mom": payload["mom"],
+        "overall_yoy": payload.get("yoy"),
+        "sku_mom": payload.get("sku_mom"),
+        "sku_yoy": payload.get("sku_yoy"),
+        "inventory_lost": payload.get("inventory_lost"),
+        "inventory_alerts": payload.get("inventory_alerts"),
+    }
+
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    response = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[
+            {"role": "system", "content": AI_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(user_prompt, indent=2)
+            }
+        ],
+        temperature=0.3
+    )
+
+    ai_text = response.choices[0].message.content.strip()
+
+    # split summary vs recommendations
+    summary = ai_text
     recommendations = None
 
-    if allow_recommendations:
-        recommendations = "Action items generated."
+    if allow_recommendations and "## RECOMMENDATIONS" in ai_text:
+        parts = ai_text.split("## RECOMMENDATIONS", 1)
+        summary = parts[0].strip()
+        recommendations = parts[1].strip()
 
     return {
         "summary": summary,
         "recommendations": recommendations
     }
+
+
 
 
 def get_or_create_summary(
