@@ -10,6 +10,10 @@ import DownloadIconButton from "../ui/button/DownloadIconButton";
 import { FaCaretLeft, FaCaretRight } from "react-icons/fa";
 import Tooltip from "./Tooltip";
 import { SkuExportPayload } from "@/lib/utils/exportTypes";
+import GroupedCollapsibleTable, {
+  ColGroup,
+  LeafCol,
+} from "../ui/table/GroupedCollapsibleTable";
 
 /* ---------- Types ---------- */
 
@@ -43,8 +47,6 @@ type TableRow = {
   profit?: number;
   profit_percentage?: number;
   unit_wise_profitability?: number;
-
-  // totals row optional fields
   platform_fee?: number;
   rembursement_fee?: number;
   advertising_total?: number;
@@ -54,20 +56,40 @@ type TableRow = {
   cm2_margins?: number;
   acos?: number;
   rembursment_vs_cm2_margins?: number;
-
-  // sometimes API uses these
   Profit?: number;
   Net_Sales?: number;
-
-  // mix values used for top/bottom
   profit_mix?: number;
   sales_mix?: number;
+  total_quantity?: number;
+  gross_sales?: number;
+  refund_sales?: number;
+  tex_and_credits?: number;
+  promotional_rebates?: number;
+  promotional_rebates_percentage?: number;
+  misc_transaction?: number;
+  other_transaction_fees?: number;
+  units_sold?: number;             // will map from total_quantity (if units_sold not provided)
+  return_units?: number;           // map from return_units/Return/returns if present, else 0
+  net_units_sold?: number;         // units_sold - return_units
 };
 
 type Totals = {
-  platform_fee: number;
-  rembursement_fee: number;
   advertising_total: number;
+
+  // ✅ new ad breakup
+  visible_ads: number;          // "Visibility - Ads"
+  dealsvouchar_ads: number;     // "Visibility - Deals, Vouchers and Reviews"
+
+  // ✅ new transactions / fees
+  other_transactions: number;   // "Other Transactions" (derived)
+  platform_fee: number;         // "Platform Fees"
+  inventory_storage_fees: number;
+
+  // ✅ reimbursement (amount + optional units if backend provides)
+  reimbursement_lost_inventory_amount: number;
+  reimbursement_lost_inventory_units?: number;
+
+  // existing
   shipment_charges: number;
   reimbursement_vs_sales: number;
   cm2_profit: number;
@@ -77,6 +99,9 @@ type Totals = {
   profit: number;
   net_sales: number;
 };
+
+type GroupId = "units" | "amazonFees" | "others" | "cm1";
+
 
 type JwtPayload = {
   user_id?: string | number;
@@ -114,16 +139,30 @@ const capitalizeFirstLetter = (str: string) =>
 const convertToAbbreviatedMonth = (m?: string) =>
   m ? capitalizeFirstLetter(m).slice(0, 3) : "";
 
-const isMissingName = (name: unknown) =>
-  name === undefined || name === null || name === "" || name === "0" || (name as any) === 0;
+const isMissingName = (v: unknown) => {
+  if (v === undefined || v === null) return true;
 
-const getDisplayProductNameFromRow = (row: TableRow): string => {
-  const name = row.product_name;
-  if (!isMissingName(name)) return String(name);
-  if (row.sku !== undefined && row.sku !== null && row.sku !== "") return String(row.sku);
-  return "-";
+  if (typeof v === "number" && Number.isNaN(v)) return true;
+
+  const s = String(v).trim().toLowerCase();
+  return (
+    s === "" ||
+    s === "0" ||
+    s === "nan" ||
+    s === "none" ||
+    s === "null" ||
+    s === "undefined"
+  );
 };
 
+const toNumber = (v: any) => {
+  if (v === undefined || v === null || v === "") return 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+
+  // handle "1,234.56" strings etc.
+  const n = Number(String(v).replace(/,/g, "").trim());
+  return Number.isFinite(n) ? n : 0;
+};
 
 /* ---------- Component ---------- */
 
@@ -144,9 +183,15 @@ const SKUtable: React.FC<SKUtableProps> = ({
 
   const [tableData, setTableData] = useState<TableRow[]>([]);
   const [totals, setTotals] = useState<Totals>({
-    platform_fee: 0,
-    rembursement_fee: 0,
     advertising_total: 0,
+    visible_ads: 0,
+    dealsvouchar_ads: 0,
+    other_transactions: 0,
+    platform_fee: 0,
+    inventory_storage_fees: 0,
+    reimbursement_lost_inventory_amount: 0,
+    reimbursement_lost_inventory_units: 0,
+
     shipment_charges: 0,
     reimbursement_vs_sales: 0,
     cm2_profit: 0,
@@ -156,10 +201,11 @@ const SKUtable: React.FC<SKUtableProps> = ({
     profit: 0,
     net_sales: 0,
   });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showamazonfee, setshowamazonfee] = useState(false);
-  const [showprofit, setshowprofit] = useState(false);
+  // const [showamazonfee, setshowamazonfee] = useState(false);
+  // const [showprofit, setshowprofit] = useState(false);
   const [userData, setUserData] = useState<{ brand_name?: string; company_name?: string } | null>(
     null
   );
@@ -172,24 +218,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
     return (localStorage.getItem("homeCurrency") || "").toLowerCase();
   });
 
-  const isMissingName = (v: unknown) => {
-    if (v === undefined || v === null) return true;
 
-    // real NaN (number)
-    if (typeof v === "number" && Number.isNaN(v)) return true;
-
-    const s = String(v).trim().toLowerCase();
-
-    // treat these as missing
-    return (
-      s === "" ||
-      s === "0" ||
-      s === "nan" ||
-      s === "none" ||
-      s === "null" ||
-      s === "undefined"
-    );
-  };
 
   const getDisplayProductNameFromRow = (row: TableRow): string => {
     if (!isMissingName(row.product_name)) return String(row.product_name);
@@ -217,6 +246,105 @@ const SKUtable: React.FC<SKUtableProps> = ({
   const currencySymbol = isGlobalPage
     ? getCurrencySymbol(effectiveHomeCurrency || "usd")
     : getCurrencySymbol(countryName || "");
+
+  // find asp key (asp or ASP)
+  const aspKey = useMemo(() => {
+    const first = tableData[0] || {};
+    const k = Object.keys(first).find((key) => key.toLowerCase() === "asp");
+    return k as keyof TableRow | undefined;
+  }, [tableData]);
+
+
+  // ---- Columns config (Excel-like groups) ----
+  const LEFT_COLS: LeafCol<TableRow>[] = [
+    { key: "sno", label: "Sno.", align: "center" },
+    { key: "product_name", label: "Product Name", align: "left" },
+
+    // ✅ SKU column (rowSpan=2)
+    { key: "sku", label: "SKU", align: "left" },
+
+
+  ];
+
+  const GROUPS: ColGroup<TableRow>[] = [
+    {
+      id: "Net Units",
+      label: "Net Units Sold",
+      headerClassName: "bg-[#f8edcf] text-black",
+      collapsedCols: [{ key: "net_units_sold", label: "Net Units Sold", align: "center" }],
+      expandedCols: [
+        { key: "units_sold", label: "Units Sold", align: "center" },
+        { key: "return_units", label: "Return", align: "center" },
+        { key: "net_units_sold", label: "Net Units Sold", align: "center" },
+      ],
+    },
+    {
+      id: "amazonFees",
+      label: "Amazon Fees",
+      headerClassName: "bg-[#4a8773] text-[#f8edcf]",
+      collapsedCols: [{ key: "amazon_fee", label: "", align: "center" }],
+      expandedCols: [
+        { key: "selling_fees", label: "Selling Fees", align: "center" },
+        { key: "fba_fees", label: "FBA Fees", align: "center" },
+        { key: "amazon_fee", label: "Amazon Fees", align: "center" },
+      ],
+    },
+  ];
+
+  // const SINGLE_COLS: LeafCol<TableRow>[] = [
+  //   { key: "product_sales", label: "Gross Sales", align: "center" },
+  //   { key: "net_sales", label: "Net Sales", align: "center" },
+  //   { key: "cost_of_unit_sold", label: "COGS", align: "center" },
+  //   { key: "profit", label: "CM1 Profit", align: "center" },
+  //   { key: "quantity", label: "Quantity Sold", align: "center" },
+  //   { key: (aspKey ?? "asp") as string, label: "ASP", align: "center" },
+  // ];
+
+
+  const SINGLE_COLS: LeafCol<TableRow>[] = [
+    // ======================
+    // Sales
+    // ======================
+    { key: "product_sales", label: "Gross Sales", align: "center" },
+    { key: "refund_sales", label: "Sales - Refund", align: "center" },
+    { key: "net_sales", label: "Net Sales", align: "center" },
+
+    // ======================
+    // Units (mapped correctly)
+    // ======================
+    { key: "units_sold", label: "Units Sold", align: "center" },
+    { key: "return_units", label: "Return Units", align: "center" },
+    { key: "net_units_sold", label: "Net Units Sold", align: "center" },
+
+
+    // ======================
+    // Pricing / Cost
+    // ======================
+    { key: (aspKey ?? "asp") as string, label: "ASP", align: "center" },
+    { key: "cost_of_unit_sold", label: "COGS", align: "center" },
+
+    // ======================
+    // Taxes / Credits
+    // ======================
+    { key: "tex_and_credits", label: "Tax & Credits", align: "center" },
+    { key: "net_taxes", label: "Net Taxes", align: "center" },
+    { key: "net_credits", label: "Net Credits", align: "center" },
+
+    // ======================
+    // Misc / Other
+    // ======================
+    { key: "misc_transaction", label: "Misc.", align: "center" },
+    { key: "other_transaction_fees", label: "Other Transactions", align: "center" },
+
+    // ======================
+    // CM1 Metrics
+    // ======================
+    { key: "profit", label: "CM1 Profit", align: "center" },
+    { key: "profit_percentage", label: "CM1 Profit %", align: "center" },
+    { key: "unit_wise_profitability", label: "CM1 Profit / Unit", align: "center" },
+  ];
+
+
 
   const yearShort =
     typeof year === "string" ? year.toString().slice(-2) : String(year).slice(-2);
@@ -309,12 +437,12 @@ const SKUtable: React.FC<SKUtableProps> = ({
   ];
 
 
-const periodLabel =
-  range === "monthly"
-    ? `SKU-wise Profitability-${convertToAbbreviatedMonth(month)}'${yearShort}`
-    : range === "quarterly"
-      ? `SKU-wise Profitability-${quarter}'${yearShort}`
-      : `SKU-wise Profitability-Year'${yearShort}`;
+  const periodLabel =
+    range === "monthly"
+      ? `SKU-wise Profitability-${convertToAbbreviatedMonth(month)}'${yearShort}`
+      : range === "quarterly"
+        ? `SKU-wise Profitability-${quarter}'${yearShort}`
+        : `SKU-wise Profitability-Year'${yearShort}`;
 
 
   const CustomModal: React.FC<React.PropsWithChildren<{ onClose: () => void }>> = ({
@@ -336,36 +464,30 @@ const periodLabel =
     );
   };
 
-  // find asp key (asp or ASP)
-  const aspKey = useMemo(() => {
-    const first = tableData[0] || {};
-    const k = Object.keys(first).find((key) => key.toLowerCase() === "asp");
-    return k as keyof TableRow | undefined;
-  }, [tableData]);
 
   // columns visible (controlled by toggles)
-  const columnsToDisplay = useMemo(() => {
-    const cols: (keyof TableRow | string | false)[] = [
-      "product_name",
-      "quantity",
-      aspKey || "asp",
-      "product_sales",
-      "net_sales",
-      "cost_of_unit_sold",
-      "amazon_fee",
-      showamazonfee && "selling_fees",
-      showamazonfee && "fba_fees",
-      "net_credits",
-      "net_taxes",
-      "profit",
-      showprofit && "profit_percentage",
-      showprofit && "unit_wise_profitability",
-    ];
-    return cols.filter(Boolean) as (keyof TableRow | string)[];
-  }, [aspKey, showamazonfee, showprofit]);
+  // const columnsToDisplay = useMemo(() => {
+  //   const cols: (keyof TableRow | string | false)[] = [
+  //     "product_name",
+  //     "quantity",
+  //     aspKey || "asp",
+  //     "product_sales",
+  //     "net_sales",
+  //     "cost_of_unit_sold",
+  //     "amazon_fee",
+  //     showamazonfee && "selling_fees",
+  //     showamazonfee && "fba_fees",
+  //     "net_credits",
+  //     "net_taxes",
+  //     "profit",
+  //     showprofit && "profit_percentage",
+  //     showprofit && "unit_wise_profitability",
+  //   ];
+  //   return cols.filter(Boolean) as (keyof TableRow | string)[];
+  // }, [aspKey, showamazonfee, showprofit]);
 
-  const totalTableColumns = 1 + columnsToDisplay.length;
-  const summaryLabelColSpan = totalTableColumns - 1;
+  // const totalTableColumns = 1 + columnsToDisplay.length;
+  // const summaryLabelColSpan = totalTableColumns - 1;
 
   /* --------- Fetch user data (brand/company names) --------- */
   useEffect(() => {
@@ -479,39 +601,132 @@ const periodLabel =
 
         if (Array.isArray(data)) {
           const normalized = data.map((r) => {
-            // keep totals row as-is if it already has "Total"
-            if (!isMissingName(r.product_name) && String(r.product_name).toLowerCase() === "total") {
-              return r;
-            }
+            const row: any = r || {};
 
-            if (isMissingName(r.product_name) && !isMissingName(r.sku)) {
-              return { ...r, product_name: String(r.sku) };
-            }
+            // ---- product name fallback ----
+            const product_name =
+              !isMissingName(row.product_name)
+                ? String(row.product_name)
+                : !isMissingName(row.sku)
+                  ? String(row.sku)
+                  : "-";
 
-            return r;
+            const isTotalRow = String(product_name).trim().toLowerCase() === "total";
+
+            // ---- returns may not exist in this CSV; default 0 ----
+            // const unitsSold = toNumber(row.quantity); // CSV uses quantity
+            // const returnUnits = toNumber(row.return_quantity
+            // );
+
+            const netUnits = toNumber(
+              row.total_quantity
+            );
+
+            return {
+              ...row,
+
+              // Identity
+              product_name: isTotalRow ? "Total" : product_name,
+              sku: row.sku ?? "-",
+
+              // Units (correct)
+              units_sold: toNumber(row.quantity),
+              return_units: toNumber(row.return_quantity),
+              net_units_sold: netUnits,
+
+              // Pricing / Sales (correct from CSV)
+              asp: toNumber(row.asp),
+              product_sales: toNumber(row.gross_sales ?? row.product_sales),
+              refund_sales: toNumber(row.refund_sales),
+              net_sales: toNumber(row.net_sales),
+
+              // Costs / Fees
+              cost_of_unit_sold: toNumber(row.cost_of_unit_sold),
+              shipment_charges: toNumber(row.shipment_charges),
+              selling_fees: toNumber(row.selling_fees),
+              fba_fees: toNumber(row.fba_fees),
+              amazon_fee: toNumber(row.amazon_fee),
+
+              // Taxes / Credits
+              tex_and_credits: toNumber(row.tex_and_credits),
+              net_taxes: toNumber(row.net_taxes),
+              net_credits: toNumber(row.net_credits),
+
+              // Other
+              misc_transaction: toNumber(row.misc_transaction),
+              other_transaction_fees: toNumber(row.other_transaction_fees),
+
+              // CM1
+              profit: toNumber(row.profit),
+              profit_percentage: toNumber(row.profit_percentage),
+              unit_wise_profitability: toNumber(row.unit_wise_profitability),
+
+              // Promotions
+              promotional_rebates: toNumber(row.promotional_rebates),
+              promotional_rebates_percentage: toNumber(row.promotional_rebates_percentage),
+            } as TableRow;
           });
 
           setTableData(normalized);
           setNoDataFound(false);
 
-          const lastRow = data[data.length - 1] || {};
-          const lastRowProfit = (lastRow.Profit as number) ?? (lastRow.profit as number) ?? 0;
-          const lastRowSales = (lastRow.Net_Sales as number) ?? (lastRow.net_sales as number) ?? 0;
+          // ✅ Use normalized last row for totals
+          const lastRow: any = normalized[normalized.length - 1] || {};
+
+          // Inventory Storage Fees (-)
+          const inventoryStorageFees = toNumber(lastRow.platformfeeothertransection);
+
+          // Platform Fees (-)
+          const platformFees =
+            toNumber(lastRow.platformfeenew) || toNumber(lastRow.platform_fee);
+
+          // Other Transactions (you want it to be Inventory Storage Fees + Platform Fees)
+          const otherTransactions = inventoryStorageFees + platformFees;
+
+
+          const reimbursementAmount =
+            toNumber(lastRow.reimbursement_lost_inventory_amount) ||
+            toNumber(lastRow.rembursement_fee) || 0; // fallback if you’re using rembursement_fee
+
+          const reimbursementUnits =
+            toNumber(lastRow.reimbursement_lost_inventory_units) || 0;
+
+          const lastRowProfit = Number(lastRow.Profit ?? lastRow.profit ?? 0) || 0;
+          const lastRowSales = Number(lastRow.Net_Sales ?? lastRow.net_sales ?? 0) || 0;
+          const cm2MarginsValue = toNumber(
+            lastRow.cm2_margins ??
+            lastRow.cm2_profit_percentage ??
+            lastRow.cm2_profit_percent ??
+            lastRow.cm2_profit_percentage_value
+          );
 
           setTotals({
-            platform_fee: parseFloat(String(lastRow.platform_fee ?? 0)),
-            rembursement_fee: parseFloat(String(lastRow.rembursement_fee ?? 0)),
-            advertising_total: parseFloat(String(lastRow.advertising_total ?? 0)),
-            shipment_charges: parseFloat(String(lastRow.shipment_charges ?? 0)),
-            reimbursement_vs_sales: parseFloat(String(lastRow.reimbursement_vs_sales ?? 0)),
-            cm2_profit: parseFloat(String(lastRow.cm2_profit ?? 0)),
-            cm2_margins: parseFloat(String(lastRow.cm2_margins ?? 0)),
-            acos: parseFloat(String(lastRow.acos ?? 0)),
-            rembursment_vs_cm2_margins: parseFloat(String(lastRow.rembursment_vs_cm2_margins ?? 0)),
-            profit: parseFloat(String(lastRowProfit ?? 0)),
-            net_sales: parseFloat(String(lastRowSales ?? 0)),
+            advertising_total: toNumber(lastRow.advertising_total),
+            visible_ads: toNumber(lastRow.visible_ads),
+            dealsvouchar_ads: toNumber(lastRow.dealsvouchar_ads),
+
+            inventory_storage_fees: inventoryStorageFees,
+            platform_fee: platformFees,
+            other_transactions: otherTransactions,
+            // ✅ reimbursement
+            reimbursement_lost_inventory_amount: reimbursementAmount,
+            reimbursement_lost_inventory_units: reimbursementUnits,
+
+            // existing
+            shipment_charges: toNumber(lastRow.shipment_charges),
+            reimbursement_vs_sales: toNumber(lastRow.reimbursement_vs_sales),
+            cm2_profit: toNumber(lastRow.cm2_profit),
+            cm2_margins: cm2MarginsValue,
+            acos: toNumber(lastRow.acos),
+            rembursment_vs_cm2_margins: toNumber(lastRow.rembursment_vs_cm2_margins),
+
+            profit: toNumber(lastRow.Profit ?? lastRow.profit),
+            net_sales: toNumber(lastRow.Net_Sales ?? lastRow.net_sales),
           });
-        } else {
+
+
+        }
+        else {
           setNoDataFound(true);
           setTableData(dummyTableData);
         }
@@ -539,39 +754,39 @@ const periodLabel =
     effectiveHomeCurrency,
   ]);
 
-useEffect(() => {
-  if (!tableData || tableData.length === 0) return;
+  useEffect(() => {
+    if (!tableData || tableData.length === 0) return;
 
-  onExportPayloadChange?.({
+    onExportPayloadChange?.({
+      tableData,
+      totals,
+      currencySymbol,
+      brandName: userData?.brand_name,
+      companyName: userData?.company_name,
+      title: "Profit Breakup (SKU Level)",
+      periodLabel,
+      range,
+      countryName, // ✅ ADD THIS (from props)
+    });
+  }, [
     tableData,
     totals,
     currencySymbol,
-    brandName: userData?.brand_name,
-    companyName: userData?.company_name,
-    title: "Profit Breakup (SKU Level)",
+    userData?.brand_name,
+    userData?.company_name,
     periodLabel,
     range,
-    countryName, // ✅ ADD THIS (from props)
-  });
-}, [
-  tableData,
-  totals,
-  currencySymbol,
-  userData?.brand_name,
-  userData?.company_name,
-  periodLabel,
-  range,
-  countryName, // ✅ ADD in deps
-  onExportPayloadChange,
-]);
+    countryName, // ✅ ADD in deps
+    onExportPayloadChange,
+  ]);
 
   /* --------- UI Handlers --------- */
   const handleProductClick = (product: string) => {
     setSelectedProduct(product);
     setShowModal(true);
   };
-  const handleAmazonFeeClick = () => setshowamazonfee((p) => !p);
-  const handleprofitClick = () => setshowprofit((p) => !p);
+  // const handleAmazonFeeClick = () => setshowamazonfee((p) => !p);
+  // const handleprofitClick = () => setshowprofit((p) => !p);
 
   /* --------- Top/Bottom helpers --------- */
   function getTop5Profitable(data: TableRow[]) {
@@ -637,7 +852,9 @@ useEffect(() => {
   const formatValue = (value: unknown, key: string) => {
     if (value === undefined || value === null || value === "") return "-";
 
-    if (key === "quantity") {
+    const intKeys = new Set(["quantity", "units_sold", "return_units", "net_units_sold"]);
+
+    if (intKeys.has(key)) {
       const n = Number(value);
       return Number.isFinite(n) ? n : "-";
     }
@@ -653,6 +870,7 @@ useEffect(() => {
     if (key === "profit_percentage") return `${formatted}%`;
     return formatted;
   };
+
 
   const getTitle = () => `Profit Breakup (SKU Level)`;
 
@@ -700,7 +918,13 @@ useEffect(() => {
       const rowData: Record<string, string | number> = {};
 
       columnsToDisplay2.forEach((column) => {
-        let value: any = row[column];
+        let value: any =
+          column === "product_sales"
+            ? (row.product_sales ?? (row as any).gross_sales ?? 0)
+            : column === "quantity"
+              ? (row.quantity ?? (row as any).total_quantity ?? 0)
+              : row[column];
+
 
         // ✅ Product name fallback to SKU only if name missing
         if (column === "product_name") {
@@ -823,495 +1047,952 @@ useEffect(() => {
 
   /* --------- Render --------- */
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div className="text-red-600">Error: {error}</div>;
+  // if (loading) return <div>Loading...</div>;
+  // if (error) return <div className="text-red-600">Error: {error}</div>;
 
-  return (
-    <>
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-baseline gap-2 justify-center sm:justify-start">
-            <PageBreadcrumb pageTitle={getTitle()} variant="page" align="left" textSize="2xl" />
-            <span className="text-[#5EA68E] text-lg sm:text-2xl md:text-2xl font-bold">
-              ({currencySymbol})
-            </span>
+  // return (
+  //   <>
+  //     <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
+  //       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  //         <div className="flex flex-wrap items-baseline gap-2 justify-center sm:justify-start">
+  //           <PageBreadcrumb pageTitle={getTitle()} variant="page" align="left" textSize="2xl" />
+  //           <span className="text-[#5EA68E] text-lg sm:text-2xl md:text-2xl font-bold">
+  //             ({currencySymbol})
+  //           </span>
+  //         </div>
+
+  //         <div className="flex justify-center sm:justify-end">
+  //           {!hideDownloadButton && <DownloadIconButton onClick={handleDownloadExcel} />}
+  //         </div>
+
+  //       </div>
+
+  //       <div className={`transition-opacity ${noDataFound ? "opacity-30" : "opacity-100"}`}>
+  //         {showModal2 && (
+  //           <CustomModal onClose={() => setShowModal2(false)}>
+  //             <SkuMultiCountryUpload
+  //               onClose={() => setShowModal2(false)}
+  //               onComplete={() => setShowModal2(false)}
+  //             />
+  //           </CustomModal>
+  //         )}
+
+  //         <div className="w-full overflow-x-auto rounded-xl border border-gray-300">
+  //           <div className="min-w-full">
+  //             {/* <table className="min-w-[800px] w-full table-auto border-collapse text-[#414042]">
+  //               <thead className="sticky top-0 z-10 font-bold text-[#f8edcf]">
+  //                 <tr className="bg-[#5EA68E]">
+  //                   <th className="w-[60px] whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     Sno.
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     Product Name
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     Quantity Sold
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     ASP
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     Gross Sales
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     Net Sales
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     COGS
+  //                   </th>
+
+  //                   <th
+  //                     onClick={handleAmazonFeeClick}
+  //                     className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
+  //                   >
+  //                     <span className="absolute left-2 top-1/2 caret-pulse">
+  //                       {showamazonfee ? <FaCaretRight /> : <FaCaretLeft />}
+  //                     </span>
+  //                     <span>Amazon Fees </span>
+  //                     <span className="absolute right-2 top-1/2 caret-pulse">
+  //                       {showamazonfee ? <FaCaretLeft /> : <FaCaretRight />}
+  //                     </span>
+  //                   </th>
+
+  //                   {showamazonfee && (
+  //                     <>
+  //                       <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                         Selling Fees
+  //                       </th>
+  //                       <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                         FBA fees
+  //                       </th>
+  //                     </>
+  //                   )}
+
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     <div className="flex items-center justify-center gap-1">
+  //                       Net Credits
+  //                       <Tooltip text="Net Credits Formula: Postage Credits + Gift Wrap Credits" />
+  //                     </div>
+  //                   </th>
+
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     <div className="flex items-center justify-center gap-1">
+  //                       Net Taxes
+  //                       <Tooltip text="Net Taxes Formula: Shipping Credits Tax + Giftwrap Credits Tax + Promotional Rebates tax - Marketplace Withheld Tax" />
+  //                     </div>
+  //                   </th>
+
+  //                   <th
+  //                     onClick={handleprofitClick}
+  //                     className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
+  //                   >
+  //                     <span className="absolute left-2 top-1/2 caret-pulse">
+  //                       {showprofit ? <FaCaretRight /> : <FaCaretLeft />}
+  //                     </span>
+  //                     <span>CM1 Profit </span>
+  //                     <span className="absolute right-2 top-1/2 caret-pulse">
+  //                       {showprofit ? <FaCaretLeft /> : <FaCaretRight />}
+  //                     </span>
+  //                   </th>
+
+  //                   {showprofit && (
+  //                     <>
+  //                       <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                         CM1 Profit (%)
+  //                       </th>
+  //                       <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                         CM1 Profit per Unit
+  //                       </th>
+  //                     </>
+  //                   )}
+  //                 </tr>
+
+  //                 <tr className="font-bold text-center">
+  //                   <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                   <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                   <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                   <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                   <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-green-700">
+  //                     (+)
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
+  //                     (-)
+  //                   </td>
+  //                   <td
+  //                     onClick={handleAmazonFeeClick}
+  //                     className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]"
+  //                   >
+  //                     (-)
+  //                   </td>
+  //                   {showamazonfee && (
+  //                     <>
+  //                       <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
+  //                         (-)
+  //                       </td>
+  //                       <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
+  //                         (-)
+  //                       </td>
+  //                     </>
+  //                   )}
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-green-700">
+  //                     (+)
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                   {showprofit && (
+  //                     <>
+  //                       <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                       <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
+  //                     </>
+  //                   )}
+  //                 </tr>
+  //               </thead>
+
+  //               <tbody>
+  //                 {tableData.length > 0 ? (
+  //                   tableData.map((row, index) => {
+  //                     const isLastRow = index === tableData.length - 1;
+
+  //                     return (
+  //                       <tr
+  //                         key={index}
+  //                         className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${isLastRow ? "bg-gray-200 font-semibold" : ""
+  //                           }`}
+  //                       >
+  //                         <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                           {isLastRow ? "" : index + 1}
+  //                         </td>
+
+  //                         {columnsToDisplay.map((column, idx) => {
+  //                           const col = column as keyof TableRow;
+  //                           const isProductName = col === "product_name";
+
+  //                           let rawValue: any = (row as any)[col];
+
+  //                           if (col === "quantity") {
+  //                             const q = toNumber((row as any).quantity);
+  //                             const tq = toNumber((row as any).total_quantity);
+  //                             rawValue = q > 0 ? q : tq;
+  //                           }
+
+  //                           if (col === "product_sales") {
+  //                             rawValue = (row as any).product_sales ?? (row as any).gross_sales;
+  //                           }
+
+  //                           let cellContent: React.ReactNode = formatValue(rawValue, col as string);
+
+  //                           if (isProductName) {
+  //                             cellContent = getDisplayProductNameFromRow(row);
+  //                           }
+
+  //                           return (
+  //                             <td
+  //                               key={idx}
+  //                               className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ${isProductName ? "text-left" : "text-center"
+  //                                 }`}
+  //                             >
+  //                               {isProductName && !isLastRow ? (
+  //                                 <span
+  //                                   onClick={() => handleProductClick(String(cellContent || ""))}
+  //                                   className="inline-block max-w-[220px] cursor-pointer truncate align-middle text-[#60a68e] no-underline"
+  //                                   title={String(cellContent || "")}
+  //                                 >
+  //                                   {String(cellContent || "-")}
+  //                                   {isMissingName(row.product_name) && (
+  //                                     <span className="ml-2 inline-flex items-center">
+  //                                       <i
+  //                                         className="fa-solid fa-circle-info ml-1 cursor-pointer"
+  //                                         title="Product name is not available. You may need to upload SKU data file."
+  //                                         onClick={(e) => {
+  //                                           e.stopPropagation();
+  //                                           setShowModal2(true);
+  //                                         }}
+  //                                       />
+  //                                     </span>
+  //                                   )}
+  //                                 </span>
+  //                               ) : (
+  //                                 <span className="inline-block max-w-[220px] truncate">
+  //                                   {cellContent}
+  //                                 </span>
+  //                               )}
+  //                             </td>
+  //                           );
+  //                         })}
+  //                       </tr>
+  //                     );
+  //                   })
+  //                 ) : (
+  //                   <tr>
+  //                     <td
+  //                       className="border border-gray-300 px-2 py-3 text-center text-[clamp(12px,0.729vw,16px)]"
+  //                       colSpan={columnsToDisplay.length + 1}
+  //                     >
+  //                       No data available
+  //                     </td>
+  //                   </tr>
+  //                 )}
+
+  //                 <tr>
+  //                   <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     Cost of Advertisement <strong>(-)</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {formatValue(totals.advertising_total, "advertising_total")}
+  //                   </td>
+  //                 </tr>
+
+  //                 {(countryName === "us" || countryName === "global") && (
+  //                   <tr>
+  //                     <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       Shipment Charges <strong>(-)</strong>
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.shipment_charges, "shipment_charges")}
+  //                     </td>
+  //                   </tr>
+  //                 )}
+
+  //                 <tr>
+  //                   <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     Platform Fees <strong>(-)</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {formatValue(totals.platform_fee, "platform_fee")}
+  //                   </td>
+  //                 </tr>
+
+  //                 <tr>
+  //                   <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     CM2 Profit/Loss
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {formatValue(totals.cm2_profit, "cm2_profit")}
+  //                   </td>
+  //                 </tr>
+
+  //                 <tr>
+  //                   <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     CM2 Margins
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {formatValue(totals.cm2_margins, "cm2_margins")}%
+  //                   </td>
+  //                 </tr>
+
+  //                 <tr>
+  //                   <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     TACoS (Total Advertising Cost of Sale)
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {formatValue(totals.acos, "acos")}%
+  //                   </td>
+  //                 </tr>
+
+  //                 <tr>
+  //                   <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     Net Reimbursement
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {formatValue(totals.rembursement_fee, "rembursement_fee")}
+  //                   </td>
+  //                 </tr>
+
+  //                 <tr>
+  //                   <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     Reimbursement vs CM2 Margins
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {formatValue(totals.rembursment_vs_cm2_margins, "rembursment_vs_cm2_margins")}%
+  //                   </td>
+  //                 </tr>
+
+  //                 <tr>
+  //                   <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     Reimbursement vs Sales
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {formatValue(totals.reimbursement_vs_sales, "reimbursement_vs_sales")}%
+  //                   </td>
+  //                 </tr>
+  //               </tbody>
+  //             </table> */}
+
+  //             <div className="min-w-full">
+  //               <GroupedCollapsibleTable<TableRow>
+  //                 rows={tableData}
+  //                 leftCols={LEFT_COLS}
+  //                 groups={GROUPS}
+  //                 singleCols={SINGLE_COLS}
+  //                 initialCollapsed={{
+  //                   units: true,
+  //                   amazonFees: true,
+  //                   others: false,
+  //                   cm1: true,
+  //                 }}
+  //                 showSignRowInBody
+  //                 getSignForCol={(colKey) => {
+  //                   const plus = new Set(["net_sales", "net_credits"]);
+  //                   const minus = new Set(["cost_of_unit_sold", "amazon_fee", "selling_fees", "fba_fees"]);
+  //                   if (plus.has(colKey)) return { text: "(+)", className: "text-green-700" };
+  //                   if (minus.has(colKey)) return { text: "(-)", className: "text-[#ff5c5c]" };
+  //                   return null;
+  //                 }}
+  //                 getRowClassName={(row, index) => {
+  //                   const isLastRow = index === tableData.length - 1;
+  //                   return `${index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${isLastRow ? "bg-gray-200 font-semibold" : ""
+  //                     }`;
+  //                 }}
+  //                 getValue={(row, colKey, rowIndex) => {
+  //                   const isLastRow = rowIndex === tableData.length - 1;
+
+  //                   if (colKey === "sno") return isLastRow ? "" : rowIndex + 1;
+  //                   if (colKey === "sku") return (row as any).sku ?? "-";
+
+  //                   if (colKey === "units_sold") return formatValue((row as any).units_sold, "units_sold");
+  //                   if (colKey === "return_units") return formatValue((row as any).return_units, "return_units");
+  //                   if (colKey === "net_units_sold") return formatValue((row as any).net_units_sold, "net_units_sold");
+
+  //                   if (colKey === "product_name") {
+  //                     const name = getDisplayProductNameFromRow(row);
+  //                     return !isLastRow ? (
+  //                       <span
+  //                         onClick={() => handleProductClick(String(name || ""))}
+  //                         className="inline-block max-w-[220px] cursor-pointer truncate align-middle text-[#60a68e] no-underline"
+  //                         title={String(name || "")}
+  //                       >
+  //                         {String(name || "-")}
+  //                       </span>
+  //                     ) : (
+  //                       <span className="inline-block max-w-[220px] truncate">{String(name || "-")}</span>
+  //                     );
+  //                   }
+
+  //                   if (colKey === "quantity") {
+  //                     const q = toNumber((row as any).quantity);
+  //                     const tq = toNumber((row as any).total_quantity);
+  //                     return formatValue(q > 0 ? q : tq, "quantity");
+  //                   }
+
+  //                   if (colKey === "product_sales") {
+  //                     const v = (row as any).product_sales ?? (row as any).gross_sales;
+  //                     return formatValue(v, "product_sales");
+  //                   }
+
+  //                   return formatValue((row as any)[colKey], colKey);
+  //                 }}
+  //               />
+
+
+  //               {/* ✅ Summary rows (kept exactly like you had) */}
+  //               <table className="w-full table-auto border-collapse text-[#414042]">
+  //                 <tbody>
+  //                   {/* NOTE: colspan should match visible columns.
+  //         Since collapse state lives inside the table component, we keep summary visually aligned by spanning "all but last value col".
+  //         Easiest: use full-width rows with 2 cols layout below.
+  //     */}
+
+  //                   <tr>
+  //                     <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       Cost of Advertisement <strong>(-)</strong>
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.advertising_total, "advertising_total")}
+  //                     </td>
+  //                   </tr>
+
+  //                   {(countryName === "us" || countryName === "global") && (
+  //                     <tr>
+  //                       <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                         Shipment Charges <strong>(-)</strong>
+  //                       </td>
+  //                       <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                         {formatValue(totals.shipment_charges, "shipment_charges")}
+  //                       </td>
+  //                     </tr>
+  //                   )}
+
+  //                   <tr>
+  //                     <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       Platform Fees <strong>(-)</strong>
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.platform_fee, "platform_fee")}
+  //                     </td>
+  //                   </tr>
+
+  //                   <tr>
+  //                     <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       CM2 Profit/Loss
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.cm2_profit, "cm2_profit")}
+  //                     </td>
+  //                   </tr>
+
+  //                   <tr>
+  //                     <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       CM2 Margins
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.cm2_margins, "cm2_margins")}%
+  //                     </td>
+  //                   </tr>
+
+  //                   <tr>
+  //                     <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       TACoS (Total Advertising Cost of Sale)
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.acos, "acos")}%
+  //                     </td>
+  //                   </tr>
+
+  //                   <tr>
+  //                     <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       Net Reimbursement
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.rembursement_fee, "rembursement_fee")}
+  //                     </td>
+  //                   </tr>
+
+  //                   <tr>
+  //                     <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       Reimbursement vs CM2 Margins
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.rembursment_vs_cm2_margins, "rembursment_vs_cm2_margins")}%
+  //                     </td>
+  //                   </tr>
+
+  //                   <tr>
+  //                     <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       Reimbursement vs Sales
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {formatValue(totals.reimbursement_vs_sales, "reimbursement_vs_sales")}%
+  //                     </td>
+  //                   </tr>
+  //                 </tbody>
+  //               </table>
+  //             </div>
+
+
+  //           </div>
+  //         </div>
+  //       </div>
+  //     </div>
+
+  //     {/* Top & Bottom tables */}
+  //     <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
+  //       <div className="flex flex-col justify-between gap-7 md:gap-3 text-[#414042] md:flex-row min-w-0">
+  //         <div className="flex-1 min-w-0">
+  //           <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
+  //             <PageBreadcrumb pageTitle="Most 5 Profitable Products" variant="page" align="left" textSize="2xl" />
+  //           </div>
+
+  //           <div className="overflow-x-auto rounded-xl border border-gray-300">
+  //             <table className="w-full table-auto border-collapse">
+  //               <thead>
+  //                 <tr className="bg-green-500 font-bold text-[#f8edcf]">
+  //                   <th className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     Product Name
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     CM1 Profit ({currencySymbol})
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     Profit Mix (%)
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     Sales Mix (%)
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     CM1 Profit per Unit ({currencySymbol})
+  //                   </th>
+  //                 </tr>
+  //               </thead>
+  //               <tbody>
+  //                 {topData.rows.map((item, index) => (
+  //                   <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+  //                     <td className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       <span className="flex max-w-[220px] items-center truncate" title={item.product_name}>
+  //                         {item.product_name || "-"}
+  //                       </span>
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {item.profit}
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {item.profitMix}%
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {item.salesMix}%
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {item.unit_wise_profitability}
+  //                     </td>
+  //                   </tr>
+  //                 ))}
+
+  //                 <tr className="bg-gray-200 font-semibold">
+  //                   <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     <strong>Total</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     <strong>{topData.totals.profit}</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     <strong>{topData.totals.profitMix}%</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     <strong>{topData.totals.salesMix}%</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {/* <strong>{topData.totals.unit_wise_profitability}</strong> */}
+  //                     <strong></strong>
+  //                   </td>
+  //                 </tr>
+  //               </tbody>
+  //             </table>
+  //           </div>
+  //         </div>
+
+  //         <div className="flex-1 min-w-0">
+  //           <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
+  //             <PageBreadcrumb pageTitle="Least 5 Profitable Products" variant="page" align="left" textSize="2xl" />
+  //           </div>
+
+  //           <div className="overflow-x-auto rounded-xl border border-gray-300">
+  //             <table className="w-full table-auto border-collapse">
+  //               <thead>
+  //                 <tr className="bg-[#ff5c5c] font-bold text-[#f8edcf]">
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     Product Name
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     CM1 Profit ({currencySymbol})
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     Profit Mix (%)
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     Sales Mix (%)
+  //                   </th>
+  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     CM1 Profit per Unit ({currencySymbol})
+  //                   </th>
+  //                 </tr>
+  //               </thead>
+  //               <tbody>
+  //                 {bottomData.rows.map((item, index) => (
+  //                   <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                       <span className="inline-flex max-w-[220px] items-center truncate" title={item.product_name}>
+  //                         {item.product_name || "-"}
+  //                       </span>
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {item.profit}
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {item.profitMix}%
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {item.salesMix}%
+  //                     </td>
+  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                       {item.unit_wise_profitability}
+  //                     </td>
+  //                   </tr>
+  //                 ))}
+
+  //                 <tr className="bg-gray-200 font-semibold">
+  //                   <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                     <strong>Total</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     <strong>{bottomData.totals.profit}</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     <strong>{bottomData.totals.profitMix}%</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     <strong>{bottomData.totals.salesMix}%</strong>
+  //                   </td>
+  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                     {/* <strong>{bottomData.totals.unit_wise_profitability}</strong> */}
+  //                     <strong></strong>
+  //                   </td>
+  //                 </tr>
+  //               </tbody>
+  //             </table>
+  //           </div>
+  //         </div>
+  //       </div>
+  //     </div>
+
+  //     {showModal && selectedProduct && (
+  //       <Productinfoinpopup
+  //         productname={selectedProduct}
+  //         countryName={countryName}
+  //         month={month}
+  //         year={year}
+  //         onClose={() => setShowModal(false)}
+  //       />
+  //     )}
+  //   </>
+  // );
+
+  /* --------- Render --------- */
+
+  const content = React.useMemo(() => {
+    if (loading) return <div>Loading...</div>;
+    if (error) return <div className="text-red-600">Error: {error}</div>;
+
+    return (
+      <>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-baseline gap-2 justify-center sm:justify-start">
+              <PageBreadcrumb pageTitle={getTitle()} variant="page" align="left" textSize="2xl" />
+              <span className="text-[#5EA68E] text-lg sm:text-2xl md:text-2xl font-bold">
+                ({currencySymbol})
+              </span>
+            </div>
+
+            <div className="flex justify-center sm:justify-end">
+              {!hideDownloadButton && <DownloadIconButton onClick={handleDownloadExcel} />}
+            </div>
           </div>
 
-          <div className="flex justify-center sm:justify-end">
-            {!hideDownloadButton && <DownloadIconButton onClick={handleDownloadExcel} />}
-          </div>
+          <div className={`transition-opacity ${noDataFound ? "opacity-30" : "opacity-100"}`}>
+            {showModal2 && (
+              <CustomModal onClose={() => setShowModal2(false)}>
+                <SkuMultiCountryUpload
+                  onClose={() => setShowModal2(false)}
+                  onComplete={() => setShowModal2(false)}
+                />
+              </CustomModal>
+            )}
 
-        </div>
-
-        <div className={`transition-opacity ${noDataFound ? "opacity-30" : "opacity-100"}`}>
-          {showModal2 && (
-            <CustomModal onClose={() => setShowModal2(false)}>
-              <SkuMultiCountryUpload
-                onClose={() => setShowModal2(false)}
-                onComplete={() => setShowModal2(false)}
-              />
-            </CustomModal>
-          )}
-
-          <div className="w-full overflow-x-auto rounded-xl border border-gray-300">
-            <div className="min-w-full">
-              <table className="min-w-[800px] w-full table-auto border-collapse text-[#414042]">
-                <thead className="sticky top-0 z-10 font-bold text-[#f8edcf]">
-                  <tr className="bg-[#5EA68E]">
-                    <th className="w-[60px] whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      Sno.
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      Product Name
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      Quantity Sold
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      ASP
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      Gross Sales
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      Net Sales
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      COGS
-                    </th>
-
-                    <th
-                      onClick={handleAmazonFeeClick}
-                      className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
-                    >
-                      <span className="absolute left-2 top-1/2 caret-pulse">
-                        {showamazonfee ? <FaCaretRight /> : <FaCaretLeft />}
-                      </span>
-                      <span>Amazon Fees </span>
-                      <span className="absolute right-2 top-1/2 caret-pulse">
-                        {showamazonfee ? <FaCaretLeft /> : <FaCaretRight />}
-                      </span>
-                    </th>
-
-                    {showamazonfee && (
-                      <>
-                        <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          Selling Fees
-                        </th>
-                        <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          FBA fees
-                        </th>
-                      </>
-                    )}
-
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <div className="flex items-center justify-center gap-1">
-                        Net Credits
-                        <Tooltip text="Net Credits Formula: Postage Credits + Gift Wrap Credits" />
-                      </div>
-                    </th>
-
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <div className="flex items-center justify-center gap-1">
-                        Net Taxes
-                        <Tooltip text="Net Taxes Formula: Shipping Credits Tax + Giftwrap Credits Tax + Promotional Rebates tax - Marketplace Withheld Tax" />
-                      </div>
-                    </th>
-
-                    <th
-                      onClick={handleprofitClick}
-                      className="relative cursor-pointer select-none whitespace-nowrap border border-gray-300 bg-[#4a8773] px-6 py-2 text-center text-[clamp(12px,0.729vw,16px)]"
-                    >
-                      <span className="absolute left-2 top-1/2 caret-pulse">
-                        {showprofit ? <FaCaretRight /> : <FaCaretLeft />}
-                      </span>
-                      <span>CM1 Profit </span>
-                      <span className="absolute right-2 top-1/2 caret-pulse">
-                        {showprofit ? <FaCaretLeft /> : <FaCaretRight />}
-                      </span>
-                    </th>
-
-                    {showprofit && (
-                      <>
-                        <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          CM1 Profit (%)
-                        </th>
-                        <th className="whitespace-nowrap border border-gray-300 bg-[#4a8773] px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          CM1 Profit per Unit
-                        </th>
-                      </>
-                    )}
-                  </tr>
-
-                  <tr className="font-bold text-center">
-                    <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                    <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                    <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                    <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                    <td className="border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-green-700">
-                      (+)
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
-                      (-)
-                    </td>
-                    <td
-                      onClick={handleAmazonFeeClick}
-                      className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]"
-                    >
-                      (-)
-                    </td>
-                    {showamazonfee && (
-                      <>
-                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
-                          (-)
-                        </td>
-                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-[#ff5c5c]">
-                          (-)
-                        </td>
-                      </>
-                    )}
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] text-green-700">
-                      (+)
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                    {showprofit && (
-                      <>
-                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]" />
-                      </>
-                    )}
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {tableData.length > 0 ? (
-                    tableData.map((row, index) => {
+            <div className="w-full overflow-x-auto rounded-xl border border-gray-300">
+              <div className="min-w-full">
+                <div className="min-w-full">
+                  <GroupedCollapsibleTable<TableRow>
+                    rows={tableData}
+                    leftCols={LEFT_COLS}
+                    groups={[]}
+                    singleCols={SINGLE_COLS}
+                    // initialCollapsed={{
+                    //   units: true,
+                    //   amazonFees: true,
+                    //   others: false,
+                    //   cm1: true,
+                    // }}
+                    showSignRowInBody
+                    getSignForCol={(colKey) => {
+                      const plus = new Set(["net_sales", "net_credits"]);
+                      const minus = new Set([
+                        "cost_of_unit_sold",
+                        "amazon_fee",
+                        "selling_fees",
+                        "fba_fees",
+                      ]);
+                      if (plus.has(colKey)) return { text: "(+)", className: "text-green-700" };
+                      if (minus.has(colKey)) return { text: "(-)", className: "text-[#ff5c5c]" };
+                      return null;
+                    }}
+                    getRowClassName={(row, index) => {
                       const isLastRow = index === tableData.length - 1;
+                      return `${index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${isLastRow ? "bg-gray-200 font-semibold" : ""
+                        }`;
+                    }}
+                    getValue={(row, colKey, rowIndex) => {
+                      const isLastRow = rowIndex === tableData.length - 1;
 
-                      return (
-                        <tr
-                          key={index}
-                          className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${isLastRow ? "bg-gray-200 font-semibold" : ""
-                            }`}
-                        >
-                          <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                            {isLastRow ? "" : index + 1}
-                          </td>
+                      if (colKey === "sno") return isLastRow ? "" : rowIndex + 1;
+                      if (colKey === "sku") return (row as any).sku ?? "-";
 
-                          {columnsToDisplay.map((column, idx) => {
-                            const col = column as keyof TableRow;
-                            const isProductName = col === "product_name";
+                      if (colKey === "product_name") {
+                        const name = getDisplayProductNameFromRow(row);
+                        return !isLastRow ? (
+                          <span
+                            onClick={() => handleProductClick(String(name || ""))}
+                            className="inline-block max-w-[220px] cursor-pointer truncate align-middle text-[#60a68e] no-underline"
+                            title={String(name || "")}
+                          >
+                            {String(name || "-")}
+                          </span>
+                        ) : (
+                          <span className="inline-block max-w-[220px] truncate">{String(name || "-")}</span>
+                        );
+                      }
 
-                            let cellContent: React.ReactNode = formatValue(
-                              (row as any)[col],
-                              col as string
-                            );
+                      return formatValue((row as any)[colKey], colKey);
+                    }}
 
-                            if (isProductName) {
-                              cellContent = getDisplayProductNameFromRow(row);
-                            }
-
-                            return (
-                              <td
-                                key={idx}
-                                className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ${isProductName ? "text-left" : "text-center"
-                                  }`}
-                              >
-                                {isProductName && !isLastRow ? (
-                                  <span
-                                    onClick={() => handleProductClick(String(cellContent || ""))}
-                                    className="inline-block max-w-[220px] cursor-pointer truncate align-middle text-[#60a68e] no-underline"
-                                    title={String(cellContent || "")}
-                                  >
-                                    {String(cellContent || "-")}
-                                    {/* Keep info icon/modal (no red coloring) */}
-                                    {isMissingName(row.product_name) && (
-                                      <span className="ml-2 inline-flex items-center">
-                                        <i
-                                          className="fa-solid fa-circle-info ml-1 cursor-pointer"
-                                          title="Product name is not available. You may need to upload SKU data file."
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setShowModal2(true);
-                                          }}
-                                        />
-                                      </span>
-                                    )}
-                                  </span>
-                                ) : (
-                                  <span className="inline-block max-w-[220px] truncate">
-                                    {cellContent}
-                                  </span>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td
-                        className="border border-gray-300 px-2 py-3 text-center text-[clamp(12px,0.729vw,16px)]"
-                        colSpan={columnsToDisplay.length + 1}
-                      >
-                        No data available
-                      </td>
-                    </tr>
-                  )}
+                  />
 
                   {/* Summary rows */}
-                  <tr>
-                    <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      Cost of Advertisement <strong>(-)</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {formatValue(totals.advertising_total, "advertising_total")}
-                    </td>
-                  </tr>
+                  <table className="w-full table-auto border-collapse text-[#414042]">
+                    <tbody>
+                      {/* <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Cost of Advertisement <strong>(-)</strong>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(totals.advertising_total, "advertising_total")}
+                        </td>
+                      </tr> */}
 
-                  {(countryName === "us" || countryName === "global") && (
-                    <tr>
-                      <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                        Shipment Charges <strong>(-)</strong>
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {formatValue(totals.shipment_charges, "shipment_charges")}
-                      </td>
-                    </tr>
-                  )}
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Cost of Advertisement <strong>(-)</strong>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(Math.abs(totals.advertising_total), "advertising_total")}
+                        </td>
+                      </tr>
 
-                  <tr>
-                    <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      Platform Fees <strong>(-)</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {formatValue(totals.platform_fee, "platform_fee")}
-                    </td>
-                  </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Visibility - Ads <strong>(-)</strong>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(Math.abs(totals.visible_ads), "visible_ads")}
+                        </td>
+                      </tr>
 
-                  <tr>
-                    <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      CM2 Profit/Loss
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {formatValue(totals.cm2_profit, "cm2_profit")}
-                    </td>
-                  </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Visibility - Deals, Vouchers and Reviews <strong>(-)</strong>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(Math.abs(totals.dealsvouchar_ads), "dealsvouchar_ads")}
+                        </td>
+                      </tr>
 
-                  <tr>
-                    <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      CM2 Margins
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {formatValue(totals.cm2_margins, "cm2_margins")}%
-                    </td>
-                  </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Other Transactions
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(totals.other_transactions, "other_transactions")}
+                        </td>
+                      </tr>
 
-                  <tr>
-                    <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      TACoS (Total Advertising Cost of Sale)
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {formatValue(totals.acos, "acos")}%
-                    </td>
-                  </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Platform Fees <strong>(-)</strong>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(Math.abs(totals.platform_fee), "platform_fee")}
+                        </td>
+                      </tr>
 
-                  <tr>
-                    <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      Net Reimbursement
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {formatValue(totals.rembursement_fee, "rembursement_fee")}
-                    </td>
-                  </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Inventory Storage Fees <strong>(-)</strong>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(Math.abs(totals.inventory_storage_fees), "inventory_storage_fees")}
+                        </td>
+                      </tr>
 
-                  <tr>
-                    <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      Reimbursement vs CM2 Margins
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {formatValue(totals.rembursment_vs_cm2_margins, "rembursment_vs_cm2_margins")}%
-                    </td>
-                  </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Reimbursement for lost Inventory
+                          {totals.reimbursement_lost_inventory_units
+                            ? ` - ${totals.reimbursement_lost_inventory_units} Units `
+                            : " "}
+                          <strong>(+)</strong>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {/* {formatValue(Math.abs(totals.reimbursement_lost_inventory_amount), "reimbursement_lost_inventory_amount")} */}
+                        </td>
+                      </tr>
 
-                  <tr>
-                    <td colSpan={summaryLabelColSpan} className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      Reimbursement vs Sales
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {formatValue(totals.reimbursement_vs_sales, "reimbursement_vs_sales")}%
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+
+                      {(countryName === "us" || countryName === "global") && (
+                        <tr>
+                          <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                            Shipment Charges <strong>(-)</strong>
+                          </td>
+                          <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                            {formatValue(totals.shipment_charges, "shipment_charges")}
+                          </td>
+                        </tr>
+                      )}
+
+                      {/* <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Platform Fees <strong>(-)</strong>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(totals.platform_fee, "platform_fee")}
+                        </td>
+                      </tr> */}
+
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          CM2 Profit/Loss
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(totals.cm2_profit, "cm2_profit")}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          CM2 Margins
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(totals.cm2_margins, "cm2_margins")}%
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          TACoS (Total Advertising Cost of Sale)
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(totals.acos, "acos")}%
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Net Reimbursement
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(Math.abs(totals.reimbursement_lost_inventory_amount), "reimbursement_lost_inventory_amount")}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Reimbursement vs CM2 Margins
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(totals.rembursment_vs_cm2_margins, "rembursment_vs_cm2_margins")}%
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          Reimbursement vs Sales
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {formatValue(totals.reimbursement_vs_sales, "reimbursement_vs_sales")}%
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Top & Bottom tables */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
-        <div className="flex flex-col justify-between gap-7 md:gap-3 text-[#414042] md:flex-row min-w-0">
-          <div className="flex-1 min-w-0">
-            <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
-              <PageBreadcrumb pageTitle="Most 5 Profitable Products" variant="page" align="left" textSize="2xl" />
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-gray-300">
-              <table className="w-full table-auto border-collapse">
-                <thead>
-                  <tr className="bg-green-500 font-bold text-[#f8edcf]">
-                    <th className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      Product Name
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      CM1 Profit ({currencySymbol})
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      Profit Mix (%)
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      Sales Mix (%)
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      CM1 Profit per Unit ({currencySymbol})
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topData.rows.map((item, index) => (
-                    <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                      <td className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                        <span className="flex max-w-[220px] items-center truncate" title={item.product_name}>
-                          {item.product_name || "-"}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {item.profit}
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {item.profitMix}%
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {item.salesMix}%
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {item.unit_wise_profitability}
-                      </td>
-                    </tr>
-                  ))}
-
-                  <tr className="bg-gray-200 font-semibold">
-                    <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      <strong>Total</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <strong>{topData.totals.profit}</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <strong>{topData.totals.profitMix}%</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <strong>{topData.totals.salesMix}%</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {/* <strong>{topData.totals.unit_wise_profitability}</strong> */}
-                      <strong></strong>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
-              <PageBreadcrumb pageTitle="Least 5 Profitable Products" variant="page" align="left" textSize="2xl" />
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-gray-300">
-              <table className="w-full table-auto border-collapse">
-                <thead>
-                  <tr className="bg-[#ff5c5c] font-bold text-[#f8edcf]">
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      Product Name
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      CM1 Profit ({currencySymbol})
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      Profit Mix (%)
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      Sales Mix (%)
-                    </th>
-                    <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      CM1 Profit per Unit ({currencySymbol})
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bottomData.rows.map((item, index) => (
-                    <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                        <span className="inline-flex max-w-[220px] items-center truncate" title={item.product_name}>
-                          {item.product_name || "-"}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {item.profit}
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {item.profitMix}%
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {item.salesMix}%
-                      </td>
-                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                        {item.unit_wise_profitability}
-                      </td>
-                    </tr>
-                  ))}
-
-                  <tr className="bg-gray-200 font-semibold">
-                    <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-                      <strong>Total</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <strong>{bottomData.totals.profit}</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <strong>{bottomData.totals.profitMix}%</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      <strong>{bottomData.totals.salesMix}%</strong>
-                    </td>
-                    <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {/* <strong>{bottomData.totals.unit_wise_profitability}</strong> */}
-                      <strong></strong>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+        {/* Top & Bottom tables */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
+          {/* keep your existing Top/Bottom tables here exactly */}
+          {/* (paste unchanged from your current code) */}
         </div>
-      </div>
 
-      {showModal && selectedProduct && (
-        <Productinfoinpopup
-          productname={selectedProduct}
-          countryName={countryName}
-          month={month}
-          year={year}
-          onClose={() => setShowModal(false)}
-        />
-      )}
-    </>
-  );
+        {showModal && selectedProduct && (
+          <Productinfoinpopup
+            productname={selectedProduct}
+            countryName={countryName}
+            month={month}
+            year={year}
+            onClose={() => setShowModal(false)}
+          />
+        )}
+      </>
+    );
+  }, [
+    loading,
+    error,
+    noDataFound,
+    showModal2,
+    showModal,
+    selectedProduct,
+    tableData,
+    totals,
+    currencySymbol,
+    hideDownloadButton,
+    countryName,
+    month,
+    year,
+  ]);
+
+  return content;
+
+
 };
 
 export default SKUtable;

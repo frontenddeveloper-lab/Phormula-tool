@@ -1459,7 +1459,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 ].join(" ")}
               >
                 {/* Units */}
-                <div className="w-full rounded-2xl border border-[#FFBE25] bg-[#FFBE2526] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#FDD36F] bg-[#FDD36F4D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">Units</span>
                   </div>
@@ -1469,7 +1469,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                   {renderComparisons("unit_sold", formatUnits)}
                 </div>
 
-                <div className="w-full rounded-2xl border border-[#F47A00] bg-[#F47A0026] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#ED9F50] bg-[#ED9F504D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">Gross Sales</span>
                   </div>
@@ -1480,7 +1480,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 </div>
 
                 {/* Net Sales */}
-                <div className="w-full rounded-2xl border border-[#2CA9E0] bg-[#2CA9E026] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#75BBDA] bg-[#75BBDA4D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <span className="text-[10px] 2xl:text-xs text-charcoal-500">Net Sales</span>
                   <div className="text-sm 2xl:text-lg font-semibold text-charcoal-500 leading-tight tabular-nums">
                     {formatMoney(netSales)}
@@ -1490,7 +1490,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
 
 
                 {/* Expenses */}
-                <div className="w-full rounded-2xl border border-[#FF5C5C] bg-[#FF5C5C26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#B75A5A] bg-[#B75A5A4D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">Expenses</span>
                   </div>
@@ -1536,7 +1536,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
                 </div>
 
                 {/* CM2 Profit % */}
-                <div className="w-full rounded-2xl border border-[#01627F] bg-[#01627F26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#7B9A6D] bg-[#7B9A6D4D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">CM2 Profit %</span>
                   </div>

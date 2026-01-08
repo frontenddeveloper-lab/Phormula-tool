@@ -290,14 +290,14 @@ const Bargraph: React.FC<BargraphProps> = ({
     | "CM2 Profit",
     string
   > = {
-    Sales: "#2CA9E0",
-    COGS: "#AB64B5",
-    "Amazon Fees": "#FFBE25",
-    "Advertising Cost": "#F47A00",
-    Other: "#01627F",
-    "Taxes & Credits": "#C03030",
+    Sales: "#75BBDA",
+    COGS: "#FDD36F",
+    "Amazon Fees": "#B75A5A",
+    "Advertising Cost": "#ED9F50",
+    Other: "#3A8EA4",
+    "Taxes & Credits": "#C49466",
     "CM1 Profit": "#87AD12",
-    "CM2 Profit": "#2DA49A",
+    "CM2 Profit": "#7B9A6D",
   };
 
   const preferredOrder = [

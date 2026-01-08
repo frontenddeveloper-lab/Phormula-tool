@@ -113,14 +113,14 @@ const labelMap: Record<(typeof columnsToDisplay2)[number], string> = {
 };
 
 const colorMapping: Record<string, string> = {
-  Sales: "#2CA9E0",
-  "Amazon Fees": "#ff5c5c",
-  "Advertising Cost": "#F47A00",
-  "Other Charges": "#00627D",
-  "Tax and Credit": "#FFBE26",
-  "CM1 Profit": "#5EA49B",
+  Sales: "#75BBDA",
+  "Amazon Fees": "#B75A5A",
+  "Advertising Cost": "#C49466",
+  "Other Charges": "#3A8EA4",
+  "Tax and Credit": "#ED9F50",
+  "CM1 Profit": "#7B9A6D",
   "Net Reimbursement": "#AB63B5",
-  "Cash Generated": "#87AD12",
+  "Cash Generated": "#7B9A6D",
 };
 
 const monthsList = [
@@ -220,15 +220,17 @@ const [year, setYear] = useState<string>(
   const [quarterlyMonthlyData, setQuarterlyMonthlyData] =
     useState<QuarterlyMonthlyData>({});
 
-  const defaultMetricState = {
-    net_sales: true,
-    amazon_fee: true,
-    advertising_total: true,
-    taxncredit: true,
-    otherwplatform: true,
-    rembursement_fee: true,
-    cashflow: true,
-  };
+const defaultMetricState = {
+  net_sales: true,
+  amazon_fee: true,
+  advertising_total: true,
+  taxncredit: true,
+  otherwplatform: true,
+  rembursement_fee: true,
+  cashflow: true,
+};
+
+
 
   const [selectedGraphs, setSelectedGraphs] =
     useState<Record<string, boolean>>(defaultMetricState);
@@ -858,11 +860,36 @@ if (
   }));
 
   // Handlers for PeriodFiltersTable
-  const handleRangeChange = (v: PeriodType) => {
-    setPeriodType(v);
-    setData(null);
-    setError("");
-  };
+ const handleRangeChange = (v: PeriodType) => {
+  setPeriodType(v);
+  setData(null);
+  setError("");
+
+  // 🔥 reset graph selection on period change
+  setSelectedGraphs(
+    v === "monthly"
+      ? {
+          net_sales: true,
+          amazon_fee: true,
+          advertising_total: true,
+          taxncredit: true,
+          otherwplatform: true,
+          rembursement_fee: true,
+          cashflow: true,
+        }
+      : {
+          net_sales: true,
+          rembursement_fee: true,
+          cashflow: true,
+
+          amazon_fee: false,
+          advertising_total: false,
+          taxncredit: false,
+          otherwplatform: false,
+        }
+  );
+};
+
 
   const handleMonthChange = (lowercaseMonth: string) => {
     setMonth(capitalize(lowercaseMonth));
@@ -953,7 +980,7 @@ if (
                 align="left"
                 className="mt-0 md:mt-2 mb-0 md:mb-2"
               />
-              <span className="text-[#5EA68E] font-bold text-lg sm:text-2xl md:text-2xl">
+              <span className="text-[#5EA68E] font-bold text-lg text-lg 2xl:text-2xl">
   {countryName?.toUpperCase()}
 </span>
             </div>

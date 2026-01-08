@@ -302,6 +302,8 @@ const soldLabels = useMemo(
 
 const chartOptions = useMemo(
   () => ({
+    responsive: true,
+    maintainAspectRatio: false,
     layout: {
       // 👇 Legend aur actual chart area ke beech ka gap
       padding: {
@@ -611,9 +613,11 @@ const chartOptions = useMemo(
       </div>
       </div>
         </div>
-       
-        <Line ref={chartRef} data={chartData} options={chartOptions} plugins={[forecastPlugin]} />
+       <div className='w-full h-[550px]'>
+ <Line ref={chartRef} data={chartData} options={chartOptions} plugins={[forecastPlugin]} />
      
+       </div>
+       
 <h2 className='2xl:text-2xl text-[18px] font-bold text-[#414042]'>Detailed Forecast Data (All SKUs)</h2>
       {/* Table with two-row header and totals row */}
    <div className="overflow-x-auto mt-6">

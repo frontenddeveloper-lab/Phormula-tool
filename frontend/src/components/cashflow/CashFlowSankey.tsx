@@ -17,7 +17,7 @@ import {
 
 type SummaryShape = {
   quantity_total?: number;
-  product_sales?: number;
+  gross_sales?: number;
   net_sales?: number;
   taxncredit?: number;
   amazon_fee?: number;
@@ -49,6 +49,20 @@ const CashFlowSankey: React.FC<Props> = ({
   periodType = "monthly",
 }) => {
   /* ---------- helpers ---------- */
+  const [screenWidth, setScreenWidth] = React.useState(
+  typeof window !== "undefined" ? window.innerWidth : 1920
+);
+
+React.useEffect(() => {
+  const onResize = () => setScreenWidth(window.innerWidth);
+  window.addEventListener("resize", onResize);
+  return () => window.removeEventListener("resize", onResize);
+}, []);
+
+const is2XL = screenWidth >= 1536;
+const isXL = screenWidth >= 1280 && screenWidth < 1536;
+
+  
 
   const formatNumber = (val?: number) =>
     val !== undefined
@@ -109,17 +123,17 @@ const CashFlowSankey: React.FC<Props> = ({
       value: data.quantity_total,
       prev: previous_summary?.quantity_total,
       icon: <FaBoxArchive size={16} color="#87AD12" />,
-      bg: "bg-[#EAF3D8]",
-      border: "border-[#87AD12]",
+      bg: "bg-[#FDD36F4D]",
+      border: "border-[#FDD36F]",
       isCurrency: false,
     },
     {
       label: "Gross Sales",
-      value: data.product_sales,
-      prev: previous_summary?.product_sales,
+      value: data.gross_sales,
+      prev: previous_summary?.gross_sales,
       icon: <FaMoneyBillTrendUp size={16} />,
-      bg: "bg-[#E3F2FD]",
-      border: "border-[#2CA9E0]",
+      bg: "bg-[#ED9F504D]",
+      border: "border-[#ED9F50]",
       isCurrency: true,
     },
     {
@@ -127,8 +141,8 @@ const CashFlowSankey: React.FC<Props> = ({
       value: data.net_sales,
       prev: previous_summary?.net_sales,
       icon: <FaTags size={16} />,
-      bg: "bg-[#FFF7E0]",
-      border: "border-[#FFBE25]",
+      bg: "bg-[#75BBDA4D]",
+      border: "border-[#75BBDA]",
       isCurrency: true,
     },
     {
@@ -136,8 +150,8 @@ const CashFlowSankey: React.FC<Props> = ({
   value: data.promotional_rebates,
   prev: previous_summary?.promotional_rebates,
   icon: <FaPercent size={16} />,
-  bg: "bg-[#FFF1F1]",
-  border: "border-[#D32F2F]", // 🔴 red border
+  bg: "bg-[#B8C78C4D]",
+  border: "border-[#B8C78C]", // 🔴 red border
   isCurrency: true,
   isDiscount: true,
   isNegative: true, // 👈 ADD THIS
@@ -148,8 +162,8 @@ const CashFlowSankey: React.FC<Props> = ({
       value: data.amazon_fee,
       prev: previous_summary?.amazon_fee,
       icon: <FaAmazon size={16} />,
-      bg: "bg-[#FFF3E0]",
-      border: "border-[#FF9900]",
+      bg: "bg-[#B75A5A4D]",
+      border: "border-[#B75A5A]",
       isCurrency: true,
     },
     {
@@ -157,8 +171,8 @@ const CashFlowSankey: React.FC<Props> = ({
       value: data.otherwplatform,
       prev: previous_summary?.otherwplatform,
       icon: <FaLayerGroup size={16} />,
-      bg: "bg-[#EEF6F8]",
-      border: "border-[#00627D]",
+      bg: "bg-[#3A8EA44D]",
+      border: "border-[#3A8EA4]",
       isCurrency: true,
     },
     {
@@ -166,8 +180,8 @@ const CashFlowSankey: React.FC<Props> = ({
       value: data.cashflow,
       prev: previous_summary?.cashflow,
       icon: <FaWallet size={16} />,
-      bg: "bg-[#E8F5E9]",
-      border: "border-[#2E7D32]",
+      bg: "bg-[#7B9A6D4D]",
+      border: "border-[#7B9A6D]",
       isCurrency: true,
     },
     {
@@ -175,25 +189,23 @@ const CashFlowSankey: React.FC<Props> = ({
       value: data.rembursement_fee,
       prev: previous_summary?.rembursement_fee,
       icon: <FaArrowRotateRight size={16} />,
-      bg: "bg-[#F3E5F5]",
-      border: "border-[#AB63B5]",
+      bg: "bg-[#C494664D]",
+      border: "border-[#C49466]",
       isCurrency: true,
     },
   ];
 
   /* ---------- SANKEY ---------- */
 
- const rows = [
-  { name: "Gross Sales", value: data.product_sales || 0, sign: "+", barColor: "#2CA9E0" },
-  { name: "Tax and Credit", value: data.taxncredit || 0, sign: "+", barColor: "#2CA9E0" },
- { name: "Promotional Discount", value: data.promotional_rebates || 0, sign: "-", barColor: "#AB63B5" },
-  { name: "FBA Fees", value: data.fba_fees || 0, sign: "-", barColor: "#ff5c5c" },
-  { name: "Selling  Fees", value: data.selling_fees || 0, sign: "-", barColor: "#ff5c5c" },
-  { name: "Advertising Cost", value: data.advertising_total || 0, sign: "-", barColor: "#ff5c5c" },
-  { name: "Other", value: data.otherwplatform || 0, sign: "-", barColor: "#ff5c5c" },
-
-  { name: "Cash Generated", value: data.cashflow || 0, sign: "+", barColor: "#2E7D32" },
-  
+const rows = [
+  { name: "Gross Sales", value: data.gross_sales || 0, sign: "+", barColor: "#2CA9E0", signColor: "#2E7D32" },
+  { name: "Tax and Credit", value: data.taxncredit || 0, sign: "+", barColor: "#2CA9E0", signColor: "#2E7D32" },
+  { name: "Discount", value: data.promotional_rebates || 0, sign: "-", barColor: "#AB63B5", signColor: "#D32F2F" },
+  { name: "FBA Fees", value: data.fba_fees || 0, sign: "-", barColor: "#ff5c5c", signColor: "#D32F2F" },
+  { name: "Selling  Fees", value: data.selling_fees || 0, sign: "-", barColor: "#ff5c5c", signColor: "#D32F2F" },
+  { name: "Ads Cost", value: data.advertising_total || 0, sign: "-", barColor: "#ff5c5c", signColor: "#D32F2F" },
+  { name: "Other", value: data.otherwplatform || 0, sign: "-", barColor: "#ff5c5c", signColor: "#D32F2F" },
+  { name: "Cash Generated", value: data.cashflow || 0, sign: "+", barColor: "#2E7D32", signColor: "#2E7D32" },
 ];
 
 
@@ -213,46 +225,75 @@ const CashFlowSankey: React.FC<Props> = ({
         nodeWidth: 22,
         nodeGap: 18,
         layoutIterations: 0,
-     label: {
+label: {
   show: true,
   position: "right",
-  fontSize: 12,
-  formatter: (n: any) => {
-    const row = rows.find((r) => r.name === n.name);
-    if (!row) return "";
+  overflow: "none",
+  width: is2XL ? 310 : isXL ? 210 : 210,
+formatter: (n: any) => {
+  const row = rows.find(r => r.name === n.name);
+  if (!row) return "";
 
-   return (
-  `{title|${row.name}} ` +
-  (row.sign === "+"
-    ? `{pos|(+)}` 
-    : `{neg|(-)}`) +
- `\n{val|${currency}${Number(n.value).toLocaleString()}}`
+  const base = data.net_sales;
+  let pct: number | undefined;
+
+  if (base !== undefined && base !== 0) {
+  pct = (Math.abs(row.value) / Math.abs(base)) * 100;
+}
+
+  const isUp = pct !== undefined && pct >= 0;
+
+const showSign = row.name !== "Cash Generated";
+
+return (
+  `{label|${row.name}}` +
+  (showSign
+    ? `{sign${row.sign === "+" ? "Plus" : "Minus"}|(${row.sign})}`
+    : "") +
+  `{amount|${currency}${Number(n.value).toLocaleString()}}` +
+  `{pct|(${Math.abs(pct || 0).toFixed(1)}%)}`
 );
-  },
+},
 rich: {
-  title: {
-    fontSize: 12,
-    fontWeight: 500,
+  label: {
+    width: is2XL ? 140 : isXL ? 80 : 80,
+    fontSize: is2XL ? 12 : 11,
+    align: "left",
     color: "#374151",
-  },
-  pos: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: "#2E7D32", // green (+)
-  },
-  neg: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: "#D32F2F", // red (-)
-  },
-  val: {
-    fontSize: 12,
     fontWeight: 500,
-    color: "#414042", // value color
+  },
+
+  signPlus: {
+    fontSize: is2XL ? 12 : 11,
+    color: "#2E7D32",
+    fontWeight: 700,
+  },
+
+  signMinus: {
+    fontSize: is2XL ? 12 : 11,
+    color: "#D32F2F",
+    fontWeight: 700,
+  },
+
+  amount: {
+    width: is2XL ? 80 : isXL ? 60 : 60,
+    align: "right",
+    fontSize: is2XL ? 12 : 11,
+    fontWeight: 700,
+    color: "#111827",
+  },
+
+  pct: {
+    width: is2XL ? 70 : isXL ? 50 : 50,
+    align: "left",
+    fontSize: is2XL ? 12 : 11,
+    color: "#6B7280",
+    fontWeight: 600,
   },
 },
 
 },
+
 
 
        data: [
@@ -279,9 +320,8 @@ links: rows.map((r) => ({
   /* ---------- RENDER ---------- */
 
   return (
-    <div className="rounded-xl border shadow bg-white p-4">
-      {/* CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div>
+       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         
         {cards.map((c) => {
          const p = getChangePercent(c.value, c.prev);
@@ -292,19 +332,19 @@ links: rows.map((r) => ({
               key={c.label}
               className={`rounded-2xl border ${c.border} ${c.bg} shadow-sm xl:px-4 px-2 py-3`}
             >
-              <div className="text-xs text-charcoal-500 mb-1">{c.label}</div>
+              <div className="2xl:text-xs text-[10px] text-charcoal-500 mb-1">{c.label}</div>
 
-             <div className="text-lg font-extrabold text-charcoal-700">
+             <div className="2xl:text-lg text-sm font-semibold text-charcoal-700">
  {c.label === "Units" ? (
   formatInteger(c.value)
 ) : c.isDiscount ? (
   <>
     {currency}
     {formatNumber(Math.abs(c.value || 0))}
-    <span className="ml-1 text-xs font-medium text-charcoal-500">
+    <span className="ml-1 2xl:text-xs text-[10px] font-medium text-charcoal-500">
       (
       {(
-        ((Math.abs(c.value || 0)) / (data.product_sales || 1)) *
+        ((Math.abs(c.value || 0)) / (data.gross_sales || 1)) *
         100
       ).toFixed(1)}
       %)
@@ -316,7 +356,7 @@ links: rows.map((r) => ({
   {formatNumber(c.value)}
 
   {perUnitCards.includes(c.label) && (
-    <span className="ml-1 text-xs font-medium text-charcoal-500">
+    <span className="ml-1 2xl:text-xs text-[10px] font-medium text-charcoal-500">
       ({currency}
       {getPerUnitValue(
         c.value,
@@ -330,7 +370,7 @@ links: rows.map((r) => ({
 </div>
 
               {p && (
-                <div className="flex justify-between items-end text-xs mt-2">
+                <div className="flex justify-between items-end 2xl:text-xs text-[10px] mt-2">
                   <div className="flex flex-col">
                     <span className="text-charcoal-400">
                       {formatPrevLabel(previousLabel)}:
@@ -342,11 +382,11 @@ links: rows.map((r) => ({
         <>
           {currency}
           {formatNumber(Math.abs(c.prev || 0))}
-          <span className="ml-1 text-xs font-medium text-charcoal-500">
+          <span className="ml-1 2xl:text-xs text-[10px] font-medium text-charcoal-500">
             (
             {(
               ((Math.abs(c.prev || 0)) /
-                (previous_summary?.product_sales || 1)) *
+                (previous_summary?.gross_sales || 1)) *
               100
             ).toFixed(1)}
             %)
@@ -357,7 +397,7 @@ links: rows.map((r) => ({
           {c.isCurrency ? currency : ""}
           {formatNumber(c.prev)}
           {perUnitCards.includes(c.label) && (
-            <span className="ml-1 text-xs font-medium text-charcoal-500">
+            <span className="ml-1 2xl:text-xs text-[10px] font-medium text-charcoal-500">
               ({currency}
               {getPerUnitValue(
                 c.prev,
@@ -382,12 +422,17 @@ links: rows.map((r) => ({
           );
         })}
       </div>
+ <div className="rounded-xl border shadow bg-white p-4">
+     
+     
 
       {/* SANKEY */}
-      <div className="h-[520px]">
+      <div className="h-[520px]  ">
         <ReactECharts option={option} style={{ height: "100%" }} />
       </div>
     </div>
+    </div>
+   
   );
 };
 

@@ -137,7 +137,7 @@ const LiveLineChart: React.FC<{
     const legendItemSize = isCompactView ? 10 : 12;
 
     const option = {
-      color: ["#CECBC7", "#F47A00"],
+      color: ["#CECBC7", "#ED9F50"],
 
       tooltip: {
         trigger: "axis",
