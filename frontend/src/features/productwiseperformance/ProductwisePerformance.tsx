@@ -460,7 +460,7 @@ const handleViewBusinessInsights = async () => {
 
   /* ---------- product select handler ---------- */
   const handleProductSelect = (selectedProductName: string) => {
-    const base = "/productwiseperformance";
+    const base = "/skuwiseprofit";
     const slug = toSlug(selectedProductName);
 
     let month = selectedMonth;

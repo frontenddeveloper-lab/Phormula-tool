@@ -370,14 +370,14 @@ const AppSidebar: React.FC = () => {
 
     if ((params as any).countryName || segments[0] === "country") {
       switch (segments[0]) {
-        case "country":
-          newPath = `/country/${ranged}/${newCountryName}/${month}/${year}`;
+        case "pnl-dashboard":
+          newPath = `/pnl-dashboard/${ranged}/${newCountryName}/${month}/${year}`;
           break;
         case "live-business-insight":
           newPath = `/live-business-insight/${ranged}/${newCountryName}/${month}/${year}`;
           break;
-        case "business-insight":
-          newPath = `/business-insight/${ranged}/${newCountryName}/${month}/${year}`;
+        case "ai-insight":
+          newPath = `/ai-insight/${ranged}/${newCountryName}/${month}/${year}`;
           break;
         case "chatbot":
           newPath = `/chatbot/${ranged}/${newCountryName}/${month}/${year}`;
@@ -387,14 +387,14 @@ const AppSidebar: React.FC = () => {
 
     if (!newPath) {
       switch (segments[0]) {
-        case "inventoryChoice":
-          newPath = `/inventoryChoice/${newCountryName}/${month}/${year}`;
+        case "inventory-forecast":
+          newPath = `/inventory-forecast/${newCountryName}/${month}/${year}`;
           break;
         case "pnlforecast":
           newPath = `/pnlforecast/${newCountryName}/${month}/${year}`;
           break;
-        case "inputCost":
-          newPath = `/inputCost/${newCountryName}/${month}/${year}`;
+        case "inventory-reconciliation":
+          newPath = `/inventory-reconciliation/${newCountryName}/${month}/${year}`;
           break;
         case "currentInventory":
           newPath = `/currentInventory/${newCountryName}/${month}/${year}`;
@@ -408,15 +408,15 @@ const AppSidebar: React.FC = () => {
         case "cashflow":
           newPath = `/cashflow/${newCountryName}/${month}/${year}`;
           break;
-        case "referral-fees":
-          newPath = `/referral-fees/${newCountryName}/${month}/${year}`;
+        case "expense-reconciliation":
+          newPath = `/expense-reconciliation/${newCountryName}/${month}/${year}`;
           break;
         case "fba":
           newPath = `/fba/${newCountryName}/${month}/${year}`;
           break;
-        case "productwiseperformance": {
+        case "skuwiseprofit": {
           const productname = segments[1] ?? "Classic";
-          newPath = `/productwiseperformance/${productname}/${newCountryName}/${month}/${year}`;
+          newPath = `/skuwiseprofit/${productname}/${newCountryName}/${month}/${year}`;
           break;
         }
       }
@@ -424,144 +424,6 @@ const AppSidebar: React.FC = () => {
 
     if (newPath && newPath !== pathname) router.push(newPath);
   };
-
-  //   const sections: NavSection[] = [
-  //     {
-  //   key: "Live Analytics",
-  //   name: "LIVE ANALYTICS",
-  //   icon: (
-  //     <Image
-  //       src="/images/brand/business.png"
-  //       alt="Logo"
-  //       width={18}
-  //       height={18}
-  //       className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
-  //     />
-  //   ),
-  //   subItems: [
-  //     {
-  //       name: "Real-Time Dashboard",
-  //       path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //       onClick: handleFetchAgedInventory, 
-  //     },
-  //   ],
-  // },
-
-  //     {
-  //       key: "dashboard",
-  //       name: "HISTORICAL DASHBOARD",
-  //       icon: <LuLayoutDashboard className={iconSize} />,
-  //       subItems: [
-  //         {
-  //           name: "Profits",
-  //           path: ({ ranged, countryName, month, year }) =>
-  //             `/country/${ranged}/${countryName}/${month}/${year}`,
-  //         },
-  //         {
-  //           name: "SKU-Wise Profit",
-  //           path: (params: {
-  //             productname?: string;
-  //             countryName: string;
-  //             month: string;
-  //             year: string;
-  //           }) =>
-  //             `/productwiseperformance/${params.productname ?? "Classic"}/${params.countryName}/${params.month}/${params.year}`,
-  //         },
-  //         {
-  //           name: "Cash Flow",
-  //           path: ({ countryName, month, year }) =>
-  //             `/cashflow/${encodeURIComponent(countryName)}/${encodeURIComponent(month)}/${encodeURIComponent(year)}`,
-  //         },
-  //       ],
-  //     },
-  //     {
-  //       key: "business-intelligence",
-  //       name: "BUSINESS INTELLIGENCE",
-  //       icon: (
-  //         <Image
-  //           src="/images/brand/business.png"
-  //           alt="Logo"
-  //           width={18}
-  //           height={18}
-  //           className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
-  //         />
-  //       ),
-  //       subItems: [
-  //         {
-  //           name: "Business Insights",
-  //           path: `/business-insight/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //         },
-  //         {
-  //           name: "Chatbot",
-  //           path: `/chatbot/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //         },
-  //         {
-  //           name: "Inventory Forecast",
-  //           path: `/inventoryChoice/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //           onClick: handleInventoryForecastFetch,
-  //         },
-  //         {
-  //           name: "P/L Forecast",
-  //           path: `/pnlforecast/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //         },
-  //       ],
-  //     },
-  //     {
-  //       key: "inventory",
-  //       name: "INVENTORY",
-  //       icon: (
-  //         <Image
-  //           src="/images/brand/inventory.png"
-  //           alt="Logo"
-  //           width={18}
-  //           height={18}
-  //           className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
-  //         />
-  //       ),
-  //       subItems: [
-  //         {
-  //           name: "Current Inventory",
-  //           path: `/inputCost/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //         },
-  //         // {
-  //         //   name: "Month-Wise Inventory",
-  //         //   path: `/currentInventory/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //         // },
-  //         {
-  //           name: "Dispatches",
-  //           path: `/dispatch/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //         },
-  //         {
-  //           name: "PO",
-  //           path: `/purchase-order/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //         },
-  //       ],
-  //     },
-  //     {
-  //       key: "recon",
-  //       name: "RECON",
-  //       icon: (
-  //         <Image
-  //           src="/images/brand/recon.png"
-  //           alt="Logo"
-  //           width={18}
-  //           height={18}
-  //           className="w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] lg:w-[20px] lg:h-[20px]"
-  //         />
-  //       ),
-  //       subItems: [
-  //         {
-  //           name: "Referral Fees",
-  //           path: ({ countryName, month, year }) =>
-  //             `/referral-fees/${encodeURIComponent(countryName)}/${encodeURIComponent(month)}/${encodeURIComponent(year)}`,
-  //         },
-  //         {
-  //           name: "FBA Fees",
-  //           path: `/fba/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
-  //         },
-  //       ],
-  //     },
-  //   ];
 
   const sections: NavSection[] = [
     // A) Live Dashboard (real-time page sections only)
@@ -580,19 +442,19 @@ const AppSidebar: React.FC = () => {
       subItems: [
         {
           name: "Live Sales",
-          path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#live-sales`,
+          path: `/live-dashboard/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#live-sales`,
         },
         {
           name: "Targets and Action Items",
-          path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#targets-action-items`,
+          path: `/live-dashboard/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#targets-action-items`,
         },
         {
           name: "MTD P&L",
-          path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#mtd-pl`,
+          path: `/live-dashboard/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#mtd-pl`,
         },
         {
           name: "Current Inventory",
-          path: `/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#current-inventory`,
+          path: `/live-dashboard/${currentParams.countryName}/${currentParams.month}/${currentParams.year}#current-inventory`,
           onClick: handleFetchAgedInventory, // optional: keep/remove if you want an API call here
         },
       ],
@@ -607,7 +469,7 @@ const AppSidebar: React.FC = () => {
         {
           name: "P&L Dashboard",
           path: ({ ranged, countryName, month, year }) =>
-            `/country/${ranged}/${countryName}/${month}/${year}`, // your Profits page
+            `/pnl-dashboard/${ranged}/${countryName}/${month}/${year}`, // your Profits page
         },
         {
           name: "Business Summary",
@@ -628,14 +490,12 @@ const AppSidebar: React.FC = () => {
             month: string;
             year: string;
           }) =>
-            `/productwiseperformance/${params.productname ?? "Classic"}/${params.countryName}/${params.month}/${params.year}`,
+            `/skuwiseprofit/${params.productname ?? "Classic"}/${params.countryName}/${params.month}/${params.year}`,
         },
         {
           name: "Expense Reconcilliation",
           path: ({ countryName, month, year }) =>
-            `/referral-fees/${encodeURIComponent(countryName)}/${encodeURIComponent(
-              month
-            )}/${encodeURIComponent(year)}`, // your Amazon/Referral Fees page
+            `/expense-reconciliation/${encodeURIComponent(countryName)}/${encodeURIComponent(month)}/${encodeURIComponent(year)}` // your Amazon/Referral Fees page
         },
       ],
     },
@@ -656,7 +516,7 @@ const AppSidebar: React.FC = () => {
       subItems: [
         {
           name: "AI Insights",
-          path: `/business-insight/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+          path: `/ai-insight/${currentParams.ranged}/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
         },
         {
           name: "Chatbot",
@@ -664,7 +524,7 @@ const AppSidebar: React.FC = () => {
         },
         {
           name: "Inventory Forecast",
-          path: `/inventoryChoice/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
+          path: `/inventory-forecast/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`,
           onClick: handleInventoryForecastFetch,
         },
         {
@@ -690,7 +550,7 @@ const AppSidebar: React.FC = () => {
       subItems: [
         {
           name: "Inventory Reconcilliation",
-          path: `/inputCost/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`, // ✅ Current Inventory
+          path: `/inventory-reconciliation/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`, // ✅ Current Inventory
         },
 
         {
@@ -763,7 +623,7 @@ const AppSidebar: React.FC = () => {
         className={`py-4 sm:py-5 lg:py-6 flex gap-2 items-center border-0 ${!isExpanded && !isHovered ? "lg:justify-between" : "justify-between"
           }`}
       >
-        <Link href={`/real-time/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`} className="flex items-center gap-2">
+        <Link href={`/live-dashboard/${currentParams.countryName}/${currentParams.month}/${currentParams.year}`} className="flex items-center gap-2">
           {showText ? (
             <Image
               className="dark:hidden hidden lg:block"

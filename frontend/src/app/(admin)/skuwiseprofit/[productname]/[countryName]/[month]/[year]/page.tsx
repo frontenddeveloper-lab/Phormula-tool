@@ -1,15 +1,3 @@
-// // app/productwiseperformance/[productname]/[countryName]/[month]/[year]/page.tsx
-
-// import ProductwisePerformance from "@/features/productwiseperformance/ProductwisePerformance";
-
-// export default function Page() {
-//   return <ProductwisePerformance />;
-// }
-
-
-
-
-
 import type { Metadata } from "next";
 import ProductwisePerformance from "@/features/productwiseperformance/ProductwisePerformance";
 
@@ -48,15 +36,17 @@ const formatCountry = (c: string) => {
   return v.toUpperCase();
 };
 
-export function generateMetadata({
+export async function generateMetadata({
   params,
 }: {
-  params: Params;
-}): Metadata {
-  const product = decodeURIComponent(params.productname);
-  const country = formatCountry(params.countryName);
-  const monthFormatted = monthName(params.month);
-  const year = params.year;
+  params: Promise<Params>;
+}): Promise<Metadata> {
+  const p = await params;
+
+  const product = decodeURIComponent(p.productname);
+  const country = formatCountry(p.countryName);
+  const monthFormatted = monthName(p.month);
+  const year = p.year;
 
   const title = `${product} | SKU wise Profit | Amazon ${country}`;
 

@@ -877,7 +877,7 @@ h2 {
                 </div>
                 {!isImprovementsPage && (
                   <button className="styled-button"
-                  onClick={() =>router.push(`/productwiseperformance/${productname}/${countryName}/${month}/${year}`)}>
+                  onClick={() =>router.push(`/skuwiseprofit/${productname}/${countryName}/${month}/${year}`)}>
                   Check Full Performance{" "}
                   <i className="fa-solid fa-arrow-up-right-from-square"></i>
                 </button>

@@ -2068,7 +2068,7 @@ const FileUploadForm = ({ initialCountry, onClose, onComplete }: FileUploadFormP
 
       // 7) Redirect to the stats page
       const ranged = "MTD"; // or "QTD" if that's the active tab in your UI
-      await router.push(`/country/${ranged}/${effectiveCountry}/${finalMonth}/${finalYear}`);
+      await router.push(`/pnl-dashboard/${ranged}/${effectiveCountry}/${finalMonth}/${finalYear}`);
     } catch (err) {
       console.error("There was a problem with the file upload:", err);
       setError("Upload failed. Please try again.");

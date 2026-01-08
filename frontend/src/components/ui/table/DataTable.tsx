@@ -236,7 +236,6 @@ export default function DataTable<T extends Row>({
                 className={clsx(
                   rowClassName?.(row, (page - 1) * pageSize + ri),
                   "transition-colors",
-                  // @ts-expect-error: your rows may include __isTotal
                   (row as any).__isTotal
                     ? "bg-[#EFEFEF] font-semibold"
                     : zebra && ri % 2 === 1

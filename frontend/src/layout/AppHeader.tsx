@@ -76,7 +76,7 @@ const AppHeader: React.FC = () => {
   const currentYear =
     (params?.year as string) || String(today.getFullYear());
 
-  const realTimeHref = `/real-time/${currentCountry}/${currentMonth}/${currentYear}`;
+  const realTimeHref = `/live-dashboard/${currentCountry}/${currentMonth}/${currentYear}`;
 
   return (
     <>
