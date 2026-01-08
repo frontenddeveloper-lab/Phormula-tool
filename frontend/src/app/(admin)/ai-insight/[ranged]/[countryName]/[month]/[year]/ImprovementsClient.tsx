@@ -2016,11 +2016,11 @@ const MonthsforBI: React.FC = () => {
 
     // ✅ YAHAN ADD KARO (return se just pehle)
     const ds = [
-      { key: "netSales", label: "Net Sales", data: [netSales_m1, netSales_m2], color: "#2CA9E0" },
-      { key: "cm1Profit", label: "CM1 Profit", data: [profit_m1, profit_m2], color: "#5EA49B" },
-      { key: "otherExpense", label: "Other Expense", data: [otherExp_m1, otherExp_m2], color: "#00627D" },
-      { key: "advertising", label: "Advertising Total", data: [adv_m1, adv_m2], color: "#F47A00" },
-      { key: "reimbursement", label: "Reimbursement", data: [reimb_m1, reimb_m2], color: "#AB64B5" },
+      { key: "netSales", label: "Net Sales", data: [netSales_m1, netSales_m2], color: "#75bbda" },
+      { key: "cm1Profit", label: "CM1 Profit", data: [profit_m1, profit_m2], color: "#7b9a6d" },
+      { key: "otherExpense", label: "Other Expense", data: [otherExp_m1, otherExp_m2], color: "#3A8EA4" },
+      { key: "advertising", label: "Advertising Total", data: [adv_m1, adv_m2], color: "#C49466" },
+      { key: "reimbursement", label: "Reimbursement", data: [reimb_m1, reimb_m2], color: "#FDD36F" },
     ];
 
     const datasets = ds
@@ -2966,11 +2966,11 @@ const MonthsforBI: React.FC = () => {
           {/* Center labels like GraphPage */}
           <div className="mt-3 sm:mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-5 w-full mx-auto transition-opacity duration-300">
             {[
-              { key: "netSales", label: "Net Sales", color: "#2CA9E0" },
-              { key: "cm1Profit", label: "CM1 Profit", color: "#5EA49B" },
-              { key: "otherExpense", label: "Other Expense", color: "#00627D" },
-              { key: "advertising", label: "Advertising Total", color: "#F47A00" },
-              { key: "reimbursement", label: "Reimbursement", color: "#AB64B5" },
+              { key: "netSales", label: "Net Sales", color: "#75bbda" },
+              { key: "cm1Profit", label: "CM1 Profit", color: "#7b9a6d" },
+              { key: "otherExpense", label: "Other Expense", color: "#3A8EA4" },
+              { key: "advertising", label: "Advertising Total", color: "#C49466" },
+              { key: "reimbursement", label: "Reimbursement", color: "#FDD36F" },
             ].map(({ key, label, color }) => {
               const isChecked = !!selectedTotals[key];
 
@@ -3048,17 +3048,17 @@ const MonthsforBI: React.FC = () => {
           {/* Shared legend bottom center */}
           <div className="mt-3 flex flex-wrap justify-center gap-4 2xl:text-xs text-[10px] font-semibold text-[#414042]">
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#F47A00]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#ED9F50]" />
               Top 80%
             </span>
 
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#AB64B5]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#3A8EA4]" />
               Other SKUs
             </span>
 
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#87AD12]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#7B9A6D]" />
               New/Reviving
             </span>
           </div>

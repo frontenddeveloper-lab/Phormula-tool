@@ -1872,13 +1872,13 @@ export default function ReferralFeesDashboard(): JSX.Element {
                 label: "Over charged",
                 value: toNumberSafe(chargeOver?.net_sales_total_value),
                 pct: pctOf(toNumberSafe(chargeOver?.net_sales_total_value), totalSalesForLeft),
-                color: "#3A8EA4",
+                color: "#B75A5A",
               },
               {
                 label: "Undercharged",
                 value: toNumberSafe(chargeUnder?.net_sales_total_value),
                 pct: pctOf(toNumberSafe(chargeUnder?.net_sales_total_value), totalSalesForLeft),
-                color: "#3A8EA4",
+                color: "#FDD36F",
               },
               {
                 label: "No ref fee",
