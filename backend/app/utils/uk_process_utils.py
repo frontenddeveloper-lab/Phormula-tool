@@ -1512,6 +1512,20 @@ def process_skuwise_data(user_id, country, month, year):
             "Net Credits": "net_credits"
         }, inplace=True)
 
+        # ✅ NEW: other_transaction formula
+        for c in [ "net_taxes", "net_credits", "misc_transaction"]:
+            if c not in sku_grouped.columns:
+                sku_grouped[c] = 0.0
+
+        sku_grouped["other_transaction_fees"] = (
+            
+            
+            + pd.to_numeric(sku_grouped["net_credits"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(sku_grouped["misc_transaction"], errors="coerce").fillna(0.0)
+            - pd.to_numeric(sku_grouped["net_taxes"], errors="coerce").fillna(0.0)
+        )
+
+
         sku_grouped["cm2_profit_percentage"] = np.where(
             pd.to_numeric(sku_grouped["net_sales"], errors="coerce").fillna(0) != 0,
             (pd.to_numeric(sku_grouped["cm2_profit"], errors="coerce").fillna(0) /
@@ -1709,6 +1723,7 @@ def process_skuwise_data(user_id, country, month, year):
                     visible_ads REAL,
                     dealsvouchar_ads REAL,
                     advertising_total REAL,
+                    lost_total REAL,
                     platformfeenew REAL,
                     platform_fee REAL,
                     platform_fee_inventory_storage REAL,
@@ -2185,6 +2200,7 @@ def process_skuwise_data(user_id, country, month, year):
             "rembursement_fee",
             "rembursment_vs_cm2_margins",
             "reimbursement_vs_sales",
+            "lost_total",
 
             "user_id"
         ]

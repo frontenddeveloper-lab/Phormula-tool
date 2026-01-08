@@ -71,25 +71,20 @@ type TableRow = {
   units_sold?: number;             // will map from total_quantity (if units_sold not provided)
   return_units?: number;           // map from return_units/Return/returns if present, else 0
   net_units_sold?: number;         // units_sold - return_units
+  platformfeenew?: number;                 // Platform Fees
+  platform_fee_inventory_storage?: number;
+  other_transactions?: number;
 };
 
 type Totals = {
   advertising_total: number;
-
-  // ✅ new ad breakup
   visible_ads: number;          // "Visibility - Ads"
   dealsvouchar_ads: number;     // "Visibility - Deals, Vouchers and Reviews"
-
-  // ✅ new transactions / fees
   other_transactions: number;   // "Other Transactions" (derived)
   platform_fee: number;         // "Platform Fees"
   inventory_storage_fees: number;
-
-  // ✅ reimbursement (amount + optional units if backend provides)
   reimbursement_lost_inventory_amount: number;
   reimbursement_lost_inventory_units?: number;
-
-  // existing
   shipment_charges: number;
   reimbursement_vs_sales: number;
   cm2_profit: number;
@@ -316,6 +311,12 @@ const SKUtable: React.FC<SKUtableProps> = ({
     { key: "return_units", label: "Return Units", align: "center" },
     { key: "net_units_sold", label: "Net Units Sold", align: "center" },
 
+    // ======================
+    // Amazon Fees ✅ NEW
+    // ======================
+    { key: "selling_fees", label: "Selling Fees", align: "center" },
+    { key: "fba_fees", label: "FBA Fees", align: "center" },
+    { key: "amazon_fee", label: "Amazon Fees", align: "center" },
 
     // ======================
     // Pricing / Cost
@@ -331,10 +332,22 @@ const SKUtable: React.FC<SKUtableProps> = ({
     { key: "net_credits", label: "Net Credits", align: "center" },
 
     // ======================
+    // Promotions ✅ NEW
+    // ======================
+    { key: "promotional_rebates", label: "Promotions", align: "center" },
+    { key: "promotional_rebates_percentage", label: "Promotions %", align: "center" },
+
+    // ======================
     // Misc / Other
     // ======================
     { key: "misc_transaction", label: "Misc.", align: "center" },
-    { key: "other_transaction_fees", label: "Other Transactions", align: "center" },
+    { key: "other_transactions", label: "Other Transactions", align: "center" },
+
+    // ======================
+    // Platform / Storage Fees
+    // ======================
+    // { key: "platformfeenew", label: "Platform Fees", align: "center" },
+    { key: "platform_fee_inventory_storage", label: "Inventory Storage Fees", align: "center" },
 
     // ======================
     // CM1 Metrics
@@ -613,11 +626,6 @@ const SKUtable: React.FC<SKUtableProps> = ({
 
             const isTotalRow = String(product_name).trim().toLowerCase() === "total";
 
-            // ---- returns may not exist in this CSV; default 0 ----
-            // const unitsSold = toNumber(row.quantity); // CSV uses quantity
-            // const returnUnits = toNumber(row.return_quantity
-            // );
-
             const netUnits = toNumber(
               row.total_quantity
             );
@@ -655,6 +663,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
               // Other
               misc_transaction: toNumber(row.misc_transaction),
               other_transaction_fees: toNumber(row.other_transaction_fees),
+              other_transactions: toNumber(row.platform_fee), // ✅ map from backend
 
               // CM1
               profit: toNumber(row.profit),
@@ -670,18 +679,11 @@ const SKUtable: React.FC<SKUtableProps> = ({
           setTableData(normalized);
           setNoDataFound(false);
 
-          // ✅ Use normalized last row for totals
           const lastRow: any = normalized[normalized.length - 1] || {};
 
-          // Inventory Storage Fees (-)
-          const inventoryStorageFees = toNumber(lastRow.platformfeeothertransection);
 
-          // Platform Fees (-)
-          const platformFees =
-            toNumber(lastRow.platformfeenew) || toNumber(lastRow.platform_fee);
-
-          // Other Transactions (you want it to be Inventory Storage Fees + Platform Fees)
-          const otherTransactions = inventoryStorageFees + platformFees;
+          const platformFees = toNumber(lastRow.platformfeenew);
+          const inventoryStorageFees = toNumber(lastRow.platform_fee_inventory_storage);
 
 
           const reimbursementAmount =
@@ -690,6 +692,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
 
           const reimbursementUnits =
             toNumber(lastRow.reimbursement_lost_inventory_units) || 0;
+          const otherTransactions = toNumber(lastRow.platform_fee);
 
           const lastRowProfit = Number(lastRow.Profit ?? lastRow.profit ?? 0) || 0;
           const lastRowSales = Number(lastRow.Net_Sales ?? lastRow.net_sales ?? 0) || 0;
@@ -704,15 +707,12 @@ const SKUtable: React.FC<SKUtableProps> = ({
             advertising_total: toNumber(lastRow.advertising_total),
             visible_ads: toNumber(lastRow.visible_ads),
             dealsvouchar_ads: toNumber(lastRow.dealsvouchar_ads),
-
+            other_transactions: otherTransactions,
             inventory_storage_fees: inventoryStorageFees,
             platform_fee: platformFees,
-            other_transactions: otherTransactions,
-            // ✅ reimbursement
             reimbursement_lost_inventory_amount: reimbursementAmount,
             reimbursement_lost_inventory_units: reimbursementUnits,
 
-            // existing
             shipment_charges: toNumber(lastRow.shipment_charges),
             reimbursement_vs_sales: toNumber(lastRow.reimbursement_vs_sales),
             cm2_profit: toNumber(lastRow.cm2_profit),
@@ -862,10 +862,11 @@ const SKUtable: React.FC<SKUtableProps> = ({
     const n = typeof value === "number" ? value : Number(value);
     if (!Number.isFinite(n)) return "-";
 
-    const formatted = Math.abs(n).toLocaleString(undefined, {
+    const formatted = n.toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+
 
     if (key === "profit_percentage") return `${formatted}%`;
     return formatted;
@@ -1545,164 +1546,164 @@ const SKUtable: React.FC<SKUtableProps> = ({
   //       </div>
   //     </div>
 
-  //     {/* Top & Bottom tables */}
-  //     <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
-  //       <div className="flex flex-col justify-between gap-7 md:gap-3 text-[#414042] md:flex-row min-w-0">
-  //         <div className="flex-1 min-w-0">
-  //           <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
-  //             <PageBreadcrumb pageTitle="Most 5 Profitable Products" variant="page" align="left" textSize="2xl" />
-  //           </div>
+  // {/* Top & Bottom tables */}
+  // <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
+  //   <div className="flex flex-col justify-between gap-7 md:gap-3 text-[#414042] md:flex-row min-w-0">
+  //     <div className="flex-1 min-w-0">
+  //       <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
+  //         <PageBreadcrumb pageTitle="Most 5 Profitable Products" variant="page" align="left" textSize="2xl" />
+  //       </div>
 
-  //           <div className="overflow-x-auto rounded-xl border border-gray-300">
-  //             <table className="w-full table-auto border-collapse">
-  //               <thead>
-  //                 <tr className="bg-green-500 font-bold text-[#f8edcf]">
-  //                   <th className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-  //                     Product Name
-  //                   </th>
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     CM1 Profit ({currencySymbol})
-  //                   </th>
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     Profit Mix (%)
-  //                   </th>
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     Sales Mix (%)
-  //                   </th>
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     CM1 Profit per Unit ({currencySymbol})
-  //                   </th>
-  //                 </tr>
-  //               </thead>
-  //               <tbody>
-  //                 {topData.rows.map((item, index) => (
-  //                   <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-  //                     <td className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-  //                       <span className="flex max-w-[220px] items-center truncate" title={item.product_name}>
-  //                         {item.product_name || "-"}
-  //                       </span>
-  //                     </td>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                       {item.profit}
-  //                     </td>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                       {item.profitMix}%
-  //                     </td>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                       {item.salesMix}%
-  //                     </td>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                       {item.unit_wise_profitability}
-  //                     </td>
-  //                   </tr>
-  //                 ))}
+  //       <div className="overflow-x-auto rounded-xl border border-gray-300">
+  //         <table className="w-full table-auto border-collapse">
+  //           <thead>
+  //             <tr className="bg-green-500 font-bold text-[#f8edcf]">
+  //               <th className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                 Product Name
+  //               </th>
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 CM1 Profit ({currencySymbol})
+  //               </th>
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 Profit Mix (%)
+  //               </th>
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 Sales Mix (%)
+  //               </th>
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 CM1 Profit per Unit ({currencySymbol})
+  //               </th>
+  //             </tr>
+  //           </thead>
+  //           <tbody>
+  //             {topData.rows.map((item, index) => (
+  //               <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+  //                 <td className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                   <span className="flex max-w-[220px] items-center truncate" title={item.product_name}>
+  //                     {item.product_name || "-"}
+  //                   </span>
+  //                 </td>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                   {item.profit}
+  //                 </td>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                   {item.profitMix}%
+  //                 </td>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                   {item.salesMix}%
+  //                 </td>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                   {item.unit_wise_profitability}
+  //                 </td>
+  //               </tr>
+  //             ))}
 
-  //                 <tr className="bg-gray-200 font-semibold">
-  //                   <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-  //                     <strong>Total</strong>
-  //                   </td>
-  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     <strong>{topData.totals.profit}</strong>
-  //                   </td>
-  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     <strong>{topData.totals.profitMix}%</strong>
-  //                   </td>
-  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     <strong>{topData.totals.salesMix}%</strong>
-  //                   </td>
-  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     {/* <strong>{topData.totals.unit_wise_profitability}</strong> */}
-  //                     <strong></strong>
-  //                   </td>
-  //                 </tr>
-  //               </tbody>
-  //             </table>
-  //           </div>
-  //         </div>
-
-  //         <div className="flex-1 min-w-0">
-  //           <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
-  //             <PageBreadcrumb pageTitle="Least 5 Profitable Products" variant="page" align="left" textSize="2xl" />
-  //           </div>
-
-  //           <div className="overflow-x-auto rounded-xl border border-gray-300">
-  //             <table className="w-full table-auto border-collapse">
-  //               <thead>
-  //                 <tr className="bg-[#ff5c5c] font-bold text-[#f8edcf]">
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-  //                     Product Name
-  //                   </th>
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     CM1 Profit ({currencySymbol})
-  //                   </th>
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     Profit Mix (%)
-  //                   </th>
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     Sales Mix (%)
-  //                   </th>
-  //                   <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     CM1 Profit per Unit ({currencySymbol})
-  //                   </th>
-  //                 </tr>
-  //               </thead>
-  //               <tbody>
-  //                 {bottomData.rows.map((item, index) => (
-  //                   <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-  //                       <span className="inline-flex max-w-[220px] items-center truncate" title={item.product_name}>
-  //                         {item.product_name || "-"}
-  //                       </span>
-  //                     </td>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                       {item.profit}
-  //                     </td>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                       {item.profitMix}%
-  //                     </td>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                       {item.salesMix}%
-  //                     </td>
-  //                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                       {item.unit_wise_profitability}
-  //                     </td>
-  //                   </tr>
-  //                 ))}
-
-  //                 <tr className="bg-gray-200 font-semibold">
-  //                   <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
-  //                     <strong>Total</strong>
-  //                   </td>
-  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     <strong>{bottomData.totals.profit}</strong>
-  //                   </td>
-  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     <strong>{bottomData.totals.profitMix}%</strong>
-  //                   </td>
-  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     <strong>{bottomData.totals.salesMix}%</strong>
-  //                   </td>
-  //                   <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-  //                     {/* <strong>{bottomData.totals.unit_wise_profitability}</strong> */}
-  //                     <strong></strong>
-  //                   </td>
-  //                 </tr>
-  //               </tbody>
-  //             </table>
-  //           </div>
-  //         </div>
+  //             <tr className="bg-gray-200 font-semibold">
+  //               <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                 <strong>Total</strong>
+  //               </td>
+  //               <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 <strong>{topData.totals.profit}</strong>
+  //               </td>
+  //               <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 <strong>{topData.totals.profitMix}%</strong>
+  //               </td>
+  //               <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 <strong>{topData.totals.salesMix}%</strong>
+  //               </td>
+  //               <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 {/* <strong>{topData.totals.unit_wise_profitability}</strong> */}
+  //                 <strong></strong>
+  //               </td>
+  //             </tr>
+  //           </tbody>
+  //         </table>
   //       </div>
   //     </div>
 
-  //     {showModal && selectedProduct && (
-  //       <Productinfoinpopup
-  //         productname={selectedProduct}
-  //         countryName={countryName}
-  //         month={month}
-  //         year={year}
-  //         onClose={() => setShowModal(false)}
-  //       />
-  //     )}
+  //     <div className="flex-1 min-w-0">
+  //       <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
+  //         <PageBreadcrumb pageTitle="Least 5 Profitable Products" variant="page" align="left" textSize="2xl" />
+  //       </div>
+
+  //       <div className="overflow-x-auto rounded-xl border border-gray-300">
+  //         <table className="w-full table-auto border-collapse">
+  //           <thead>
+  //             <tr className="bg-[#ff5c5c] font-bold text-[#f8edcf]">
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                 Product Name
+  //               </th>
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 CM1 Profit ({currencySymbol})
+  //               </th>
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 Profit Mix (%)
+  //               </th>
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 Sales Mix (%)
+  //               </th>
+  //               <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 CM1 Profit per Unit ({currencySymbol})
+  //               </th>
+  //             </tr>
+  //           </thead>
+  //           <tbody>
+  //             {bottomData.rows.map((item, index) => (
+  //               <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                   <span className="inline-flex max-w-[220px] items-center truncate" title={item.product_name}>
+  //                     {item.product_name || "-"}
+  //                   </span>
+  //                 </td>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                   {item.profit}
+  //                 </td>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                   {item.profitMix}%
+  //                 </td>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                   {item.salesMix}%
+  //                 </td>
+  //                 <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                   {item.unit_wise_profitability}
+  //                 </td>
+  //               </tr>
+  //             ))}
+
+  //             <tr className="bg-gray-200 font-semibold">
+  //               <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+  //                 <strong>Total</strong>
+  //               </td>
+  //               <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 <strong>{bottomData.totals.profit}</strong>
+  //               </td>
+  //               <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 <strong>{bottomData.totals.profitMix}%</strong>
+  //               </td>
+  //               <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 <strong>{bottomData.totals.salesMix}%</strong>
+  //               </td>
+  //               <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+  //                 {/* <strong>{bottomData.totals.unit_wise_profitability}</strong> */}
+  //                 <strong></strong>
+  //               </td>
+  //             </tr>
+  //           </tbody>
+  //         </table>
+  //       </div>
+  //     </div>
+  //   </div>
+  // </div>
+
+  // {showModal && selectedProduct && (
+  //   <Productinfoinpopup
+  //     productname={selectedProduct}
+  //     countryName={countryName}
+  //     month={month}
+  //     year={year}
+  //     onClose={() => setShowModal(false)}
+  //   />
+  // )}
   //   </>
   // );
 
@@ -1755,16 +1756,24 @@ const SKUtable: React.FC<SKUtableProps> = ({
                     showSignRowInBody
                     getSignForCol={(colKey) => {
                       const plus = new Set(["net_sales", "net_credits"]);
+
                       const minus = new Set([
                         "cost_of_unit_sold",
-                        "amazon_fee",
                         "selling_fees",
                         "fba_fees",
+                        "amazon_fee",
+                        "promotional_rebates",
+                        "platformfeenew",
+                        "platform_fee_inventory_storage",
+                        "other_transactions",
                       ]);
+
                       if (plus.has(colKey)) return { text: "(+)", className: "text-green-700" };
                       if (minus.has(colKey)) return { text: "(-)", className: "text-[#ff5c5c]" };
                       return null;
                     }}
+
+
                     getRowClassName={(row, index) => {
                       const isLastRow = index === tableData.length - 1;
                       return `${index % 2 === 0 ? "bg-white" : "bg-gray-50"} ${isLastRow ? "bg-gray-200 font-semibold" : ""
@@ -1813,7 +1822,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
                           Cost of Advertisement <strong>(-)</strong>
                         </td>
                         <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          {formatValue(Math.abs(totals.advertising_total), "advertising_total")}
+                          {/* {formatValue(Math.abs(totals.advertising_total), "advertising_total")} */}
+                          {formatValue(totals.advertising_total, "advertising_total")}
                         </td>
                       </tr>
 
@@ -1822,7 +1832,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
                           Visibility - Ads <strong>(-)</strong>
                         </td>
                         <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          {formatValue(Math.abs(totals.visible_ads), "visible_ads")}
+                          {/* {formatValue(Math.abs(totals.visible_ads), "visible_ads")} */}
+                          {formatValue(totals.visible_ads, "visible_ads")}
                         </td>
                       </tr>
 
@@ -1831,7 +1842,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
                           Visibility - Deals, Vouchers and Reviews <strong>(-)</strong>
                         </td>
                         <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          {formatValue(Math.abs(totals.dealsvouchar_ads), "dealsvouchar_ads")}
+                          {/* {formatValue(Math.abs(totals.dealsvouchar_ads), "dealsvouchar_ads")} */}
+                          {formatValue(totals.visible_ads, "visible_ads")}
                         </td>
                       </tr>
 
@@ -1844,12 +1856,14 @@ const SKUtable: React.FC<SKUtableProps> = ({
                         </td>
                       </tr>
 
+
                       <tr>
                         <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
                           Platform Fees <strong>(-)</strong>
                         </td>
                         <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          {formatValue(Math.abs(totals.platform_fee), "platform_fee")}
+                          {/* {formatValue(Math.abs(totals.platform_fee), "platform_fee")} */}
+                          {formatValue(totals.platform_fee, "platform_fee")}
                         </td>
                       </tr>
 
@@ -1858,7 +1872,8 @@ const SKUtable: React.FC<SKUtableProps> = ({
                           Inventory Storage Fees <strong>(-)</strong>
                         </td>
                         <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                          {formatValue(Math.abs(totals.inventory_storage_fees), "inventory_storage_fees")}
+                          {/* {formatValue(Math.abs(totals.inventory_storage_fees), "inventory_storage_fees")} */}
+                          {formatValue(totals.inventory_storage_fees, "inventory_storage_fees")}
                         </td>
                       </tr>
 
@@ -1959,8 +1974,151 @@ const SKUtable: React.FC<SKUtableProps> = ({
 
         {/* Top & Bottom tables */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-1 sm:p-2">
-          {/* keep your existing Top/Bottom tables here exactly */}
-          {/* (paste unchanged from your current code) */}
+          <div className="flex flex-col justify-between gap-7 md:gap-3 text-[#414042] md:flex-row min-w-0">
+            <div className="flex-1 min-w-0">
+              <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
+                <PageBreadcrumb pageTitle="Most 5 Profitable Products" variant="page" align="left" textSize="2xl" />
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-300">
+                <table className="w-full table-auto border-collapse">
+                  <thead>
+                    <tr className="bg-green-500 font-bold text-[#f8edcf]">
+                      <th className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                        Product Name
+                      </th>
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        CM1 Profit ({currencySymbol})
+                      </th>
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        Profit Mix (%)
+                      </th>
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        Sales Mix (%)
+                      </th>
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        CM1 Profit per Unit ({currencySymbol})
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topData.rows.map((item, index) => (
+                      <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                        <td className="w-[160px] whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          <span className="flex max-w-[220px] items-center truncate" title={item.product_name}>
+                            {item.product_name || "-"}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {item.profit}
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {item.profitMix}%
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {item.salesMix}%
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {item.unit_wise_profitability}
+                        </td>
+                      </tr>
+                    ))}
+
+                    <tr className="bg-gray-200 font-semibold">
+                      <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                        <strong>Total</strong>
+                      </td>
+                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        <strong>{topData.totals.profit}</strong>
+                      </td>
+                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        <strong>{topData.totals.profitMix}%</strong>
+                      </td>
+                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        <strong>{topData.totals.salesMix}%</strong>
+                      </td>
+                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        {/* <strong>{topData.totals.unit_wise_profitability}</strong> */}
+                        <strong></strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex gap-2 text-lg sm:text-2xl md:text-2xl mb-2 md:mb-4 font-bold">
+                <PageBreadcrumb pageTitle="Least 5 Profitable Products" variant="page" align="left" textSize="2xl" />
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-300">
+                <table className="w-full table-auto border-collapse">
+                  <thead>
+                    <tr className="bg-[#ff5c5c] font-bold text-[#f8edcf]">
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                        Product Name
+                      </th>
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        CM1 Profit ({currencySymbol})
+                      </th>
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        Profit Mix (%)
+                      </th>
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        Sales Mix (%)
+                      </th>
+                      <th className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        CM1 Profit per Unit ({currencySymbol})
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bottomData.rows.map((item, index) => (
+                      <tr key={index} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                          <span className="inline-flex max-w-[220px] items-center truncate" title={item.product_name}>
+                            {item.product_name || "-"}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {item.profit}
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {item.profitMix}%
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {item.salesMix}%
+                        </td>
+                        <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                          {item.unit_wise_profitability}
+                        </td>
+                      </tr>
+                    ))}
+
+                    <tr className="bg-gray-200 font-semibold">
+                      <td className="border border-gray-300 px-2 py-2 text-left text-[clamp(12px,0.729vw,16px)]">
+                        <strong>Total</strong>
+                      </td>
+                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        <strong>{bottomData.totals.profit}</strong>
+                      </td>
+                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        <strong>{bottomData.totals.profitMix}%</strong>
+                      </td>
+                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        <strong>{bottomData.totals.salesMix}%</strong>
+                      </td>
+                      <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
+                        {/* <strong>{bottomData.totals.unit_wise_profitability}</strong> */}
+                        <strong></strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
 
         {showModal && selectedProduct && (
