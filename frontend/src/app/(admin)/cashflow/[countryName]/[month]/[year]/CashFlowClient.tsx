@@ -119,7 +119,7 @@ const colorMapping: Record<string, string> = {
   "Other Charges": "#3A8EA4",
   "Tax and Credit": "#ED9F50",
   "CM1 Profit": "#7B9A6D",
-  "Net Reimbursement": "#AB63B5",
+  "Net Reimbursement": "#FDD36F",
   "Cash Generated": "#7B9A6D",
 };
 

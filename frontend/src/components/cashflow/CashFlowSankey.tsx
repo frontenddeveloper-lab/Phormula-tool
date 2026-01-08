@@ -198,14 +198,14 @@ const isXL = screenWidth >= 1280 && screenWidth < 1536;
   /* ---------- SANKEY ---------- */
 
 const rows = [
-  { name: "Gross Sales", value: data.gross_sales || 0, sign: "+", barColor: "#2CA9E0", signColor: "#2E7D32" },
-  { name: "Tax and Credit", value: data.taxncredit || 0, sign: "+", barColor: "#2CA9E0", signColor: "#2E7D32" },
-  { name: "Discount", value: data.promotional_rebates || 0, sign: "-", barColor: "#AB63B5", signColor: "#D32F2F" },
-  { name: "FBA Fees", value: data.fba_fees || 0, sign: "-", barColor: "#ff5c5c", signColor: "#D32F2F" },
-  { name: "Selling  Fees", value: data.selling_fees || 0, sign: "-", barColor: "#ff5c5c", signColor: "#D32F2F" },
-  { name: "Ads Cost", value: data.advertising_total || 0, sign: "-", barColor: "#ff5c5c", signColor: "#D32F2F" },
-  { name: "Other", value: data.otherwplatform || 0, sign: "-", barColor: "#ff5c5c", signColor: "#D32F2F" },
-  { name: "Cash Generated", value: data.cashflow || 0, sign: "+", barColor: "#2E7D32", signColor: "#2E7D32" },
+  { name: "Gross Sales", value: data.gross_sales || 0, sign: "+", barColor: "#75BBDA", signColor: "#2E7D32" },
+  { name: "Tax and Credit", value: data.taxncredit || 0, sign: "+", barColor: "#75BBDA", signColor: "#2E7D32" },
+  { name: "Discount", value: data.promotional_rebates || 0, sign: "-", barColor: "#ED9F50", signColor: "#D32F2F" },
+  { name: "FBA Fees", value: data.fba_fees || 0, sign: "-", barColor: "#B75A5A", signColor: "#D32F2F" },
+  { name: "Selling  Fees", value: data.selling_fees || 0, sign: "-", barColor: "#B75A5A", signColor: "#D32F2F" },
+  { name: "Ads Cost", value: data.advertising_total || 0, sign: "-", barColor: "#B75A5A", signColor: "#D32F2F" },
+  { name: "Other", value: data.otherwplatform || 0, sign: "-", barColor: "#B75A5A", signColor: "#D32F2F" },
+  { name: "Cash Generated", value: data.cashflow || 0, sign: "+", barColor: "#7B9A6D", signColor: "#2E7D32" },
 ];
 
 
@@ -229,7 +229,7 @@ label: {
   show: true,
   position: "right",
   overflow: "none",
-  width: is2XL ? 310 : isXL ? 210 : 210,
+  width: is2XL ? 310 : isXL ? 215 : 210,
 formatter: (n: any) => {
   const row = rows.find(r => r.name === n.name);
   if (!row) return "";
@@ -276,7 +276,7 @@ rich: {
   },
 
   amount: {
-    width: is2XL ? 80 : isXL ? 60 : 60,
+    width: is2XL ? 80 : isXL ? 63 : 60,
     align: "right",
     fontSize: is2XL ? 12 : 11,
     fontWeight: 700,

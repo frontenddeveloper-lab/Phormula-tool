@@ -2296,6 +2296,7 @@ type TableRow = {
   product_sales?: number;
   refund_sales?: number;
   net_sales?: number;
+  lost_total?: number;
 
   cost_of_unit_sold?: number;
   shipment_charges?: number;
@@ -2370,6 +2371,8 @@ type Totals = {
   rembursment_vs_cm2_margins: number;
   profit: number;
   net_sales: number;
+  lost_total: number;
+
 };
 
 type JwtPayload = {
@@ -2450,6 +2453,7 @@ function normalizeRows(data: any[]): TableRow[] {
       product_sales: toNumber(row.gross_sales ?? row.product_sales),
       refund_sales: toNumber(row.refund_sales),
       net_sales: toNumber(row.net_sales),
+      lost_total: toNumber(row.lost_total),
 
       // Costs / Fees
       cost_of_unit_sold: toNumber(row.cost_of_unit_sold),
@@ -2470,7 +2474,11 @@ function normalizeRows(data: any[]): TableRow[] {
       // Other / Misc
       misc_transaction: toNumber(row.misc_transaction),
       other_transaction_fees: toNumber(row.other_transaction_fees),
-      other_transactions: toNumber(row.platform_fee),
+
+      // ✅ TABLE column "Other Transactions" should show other_transaction_fees
+      other_transactions: toNumber(row.other_transaction_fees),
+
+
 
       // CM1
       profit: toNumber(row.profit),
@@ -2504,11 +2512,13 @@ function computeTotalsFromLastRow(rows: TableRow[]): Totals {
     advertising_total: toNumber(lastRow.advertising_total),
     visible_ads: toNumber(lastRow.visible_ads),
     dealsvouchar_ads: toNumber(lastRow.dealsvouchar_ads),
+    // ✅ SUMMARY "Other Transactions" should show platform_fee (total row)
     other_transactions: toNumber(lastRow.platform_fee),
     platform_fee: platformFees,
     inventory_storage_fees: inventoryStorageFees,
     reimbursement_lost_inventory_amount: reimbursementAmount,
     reimbursement_lost_inventory_units: reimbursementUnits,
+    lost_total: toNumber(lastRow.lost_total),
 
     shipment_charges: toNumber(lastRow.shipment_charges),
     reimbursement_vs_sales: toNumber(lastRow.reimbursement_vs_sales),
@@ -2558,6 +2568,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
     rembursment_vs_cm2_margins: 0,
     profit: 0,
     net_sales: 0,
+    lost_total: 0,
   });
 
   const [loading, setLoading] = useState(true);
@@ -2637,6 +2648,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
       { key: "units_sold", label: "Units Sold", align: "center" },
       { key: "return_units", label: "Return Units", align: "center" },
       { key: "net_units_sold", label: "Net Units Sold", align: "center" },
+      { key: "lost_total", label: "Lost Total", align: "center" },
 
       { key: "selling_fees", label: "Selling Fees", align: "center" },
       { key: "fba_fees", label: "FBA Fees", align: "center" },
@@ -2653,9 +2665,9 @@ const SKUtable: React.FC<SKUtableProps> = ({
       { key: "promotional_rebates_percentage", label: "Promotions %", align: "center" },
 
       { key: "misc_transaction", label: "Misc.", align: "center" },
-      { key: "other_transactions", label: "Other Transactions", align: "center" },
+      { key: "other_transactions", label: "Other ", align: "center" },
 
-      { key: "platform_fee_inventory_storage", label: "Inventory Storage Fees", align: "center" },
+      // { key: "platform_fee_inventory_storage", label: "Inventory Storage Fees", align: "center" },
 
       { key: "profit", label: "CM1 Profit", align: "center" },
       { key: "profit_percentage", label: "CM1 Profit %", align: "center" },
@@ -2696,6 +2708,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
         "platformfeenew",
         "platform_fee_inventory_storage",
         "other_transactions",
+        "lost_total",
       ]),
     []
   );
@@ -3350,7 +3363,7 @@ const SKUtable: React.FC<SKUtableProps> = ({
                       <strong>(+)</strong>
                     </td>
                     <td className="whitespace-nowrap border border-gray-300 px-2 py-2 text-center text-[clamp(12px,0.729vw,16px)]">
-                      {/* {formatValue(Math.abs(totals.reimbursement_lost_inventory_amount), "reimbursement_lost_inventory_amount")} */}
+                      {formatValue(totals.lost_total, "lost_total")}
                     </td>
                   </tr>
 
