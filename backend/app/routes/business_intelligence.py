@@ -144,7 +144,7 @@ def print_comparison_range():
             return jsonify({'error': str(ve)}), 400
 
         # Dynamic column list
-        columns = ['asp', 'quantity', 'profit', 'sales_mix', 'product_name', 'net_sales', 'unit_wise_profitability', 'product_sales','profit_percentage','rembursement_fee','advertising_total']
+        columns = ['asp', 'total_quantity', 'profit', 'sales_mix', 'product_name', 'net_sales', 'unit_wise_profitability', 'gross_sales','profit_percentage','rembursement_fee','advertising_total']
         if not is_global:
             columns.append('sku')
         cols_str = ', '.join(columns)
@@ -236,7 +236,7 @@ def print_comparison_range():
         expense_total_month1 = query_expense_total(table1)
         expense_total_month2 = query_expense_total(table2)
         if data2:
-            print("Sample Month2 row:", {k: data2[0].get(k) for k in ['sku', 'product_name', 'sales_mix', 'quantity', 'net_sales'] if k in data2[0]})
+            print("Sample Month2 row:", {k: data2[0].get(k) for k in ['sku', 'product_name', 'sales_mix', 'total_quantity', 'net_sales'] if k in data2[0]})
 
         # ✅ query only keys safely (uses scan_key)
         def query_only_keys(table_name):
@@ -266,9 +266,9 @@ def print_comparison_range():
             return keys_set
 
         growth_field_mapping = {
-            'quantity': 'Unit Growth',
+            'total_quantity': 'Unit Growth',
             'asp': 'ASP Growth',
-            'product_sales':'Gross Sales Growth',
+            'gross_sales':'Gross Sales Growth',
             'net_sales': 'Net Sales Growth',
             'sales_mix': 'Sales Mix Change',
             'unit_wise_profitability': 'Profit Per Unit',

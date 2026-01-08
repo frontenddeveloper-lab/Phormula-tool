@@ -49,7 +49,7 @@ interface SkuItem {
   product_name: string;
   sku?: string;
   'Sales Mix (Month2)'?: number;
-  quantity?: number;
+  total_quantity?: number;
   asp?: number;
   net_sales?: number;
   sales_mix?: number;
@@ -57,14 +57,14 @@ interface SkuItem {
   profit?: number;
 
   // ✅ new raw fields from backend for Excel:
-  quantity_month1?: number;
-  quantity_month2?: number;
+  total_quantity_month1?: number;
+  total_quantity_month2?: number;
   asp_month1?: number;
   asp_month2?: number;
   net_sales_month1?: number;
   net_sales_month2?: number;
-  product_sales_month1?: number;
-  product_sales_month2?: number;
+  gross_sales_month1?: number;
+  gross_sales_month2?: number;
   sales_mix_month1?: number;
   sales_mix_month2?: number;
   profit_percentage_month1?: number;
@@ -309,7 +309,7 @@ const MonthsforBI: React.FC = () => {
 
 
   const buildCompareSeries = (
-    metricKeyBase: 'net_sales' | 'profit' | 'quantity' | 'rembursement_fee' | 'asp'
+    metricKeyBase: 'net_sales' | 'profit' | 'total_quantity' | 'rembursement_fee' | 'asp'
   ) => {
     const m1Label = `${getAbbr(month1)}'${String(year1).slice(2)}`;
     const m2Label = `${getAbbr(month2)}'${String(year2).slice(2)}`;
@@ -328,18 +328,18 @@ const MonthsforBI: React.FC = () => {
     if (metricKeyBase === 'asp') {
       const top80_ns_m1 = sumField(top80Rows, 'net_sales_month1');
       const top80_ns_m2 = sumField(top80Rows, 'net_sales_month2');
-      const top80_q_m1 = sumField(top80Rows, 'quantity_month1');
-      const top80_q_m2 = sumField(top80Rows, 'quantity_month2');
+      const top80_q_m1 = sumField(top80Rows, 'total_quantity_month1');
+      const top80_q_m2 = sumField(top80Rows, 'total_quantity_month2');
 
       const newRev_ns_m1 = sumField(newRevRows, 'net_sales_month1');
       const newRev_ns_m2 = sumField(newRevRows, 'net_sales_month2');
-      const newRev_q_m1 = sumField(newRevRows, 'quantity_month1');
-      const newRev_q_m2 = sumField(newRevRows, 'quantity_month2');
+      const newRev_q_m1 = sumField(newRevRows, 'total_quantity_month1');
+      const newRev_q_m2 = sumField(newRevRows, 'total_quantity_month2');
 
       const other_ns_m1 = sumField(otherRows, 'net_sales_month1');
       const other_ns_m2 = sumField(otherRows, 'net_sales_month2');
-      const other_q_m1 = sumField(otherRows, 'quantity_month1');
-      const other_q_m2 = sumField(otherRows, 'quantity_month2');
+      const other_q_m1 = sumField(otherRows, 'total_quantity_month1');
+      const other_q_m2 = sumField(otherRows, 'total_quantity_month2');
 
       const top80_m1 = safeDiv(top80_ns_m1, top80_q_m1);
       const top80_m2 = safeDiv(top80_ns_m2, top80_q_m2);
@@ -767,7 +767,7 @@ const MonthsforBI: React.FC = () => {
         unitsChartInstanceRef.current = echarts.init(el);
       }
 
-      const { x, values } = buildCompareSeries('quantity');
+      const { x, values } = buildCompareSeries('total_quantity');
       const { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2 } = values;
 
       const hasAny = top80_m1 || top80_m2 || newRev_m1 || newRev_m2 || other_m1 || other_m2;
@@ -1302,8 +1302,8 @@ const MonthsforBI: React.FC = () => {
       });
 
       // prev/curr → month1/month2 (aapke months compare page me bhi same keys use ho rahe)
-      clone.quantity_month1 = row.quantity_month1 ?? row.quantity_prev ?? null;
-      clone.quantity_month2 = row.quantity_month2 ?? row.quantity_curr ?? null;
+      clone.total_quantity_month1 = row.total_quantity_month1 ?? row.total_quantity_prev ?? null;
+      clone.total_quantity_month2 = row.total_quantity_month2 ?? row.total_quantity_curr ?? null;
 
       clone.asp_month1 = row.asp_month1 ?? row.asp_prev ?? null;
       clone.asp_month2 = row.asp_month2 ?? row.asp_curr ?? null;
@@ -1311,8 +1311,8 @@ const MonthsforBI: React.FC = () => {
       clone.net_sales_month1 = row.net_sales_month1 ?? row.net_sales_prev ?? null;
       clone.net_sales_month2 = row.net_sales_month2 ?? row.net_sales_curr ?? null;
 
-      clone.product_sales_month1 = row.product_sales_month1 ?? row.product_sales_prev ?? null;
-      clone.product_sales_month2 = row.product_sales_month2 ?? row.product_sales_curr ?? null;
+      clone.gross_sales_month1 = row.gross_sales_month1 ?? row.product_sales_prev ?? null;
+      clone.gross_sales_month2 = row.gross_sales_month2 ?? row.product_sales_curr ?? null;
 
 
       clone.sales_mix_month1 = row.sales_mix_month1 ?? row.sales_mix_prev ?? null;
@@ -1743,11 +1743,11 @@ const MonthsforBI: React.FC = () => {
         const netSalesGrowth = row['Net Sales Growth'] as GrowthCategory | undefined;
         const unitProfitGrowth = row['Profit Per Unit'] as GrowthCategory | undefined;
 
-        const qtyOld = pickOld(row, 'quantity_month1', 'quantity_month2');
-        const qtyNew = pickNew(row, 'quantity_month1', 'quantity_month2');
+        const qtyOld = pickOld(row, 'total_quantity_month1', 'total_quantity_month2');
+        const qtyNew = pickNew(row, 'total_quantity_month1', 'total_quantity_month2');
 
-        const gsOld = pickOld(row, 'product_sales_month1', 'product_sales_month2');
-        const gsNew = pickNew(row, 'product_sales_month1', 'product_sales_month2');
+        const gsOld = pickOld(row, 'gross_sales_month1', 'gross_sales_month2');
+        const gsNew = pickNew(row, 'gross_sales_month1', 'gross_sales_month2');
 
         const nsOld = pickOld(row, 'net_sales_month1', 'net_sales_month2');
         const nsNew = pickNew(row, 'net_sales_month1', 'net_sales_month2');
@@ -1810,11 +1810,11 @@ const MonthsforBI: React.FC = () => {
       // totals
       const totals = clean.reduce(
         (acc, r) => {
-          acc.qtyOld += num(pickOld(r, 'quantity_month1', 'quantity_month2'));
-          acc.qtyNew += num(pickNew(r, 'quantity_month1', 'quantity_month2'));
+          acc.qtyOld += num(pickOld(r, 'total_quantity_month1', 'total_quantity_month2'));
+          acc.qtyNew += num(pickNew(r, 'total_quantity_month1', 'total_quantity_month2'));
 
-          acc.gsOld += num(pickOld(r, 'product_sales_month1', 'product_sales_month2'));
-          acc.gsNew += num(pickNew(r, 'product_sales_month1', 'product_sales_month2'));
+          acc.gsOld += num(pickOld(r, 'gross_sales_month1', 'gross_sales_month2'));
+          acc.gsNew += num(pickNew(r, 'gross_sales_month1', 'gross_sales_month2'));
 
           acc.nsOld += num(pickOld(r, 'net_sales_month1', 'net_sales_month2'));
           acc.nsNew += num(pickNew(r, 'net_sales_month1', 'net_sales_month2'));
@@ -3446,7 +3446,7 @@ const MonthsforBI: React.FC = () => {
                           ...(activeTab !== 'new_or_reviving_skus'
                             ? [0]
                             : []),
-                          pct(sum('quantity_month1'), sum('quantity_month2')),
+                          pct(sum('total_quantity_month1'), sum('total_quantity_month2')),
                           pct(sum('asp_month1'), sum('asp_month2')),
                           pct(sum('net_sales_month1'), sum('net_sales_month2')),
                           pct(sum('unit_wise_profitability_month1'), sum('unit_wise_profitability_month2')),

@@ -1235,24 +1235,23 @@ def fetch_skuwise_monthly_sales(engine, meta, user_id, country, dt):
 
     if table_key not in {t.lower(): t for t in meta.tables}:
         print(f"[SOLD][WARN] Table not found: {table_name}")
-        return pd.DataFrame(columns=['sku', 'quantity', 'Label'])
+        return pd.DataFrame(columns=['sku', 'total_quantity', 'Label'])
 
     try:
         tbl = Table(table_key, meta, autoload_with=engine)
         with engine.connect() as conn:
             df = pd.read_sql(tbl.select(), conn)
 
-        df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0)
+        df['total_quantity'] = pd.to_numeric(df['total_quantity'], errors='coerce').fillna(0)
 
         # ✅ CREATE LABEL HERE
         df['Label'] = month_label(dt)   # e.g. "Sep'25"
 
-        return df[['sku', 'quantity', 'Label']]
+        return df[['sku', 'total_quantity', 'Label']]
 
     except Exception as e:
         print(f"[SOLD][ERROR] {table_name}: {e}")
-        return pd.DataFrame(columns=['sku', 'quantity', 'Label'])
-
+        return pd.DataFrame(columns=['sku', 'total_quantity', 'Label'])
 
 def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool = True):
     """
@@ -1649,14 +1648,14 @@ def generate_forecast(user_id, new_df, country, mv, year, hybrid_allowed: bool =
     if sold_frames:
         sold_df = pd.concat(sold_frames, ignore_index=True)
     else:
-        sold_df = pd.DataFrame(columns=['sku', 'quantity', 'Label'])
+        sold_df = pd.DataFrame(columns=['sku', 'total_quantity', 'Label'])
 
     last3_sold_pivot = (
         sold_df
         .pivot_table(
             index='sku',
             columns='Label',
-            values='quantity',
+            values='total_quantity',
             aggfunc='sum'
         )
         .reset_index()
