@@ -1600,7 +1600,6 @@ def process_skuwise_data(user_id, country, month, year):
                     refund_sales REAL,
                     net_sales REAL,
                     cost_of_unit_sold REAL,
-
                     sales_tax_refund REAL,
                     sales_credit_refund REAL,
                     refund_rebate REAL,
@@ -1626,63 +1625,20 @@ def process_skuwise_data(user_id, country, month, year):
                     cm2_profit_percentage REAL,
                     acos REAL,
                     rembursement_fee REAL,
-                    
                     reimbursement_vs_sales REAL,
-                    
                     cm2_margins REAL,
                     rembursment_vs_cm2_margins REAL,
-                    
-
-
-                    
                     misc_transaction REAL,
                     promotional_rebates_percentage REAL,
-
-                    
-                    
                     tex_and_credits REAL,
-                    
-
-
-
-
                     price_in_gbp REAL,
-                    
-                    
-                    
-                    
-                    
                     shipping_credits_tax REAL,
-                    
                     other REAL,
-                    
-                    
-                    
-                    
-                    
-                   
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                   
                     unit_wise_profitability REAL,
-                 
-                    
                     asp REAL,
-                    
                     sales_mix REAL,
                     profit_mix REAL,
-
                     sales_mix_analysis TEXT,
-                  
-                    
-                   
                     shipping_credits REAL,
                     shipment_charges REAL,
                     errorstatus TEXT,
@@ -1691,13 +1647,6 @@ def process_skuwise_data(user_id, country, month, year):
                     month TEXT,
                     year TEXT,
                     country TEXT,
-                    
-                    
-                    
-
-
-
-
                     user_id INTEGER
                 )
             """))
@@ -1741,13 +1690,8 @@ def process_skuwise_data(user_id, country, month, year):
                     rembursement_fee REAL,
                     rembursment_vs_cm2_margins REAL,
                     reimbursement_vs_sales REAL,
-                    
-                    
-
-
-                    
-                    
-
+                    sales_mix REAL,
+                    profit_mix REAL,
                     user_id INTEGER
                 )
             """))
@@ -1772,7 +1716,6 @@ def process_skuwise_data(user_id, country, month, year):
                     refund_sales REAL,
                     net_sales REAL,
                     cost_of_unit_sold REAL,
-
                     sales_tax_refund REAL,
                     sales_credit_refund REAL,
                     refund_rebate REAL,
@@ -1798,61 +1741,20 @@ def process_skuwise_data(user_id, country, month, year):
                     cm2_profit_percentage REAL,
                     acos REAL,
                     rembursement_fee REAL,
-                    
                     reimbursement_vs_sales REAL,
-                    
                     cm2_margins REAL,
                     rembursment_vs_cm2_margins REAL,
-                    
-
-
-                    
                     misc_transaction REAL,
                     promotional_rebates_percentage REAL,
-
-                    
-                    
                     tex_and_credits REAL,
-                    
-
-
-
-
                     price_in_gbp REAL,
-                    
-                    
-                    
-                    
-                    
                     shipping_credits_tax REAL,
-                    
                     other REAL,
-                    
-                    
-                    
-                    
                     amazon_fee REAL,
-                   
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                   
                     unit_wise_profitability REAL,
-                 
-                    
                     asp REAL,
-                    
                     sales_mix REAL,
                     sales_mix_analysis TEXT,
-                  
-                    
-                   
                     shipping_credits REAL,
                     shipment_charges REAL,
                     errorstatus TEXT,
@@ -1862,13 +1764,6 @@ def process_skuwise_data(user_id, country, month, year):
                     year TEXT,
                     country TEXT,
                     profit_mix REAL,
-
-                    
-                    
-
-
-
-
                     user_id INTEGER
                 )
             """))
@@ -2018,58 +1913,18 @@ def process_skuwise_data(user_id, country, month, year):
                     
                     cm2_margins REAL,
                     rembursment_vs_cm2_margins REAL,
-                    
-
-
-                    
                     misc_transaction REAL,
                     promotional_rebates_percentage REAL,
-
-                    
-                    
                     tex_and_credits REAL,
-                    
-
-
-
-
                     price_in_gbp REAL,
-                    
-                    
-                    
-                    
-                    
                     shipping_credits_tax REAL,
-                    
                     other REAL,
-                    
-                    
-                    
-                    
                     amazon_fee REAL,
                     profit_mix REAL,
-
-                   
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                   
                     unit_wise_profitability REAL,
-                 
-                    
                     asp REAL,
-                    
                     sales_mix REAL,
                     sales_mix_analysis TEXT,
-                  
-                    
-                   
                     shipping_credits REAL,
                     shipment_charges REAL,
                     errorstatus TEXT,
@@ -2078,13 +1933,6 @@ def process_skuwise_data(user_id, country, month, year):
                     month TEXT,
                     year TEXT,
                     country TEXT,
-                    
-                    
-                    
-
-
-
-
                     user_id INTEGER
                 )
             """))
@@ -2209,6 +2057,8 @@ def process_skuwise_data(user_id, country, month, year):
             "rembursment_vs_cm2_margins",
             "reimbursement_vs_sales",
             "lost_total",
+            "sales_mix",
+            "profit_mix",
 
             "user_id"
         ]
@@ -2539,6 +2389,8 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                 "rembursement_fee",
                 "rembursment_vs_cm2_margins",
                 "reimbursement_vs_sales",
+                "sales_mix",
+                "profit_mix",
                 "user_id"
 
                 FROM {source_table}
@@ -2586,6 +2438,8 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                     "rembursement_fee": "sum",
                     "rembursment_vs_cm2_margins": "mean",
                     "reimbursement_vs_sales": "mean",
+                    "sales_mix": "mean",
+                    "profit_mix": "mean",
                     "user_id": "first"
             }).reset_index()
 
@@ -2775,6 +2629,8 @@ def process_yearly_skuwise_data(user_id, country, year):
                 "rembursement_fee",
                 "rembursment_vs_cm2_margins",
                 "reimbursement_vs_sales",
+                "sales_mix",
+                "profit_mix",
                 "user_id"
 
                 FROM {source_table}
@@ -2830,6 +2686,8 @@ def process_yearly_skuwise_data(user_id, country, year):
                     "rembursement_fee": "sum",
                     "rembursment_vs_cm2_margins": "mean",
                     "reimbursement_vs_sales": "mean",
+                    "sales_mix": "mean",
+                    "profit_mix": "mean",
                     "user_id": "first", # or "sum" if you want to repeat user_id for each group
             }).reset_index()
             sku_grouped["product_name"] = sku_grouped["product_name"].astype(str).str.strip()
