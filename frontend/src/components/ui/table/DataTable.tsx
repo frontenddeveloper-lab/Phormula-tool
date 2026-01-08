@@ -81,6 +81,24 @@ export default function DataTable<T extends Row>({
   const loaderStyleHeight =
     typeof loaderHeight === "number" ? `${loaderHeight}px` : loaderHeight;
 
+  const [page, setPage] = React.useState<number>(Math.max(1, initialPage));
+
+  React.useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((data?.length ?? 0) / pageSize));
+    if (page > totalPages) setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, pageSize]);
+
+  const total = data?.length ?? 0;
+  const totalPages = paginate ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+
+  const pageRows = React.useMemo(() => {
+    if (!hasData) return [];
+    if (!paginate) return data;
+    const start = (page - 1) * pageSize;
+    return data.slice(start, start + pageSize);
+  }, [data, page, pageSize, hasData, paginate]);
+
   if (loading) {
     return (
       <div
@@ -101,25 +119,6 @@ export default function DataTable<T extends Row>({
       </div>
     );
   }
-
-  // Pagination
-  const [page, setPage] = React.useState<number>(Math.max(1, initialPage));
-
-  React.useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil((data?.length ?? 0) / pageSize));
-    if (page > totalPages) setPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, pageSize]);
-
-  const total = data?.length ?? 0;
-  const totalPages = paginate ? Math.max(1, Math.ceil(total / pageSize)) : 1;
-
-  const pageRows = React.useMemo(() => {
-    if (!hasData) return [];
-    if (!paginate) return data;
-    const start = (page - 1) * pageSize;
-    return data.slice(start, start + pageSize);
-  }, [data, page, pageSize, hasData, paginate]);
 
   const goToPage = (p: number) => {
     const next = Math.min(Math.max(1, p), totalPages);

@@ -1757,11 +1757,11 @@ export default function DashboardPage() {
     "Net Sales": "#75BBDA",
     "Amazon Fees": "#B75A5A",
     COGS: "#FDD36F",
-    Advertisements: "#ED9F50",
-    "Tax & Credits": "#C49466",
+    Advertisements: "#C49466",
+    "Tax & Credits": "#ED9F50",
     Others: "#3A8EA4",
-    "CM1 Profit": "#87AD12",
-    "CM2 Profit": "#7B9A6D",
+    "CM1 Profit": "#7B9A6D",
+    "CM2 Profit": "#B8C78C",
 
   };
 
@@ -2288,7 +2288,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#FF5C5C] bg-[#FF5C5C26]"
+                      className="border-[#B75A5A] bg-[#B75A5A4D]"
                     />
 
                     {/* ✅ GLOBAL: Cost of Ads (uses BI totals when rangeActive) */}
@@ -2334,7 +2334,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#A78BFA] bg-[#A78BFA26]"
+                      className="border-[#C49466] bg-[#C494664D]"
                     />
 
                     <AmazonStatCard
@@ -2383,7 +2383,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={fmtPct2}
                       bottomLabel={prevLabel}
-                      className="border-[#10B981] bg-[#10B98126]"
+                      className="border-[#3A8EA4] bg-[#3A8EA44D]"
                     />
 
 
@@ -2417,7 +2417,7 @@ export default function DashboardPage() {
                       loading={loading || shopifyLoading || (globalUseBi ? biLoading : false)}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#2DA49A] bg-[#2DA49A26]"
+                      className="border-[#B8C78C] bg-[#B8C78C4D]"
                     />
 
 
@@ -2566,7 +2566,7 @@ export default function DashboardPage() {
                       loading={loading || biLoading}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#FF5C5C] bg-[#FF5C5C26]"
+                      className="border-[#B75A5A] bg-[#B75A5A4D]"
                     />
 
                     <AmazonStatCard
@@ -2610,7 +2610,7 @@ export default function DashboardPage() {
                       loading={loading || (useBiForAmazonCards ? biLoading : false)}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#A78BFA] bg-[#A78BFA26]"
+                      className="border-[#C49466] bg-[#C494664D]"
                     />
 
                     <AmazonStatCard
@@ -2659,7 +2659,7 @@ export default function DashboardPage() {
                       loading={loading || (useBiForAmazonCards ? biLoading : false)}
                       formatter={fmtPct2}
                       bottomLabel={prevLabel}
-                      className="border-[#10B981] bg-[#10B98126]"
+                      className="border-[#3A8EA4] bg-[#3A8EA44D]"
                     />
 
 
@@ -2693,7 +2693,7 @@ export default function DashboardPage() {
                       loading={loading || (useBiCm2 ? biLoading : false)}
                       formatter={formatDisplayAmount}
                       bottomLabel={prevLabel}
-                      className="border-[#2DA49A] bg-[#2DA49A26]"
+                      className="border-[#B8C78C] bg-[#B8C78C4D]"
                     />
 
                     <AmazonStatCard
@@ -2819,7 +2819,7 @@ export default function DashboardPage() {
                         loading={shopifyLoading}
                         formatter={formatDisplayAmount}
                         bottomLabel={prevLabel}
-                        className="border-[#FF5C5C] bg-[#FF5C5C26]"
+                        className="border-[#B75A5A] bg-[#B75A5A4D]"
                       />
                     </div>
                   ) : (

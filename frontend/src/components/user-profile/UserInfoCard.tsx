@@ -20,7 +20,7 @@ import { ALL_PLATFORM_DEFS, type PlatformId } from "@/lib/utils/platforms";
 import ReactCountryFlag from "react-country-flag";
 import { FaPlus } from "react-icons/fa6";
 import DataTable, { type ColumnDef, type Row } from "@/components/ui/table/DataTable"; 
-import PageBreadcrumb from "@/components/common/PageBreadcrumb";
+import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import { useSelector } from "react-redux";
 
 
@@ -707,7 +707,6 @@ action={
 
     className="rounded-xl"
     rowClassName={(row) =>
-      // @ts-expect-error
       row.__isTotal ? "font-semibold bg-slate-50" : ""
     }
   />
@@ -836,7 +835,7 @@ action={
       <Input
         type="number"
         inputMode="numeric"
-        step="1"
+        step={1}
         min="0"
         value={form.target_sales}
         onChange={handleInput("target_sales")}

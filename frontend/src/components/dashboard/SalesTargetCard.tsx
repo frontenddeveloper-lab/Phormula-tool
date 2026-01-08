@@ -341,7 +341,7 @@ const pctDisplay = targetVal > 0 ? (mtdVal / targetVal) * 100 : 0;
         <div className="flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-sm"
-            style={{ backgroundColor: "ED9F50" }}
+            style={{ backgroundColor: "#ED9F50" }}
           />
           <span className="text-gray-600">MTD Sale</span>
         </div>

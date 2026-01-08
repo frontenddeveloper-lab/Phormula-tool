@@ -49,7 +49,7 @@ interface SkuItem {
   product_name: string;
   sku?: string;
   'Sales Mix (Month2)'?: number;
-  quantity?: number;
+  total_quantity?: number;
   asp?: number;
   net_sales?: number;
   sales_mix?: number;
@@ -57,14 +57,14 @@ interface SkuItem {
   profit?: number;
 
   // ✅ new raw fields from backend for Excel:
-  quantity_month1?: number;
-  quantity_month2?: number;
+  total_quantity_month1?: number;
+  total_quantity_month2?: number;
   asp_month1?: number;
   asp_month2?: number;
   net_sales_month1?: number;
   net_sales_month2?: number;
-  product_sales_month1?: number;
-  product_sales_month2?: number;
+  gross_sales_month1?: number;
+  gross_sales_month2?: number;
   sales_mix_month1?: number;
   sales_mix_month2?: number;
   profit_percentage_month1?: number;
@@ -309,7 +309,7 @@ const MonthsforBI: React.FC = () => {
 
 
   const buildCompareSeries = (
-    metricKeyBase: 'net_sales' | 'profit' | 'quantity' | 'rembursement_fee' | 'asp'
+    metricKeyBase: 'net_sales' | 'profit' | 'total_quantity' | 'rembursement_fee' | 'asp'
   ) => {
     const m1Label = `${getAbbr(month1)}'${String(year1).slice(2)}`;
     const m2Label = `${getAbbr(month2)}'${String(year2).slice(2)}`;
@@ -328,18 +328,18 @@ const MonthsforBI: React.FC = () => {
     if (metricKeyBase === 'asp') {
       const top80_ns_m1 = sumField(top80Rows, 'net_sales_month1');
       const top80_ns_m2 = sumField(top80Rows, 'net_sales_month2');
-      const top80_q_m1 = sumField(top80Rows, 'quantity_month1');
-      const top80_q_m2 = sumField(top80Rows, 'quantity_month2');
+      const top80_q_m1 = sumField(top80Rows, 'total_quantity_month1');
+      const top80_q_m2 = sumField(top80Rows, 'total_quantity_month2');
 
       const newRev_ns_m1 = sumField(newRevRows, 'net_sales_month1');
       const newRev_ns_m2 = sumField(newRevRows, 'net_sales_month2');
-      const newRev_q_m1 = sumField(newRevRows, 'quantity_month1');
-      const newRev_q_m2 = sumField(newRevRows, 'quantity_month2');
+      const newRev_q_m1 = sumField(newRevRows, 'total_quantity_month1');
+      const newRev_q_m2 = sumField(newRevRows, 'total_quantity_month2');
 
       const other_ns_m1 = sumField(otherRows, 'net_sales_month1');
       const other_ns_m2 = sumField(otherRows, 'net_sales_month2');
-      const other_q_m1 = sumField(otherRows, 'quantity_month1');
-      const other_q_m2 = sumField(otherRows, 'quantity_month2');
+      const other_q_m1 = sumField(otherRows, 'total_quantity_month1');
+      const other_q_m2 = sumField(otherRows, 'total_quantity_month2');
 
       const top80_m1 = safeDiv(top80_ns_m1, top80_q_m1);
       const top80_m2 = safeDiv(top80_ns_m2, top80_q_m2);
@@ -442,7 +442,7 @@ const MonthsforBI: React.FC = () => {
         legend: { show: false },
 
         grid: { left: 50, right: 20, top: 40, bottom: 35 },
-        color: ['#87AD12', '#AB64B5', '#F47A00',], // Net Sales palette
+        color: ['#7B9A6D', '#3a8ea4', '#ed9F50',], // Net Sales palette
         xAxis: {
           type: 'category',
           boundaryGap: false,
@@ -494,10 +494,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
-                { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+                { offset: 0.0, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.49, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.51, color: hexToRgba("#7B9A6D", 0.28) },
+                { offset: 1.0, color: hexToRgba("#7B9A6D", 0.28) },
               ]),
             },
             data: [newRev_m1, newRev_m1, newRev_m2],
@@ -510,10 +510,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
-                { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+                { offset: 0.0, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.49, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.51, color: hexToRgba("#3A8ea4", 0.28) },
+                { offset: 1.0, color: hexToRgba("#3A8ea4", 0.28) },
               ]),
             },
             data: [other_m1, other_m1, other_m2],
@@ -526,10 +526,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
-                { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+                { offset: 0.0, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.49, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.51, color: hexToRgba("#ed9f50", 0.28) },
+                { offset: 1.0, color: hexToRgba("#ed9f50", 0.28) },
               ]),
             },
             data: [top80_m1, top80_m1, top80_m2],
@@ -625,7 +625,7 @@ const MonthsforBI: React.FC = () => {
         legend: { show: false },
 
         grid: { left: 50, right: 20, top: 40, bottom: 35 },
-        color: ['#87AD12', '#AB64B5', '#F47A00',], // Net Sales palette
+        color: ['#7B9A6D', '#3A8ea4', '#ed9f50',], // Net Sales palette
         xAxis: {
           type: 'category',
           boundaryGap: false,
@@ -676,10 +676,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
-                { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+                { offset: 0.0, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.49, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.51, color: hexToRgba("#7B9A6D", 0.28) },
+                { offset: 1.0, color: hexToRgba("#7B9A6D", 0.28) },
               ]),
             },
             data: [newRev_m1, newRev_m1, newRev_m2],
@@ -692,10 +692,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
-                { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+                { offset: 0.0, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.49, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.51, color: hexToRgba("#3A8ea4", 0.28) },
+                { offset: 1.0, color: hexToRgba("#3A8ea4", 0.28) },
               ]),
             },
             data: [other_m1, other_m1, other_m2],
@@ -709,10 +709,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
-                { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+                { offset: 0.0, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.49, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.51, color: hexToRgba("#ed9f50", 0.28) },
+                { offset: 1.0, color: hexToRgba("#ed9f50", 0.28) },
               ]),
             },
 
@@ -767,7 +767,7 @@ const MonthsforBI: React.FC = () => {
         unitsChartInstanceRef.current = echarts.init(el);
       }
 
-      const { x, values } = buildCompareSeries('quantity');
+      const { x, values } = buildCompareSeries('total_quantity');
       const { top80_m1, top80_m2, newRev_m1, newRev_m2, other_m1, other_m2 } = values;
 
       const hasAny = top80_m1 || top80_m2 || newRev_m1 || newRev_m2 || other_m1 || other_m2;
@@ -805,7 +805,7 @@ const MonthsforBI: React.FC = () => {
 
         legend: { show: false },
         grid: { left: 50, right: 20, top: 40, bottom: 35 },
-        color: ['#87AD12', '#AB64B5', '#F47A00'],
+        color: ['#7B9A6D', '#3A8ea4', '#ed9f50'],
         xAxis: {
           type: 'category',
           boundaryGap: false,
@@ -848,10 +848,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
-                { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+                { offset: 0.0, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.49, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.51, color: hexToRgba("#7B9A6D", 0.28) },
+                { offset: 1.0, color: hexToRgba("#7B9A6D", 0.28) },
               ]),
             },
             data: [newRev_m1, newRev_m1, newRev_m2],
@@ -864,10 +864,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
-                { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+                { offset: 0.0, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.49, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.51, color: hexToRgba("#3A8ea4", 0.28) },
+                { offset: 1.0, color: hexToRgba("#3A8ea4", 0.28) },
               ]),
             },
             data: [other_m1, other_m1, other_m2],
@@ -880,10 +880,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
-                { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+                { offset: 0.0, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.49, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.51, color: hexToRgba("#ed9f50", 0.28) },
+                { offset: 1.0, color: hexToRgba("#ed9f50", 0.28) },
               ]),
             },
             data: [top80_m1, top80_m1, top80_m2],
@@ -974,7 +974,7 @@ const MonthsforBI: React.FC = () => {
         },
         legend: { show: false },
         grid: { left: 50, right: 20, top: 40, bottom: 35 },
-        color: ['#87AD12', '#AB64B5', '#F47A00'],
+        color: ['#7B9A6D', '#3A8ea4', '#ed9f50'],
         xAxis: {
           type: 'category',
           boundaryGap: false,
@@ -1019,10 +1019,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
-                { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+                { offset: 0.0, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.49, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.51, color: hexToRgba("#7B9A6D", 0.28) },
+                { offset: 1.0, color: hexToRgba("#7B9A6D", 0.28) },
               ]),
             },
             data: [newRev_m1, newRev_m1, newRev_m2],
@@ -1035,10 +1035,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
-                { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+                { offset: 0.0, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.49, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.51, color: hexToRgba("#3A8ea4", 0.28) },
+                { offset: 1.0, color: hexToRgba("#3A8ea4", 0.28) },
               ]),
             },
             data: [other_m1, other_m1, other_m2],
@@ -1051,10 +1051,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
-                { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+                { offset: 0.0, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.49, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.51, color: hexToRgba("#ed9f50", 0.28) },
+                { offset: 1.0, color: hexToRgba("#ed9f50", 0.28) },
               ]),
             },
             data: [top80_m1, top80_m1, top80_m2],
@@ -1302,8 +1302,8 @@ const MonthsforBI: React.FC = () => {
       });
 
       // prev/curr → month1/month2 (aapke months compare page me bhi same keys use ho rahe)
-      clone.quantity_month1 = row.quantity_month1 ?? row.quantity_prev ?? null;
-      clone.quantity_month2 = row.quantity_month2 ?? row.quantity_curr ?? null;
+      clone.total_quantity_month1 = row.total_quantity_month1 ?? row.total_quantity_prev ?? null;
+      clone.total_quantity_month2 = row.total_quantity_month2 ?? row.total_quantity_curr ?? null;
 
       clone.asp_month1 = row.asp_month1 ?? row.asp_prev ?? null;
       clone.asp_month2 = row.asp_month2 ?? row.asp_curr ?? null;
@@ -1311,8 +1311,8 @@ const MonthsforBI: React.FC = () => {
       clone.net_sales_month1 = row.net_sales_month1 ?? row.net_sales_prev ?? null;
       clone.net_sales_month2 = row.net_sales_month2 ?? row.net_sales_curr ?? null;
 
-      clone.product_sales_month1 = row.product_sales_month1 ?? row.product_sales_prev ?? null;
-      clone.product_sales_month2 = row.product_sales_month2 ?? row.product_sales_curr ?? null;
+      clone.gross_sales_month1 = row.gross_sales_month1 ?? row.product_sales_prev ?? null;
+      clone.gross_sales_month2 = row.gross_sales_month2 ?? row.product_sales_curr ?? null;
 
 
       clone.sales_mix_month1 = row.sales_mix_month1 ?? row.sales_mix_prev ?? null;
@@ -1595,9 +1595,9 @@ const MonthsforBI: React.FC = () => {
   const fmtNum = (v: any) => Math.round(Number(v || 0)).toLocaleString();
 
   const SERIES_ORDER = [
-    { name: 'Top 80%', color: '#F47A00' },
-    { name: 'Other SKUs', color: '#AB64B5' },
-    { name: 'New/Reviving', color: '#87AD12' },
+    { name: 'Top 80%', color: '#ed9f50' },
+    { name: 'Other SKUs', color: '#3A8ea4' },
+    { name: 'New/Reviving', color: '#7B9A6D' },
   ];
 
 
@@ -1743,11 +1743,11 @@ const MonthsforBI: React.FC = () => {
         const netSalesGrowth = row['Net Sales Growth'] as GrowthCategory | undefined;
         const unitProfitGrowth = row['Profit Per Unit'] as GrowthCategory | undefined;
 
-        const qtyOld = pickOld(row, 'quantity_month1', 'quantity_month2');
-        const qtyNew = pickNew(row, 'quantity_month1', 'quantity_month2');
+        const qtyOld = pickOld(row, 'total_quantity_month1', 'total_quantity_month2');
+        const qtyNew = pickNew(row, 'total_quantity_month1', 'total_quantity_month2');
 
-        const gsOld = pickOld(row, 'product_sales_month1', 'product_sales_month2');
-        const gsNew = pickNew(row, 'product_sales_month1', 'product_sales_month2');
+        const gsOld = pickOld(row, 'gross_sales_month1', 'gross_sales_month2');
+        const gsNew = pickNew(row, 'gross_sales_month1', 'gross_sales_month2');
 
         const nsOld = pickOld(row, 'net_sales_month1', 'net_sales_month2');
         const nsNew = pickNew(row, 'net_sales_month1', 'net_sales_month2');
@@ -1810,11 +1810,11 @@ const MonthsforBI: React.FC = () => {
       // totals
       const totals = clean.reduce(
         (acc, r) => {
-          acc.qtyOld += num(pickOld(r, 'quantity_month1', 'quantity_month2'));
-          acc.qtyNew += num(pickNew(r, 'quantity_month1', 'quantity_month2'));
+          acc.qtyOld += num(pickOld(r, 'total_quantity_month1', 'total_quantity_month2'));
+          acc.qtyNew += num(pickNew(r, 'total_quantity_month1', 'total_quantity_month2'));
 
-          acc.gsOld += num(pickOld(r, 'product_sales_month1', 'product_sales_month2'));
-          acc.gsNew += num(pickNew(r, 'product_sales_month1', 'product_sales_month2'));
+          acc.gsOld += num(pickOld(r, 'gross_sales_month1', 'gross_sales_month2'));
+          acc.gsNew += num(pickNew(r, 'gross_sales_month1', 'gross_sales_month2'));
 
           acc.nsOld += num(pickOld(r, 'net_sales_month1', 'net_sales_month2'));
           acc.nsNew += num(pickNew(r, 'net_sales_month1', 'net_sales_month2'));
@@ -2016,11 +2016,11 @@ const MonthsforBI: React.FC = () => {
 
     // ✅ YAHAN ADD KARO (return se just pehle)
     const ds = [
-      { key: "netSales", label: "Net Sales", data: [netSales_m1, netSales_m2], color: "#2CA9E0" },
-      { key: "cm1Profit", label: "CM1 Profit", data: [profit_m1, profit_m2], color: "#5EA49B" },
-      { key: "otherExpense", label: "Other Expense", data: [otherExp_m1, otherExp_m2], color: "#00627D" },
-      { key: "advertising", label: "Advertising Total", data: [adv_m1, adv_m2], color: "#F47A00" },
-      { key: "reimbursement", label: "Reimbursement", data: [reimb_m1, reimb_m2], color: "#AB64B5" },
+      { key: "netSales", label: "Net Sales", data: [netSales_m1, netSales_m2], color: "#75bbda" },
+      { key: "cm1Profit", label: "CM1 Profit", data: [profit_m1, profit_m2], color: "#7b9a6d" },
+      { key: "otherExpense", label: "Other Expense", data: [otherExp_m1, otherExp_m2], color: "#3A8EA4" },
+      { key: "advertising", label: "Advertising Total", data: [adv_m1, adv_m2], color: "#C49466" },
+      { key: "reimbursement", label: "Reimbursement", data: [reimb_m1, reimb_m2], color: "#FDD36F" },
     ];
 
     const datasets = ds
@@ -2966,11 +2966,11 @@ const MonthsforBI: React.FC = () => {
           {/* Center labels like GraphPage */}
           <div className="mt-3 sm:mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4 md:gap-5 w-full mx-auto transition-opacity duration-300">
             {[
-              { key: "netSales", label: "Net Sales", color: "#2CA9E0" },
-              { key: "cm1Profit", label: "CM1 Profit", color: "#5EA49B" },
-              { key: "otherExpense", label: "Other Expense", color: "#00627D" },
-              { key: "advertising", label: "Advertising Total", color: "#F47A00" },
-              { key: "reimbursement", label: "Reimbursement", color: "#AB64B5" },
+              { key: "netSales", label: "Net Sales", color: "#75bbda" },
+              { key: "cm1Profit", label: "CM1 Profit", color: "#7b9a6d" },
+              { key: "otherExpense", label: "Other Expense", color: "#3A8EA4" },
+              { key: "advertising", label: "Advertising Total", color: "#C49466" },
+              { key: "reimbursement", label: "Reimbursement", color: "#FDD36F" },
             ].map(({ key, label, color }) => {
               const isChecked = !!selectedTotals[key];
 
@@ -3048,17 +3048,17 @@ const MonthsforBI: React.FC = () => {
           {/* Shared legend bottom center */}
           <div className="mt-3 flex flex-wrap justify-center gap-4 2xl:text-xs text-[10px] font-semibold text-[#414042]">
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#F47A00]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#ED9F50]" />
               Top 80%
             </span>
 
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#AB64B5]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#3A8EA4]" />
               Other SKUs
             </span>
 
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#87AD12]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#7B9A6D]" />
               New/Reviving
             </span>
           </div>
@@ -3446,7 +3446,7 @@ const MonthsforBI: React.FC = () => {
                           ...(activeTab !== 'new_or_reviving_skus'
                             ? [0]
                             : []),
-                          pct(sum('quantity_month1'), sum('quantity_month2')),
+                          pct(sum('total_quantity_month1'), sum('total_quantity_month2')),
                           pct(sum('asp_month1'), sum('asp_month2')),
                           pct(sum('net_sales_month1'), sum('net_sales_month2')),
                           pct(sum('unit_wise_profitability_month1'), sum('unit_wise_profitability_month2')),

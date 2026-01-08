@@ -750,17 +750,17 @@ const CountryCard: React.FC<CountryCardProps> = ({
   const getTileStyle = (k: TileKey) => {
     switch (k) {
       case "netSales":
-        return "bg-[#2CA9E033] border-[#41404233]"; // light blue
+        return "bg-[#75BBDA4D] border-[#75BBDA]"; 
       case "units":
-        return "bg-[#FDD36F4D] border-[#FDD36F]"; // light yellow
+        return "bg-[#FDD36F4D] border-[#FDD36F]"; 
       case "cm1Profit":
-        return "bg-[#2DA49A33] border-[#41404233]"; // light mint
+        return "bg-[#7B9A6D4D] border-[#7B9A6D]"; 
       case "avgMonthlySales":
-        return "bg-[#AB64B533] border-[#41404233]"; // light purple
+        return "bg-[#ED9F504D] border-[#ED9F50]"; 
       case "avgMonthlyUnits":
-        return "bg-[#87AD1226] border-[#41404233]"; // light green
+        return "bg-[#C494664D] border-[#C49466]"; 
       case "cm1ProfitPct":
-        return "bg-[#F47A0026] border-[#41404233]"; // light peach
+        return "bg-[#B8C78C4D] border-[#B8C78C]"; // light peach
       default:
         return "bg-gray-200/40 border-gray-300";
     }

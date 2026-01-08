@@ -253,7 +253,11 @@ const soldLabels = useMemo(
     [totalsRow]
   );
 
-  const palette = ['#2CA9E0', '#FF5C5C', '#5DA68E', '#F47A00', '#87AD12', '#AB64B5'];
+  const palette = [  "#FDD36F",
+          "#5EA49B",
+          "#ED9F50",
+          "#00627D",
+          "#87AD12", '#C49466'];
   const forecastStartIndex = 3;
 
   const datasets = useMemo(() => {
@@ -276,8 +280,8 @@ const soldLabels = useMemo(
     const totalDs = {
       label: 'Total',
       data: grandTotalSeries,
-      borderColor: '#AB64B5',
-      backgroundColor: '#AB64B5',
+      borderColor: '#C49466',
+      backgroundColor: '#C49466',
       borderWidth: 3,
       tension: 0.3,
       fill: false,

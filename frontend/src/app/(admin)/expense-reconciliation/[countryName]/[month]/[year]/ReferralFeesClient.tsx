@@ -1738,8 +1738,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
               charged={card6.totalFees}
               applicable={card6.totalFeesApplicable}
               fmtCurrency={fmtCurrencyRounded}
-              borderColor="#F47A00"
-              bgColor="#F47A0026"
+              borderColor="#B75A5A"
+              bgColor="#B75A5A4D"
             />
 
             <FeeCard
@@ -1748,8 +1748,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
               charged={card6.refFeesApplied}
               applicable={card6.refFeesApplicable}
               fmtCurrency={fmtCurrencyRounded}
-              borderColor="#FF5C5C"
-              bgColor="#FF5C5C26"
+              borderColor="#7B9A6D"
+              bgColor="#7B9A6D4D"
             />
 
             <FeeCard
@@ -1758,8 +1758,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
               charged={card6.fbaFees}
               applicable={card6.fbaFeesApplicable}
               fmtCurrency={fmtCurrencyRounded}
-              borderColor="#2DA49A"
-              bgColor="#2DA49A26"
+              borderColor="#FDD36F"
+              bgColor="#FDD36F4D"
             />
 
             <FeeCard
@@ -1768,8 +1768,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
               charged={card6.platformFees}
               applicable={card6.platformFeesApplicable}
               fmtCurrency={fmtCurrencyRounded}
-              borderColor="#FDD36F"
-              bgColor="#FDD36F4D"
+              borderColor="#ED9F50"
+              bgColor="#ED9F504D"
             />
 
             <FeeCard
@@ -1778,8 +1778,8 @@ export default function ReferralFeesDashboard(): JSX.Element {
               charged={card6.otherFees}
               applicable={card6.otherFeesApplicable}
               fmtCurrency={fmtCurrencyRounded}
-              borderColor="#01627F"
-              bgColor="#01627F26"
+              borderColor="#3A8EA4"
+              bgColor="#3A8EA44D"
             />
           </div>
 
@@ -1860,31 +1860,31 @@ export default function ReferralFeesDashboard(): JSX.Element {
                 label: "Total Sales",
                 value: toNumberSafe(grand?.net_sales_total_value),
                 pct: pctOf(toNumberSafe(grand?.net_sales_total_value), totalSalesForLeft),
-                color: "#F47A00",
+                color: "#75BBDA",
               },
               {
                 label: "Accurately charged",
                 value: toNumberSafe(chargeAcc?.net_sales_total_value),
                 pct: pctOf(toNumberSafe(chargeAcc?.net_sales_total_value), totalSalesForLeft),
-                color: "#14B8A6",
+                color: "#C49466",
               },
               {
                 label: "Over charged",
                 value: toNumberSafe(chargeOver?.net_sales_total_value),
                 pct: pctOf(toNumberSafe(chargeOver?.net_sales_total_value), totalSalesForLeft),
-                color: "#EF4444",
+                color: "#B75A5A",
               },
               {
                 label: "Undercharged",
                 value: toNumberSafe(chargeUnder?.net_sales_total_value),
                 pct: pctOf(toNumberSafe(chargeUnder?.net_sales_total_value), totalSalesForLeft),
-                color: "#F59E0B",
+                color: "#FDD36F",
               },
               {
                 label: "No ref fee",
                 value: toNumberSafe(chargeNoRef?.net_sales_total_value),
                 pct: pctOf(toNumberSafe(chargeNoRef?.net_sales_total_value), totalSalesForLeft),
-                color: "#94A3B8",
+                color: "#ED9F50",
               },
             ];
 
@@ -1899,35 +1899,35 @@ export default function ReferralFeesDashboard(): JSX.Element {
                 value: toNumberSafe(grand?.selling_fees),
                 diff: toNumberSafe(grand?.difference),
                 pct: pctOf(toNumberSafe(grand?.difference), totalSalesForPct),
-                color: "#64748B",
+                color: "#7B9A6D",
               },
               {
                 label: "Accurately charged",
                 value: toNumberSafe(chargeAcc?.selling_fees),
                 diff: toNumberSafe(chargeAcc?.difference),
                 pct: pctOf(toNumberSafe(chargeAcc?.difference), totalSalesForPct),
-                color: "#14B8A6",
+                color: "#C49466",
               },
               {
                 label: "Over charged",
                 value: toNumberSafe(chargeOver?.selling_fees),
                 diff: toNumberSafe(chargeOver?.difference),
                 pct: pctOf(toNumberSafe(chargeOver?.difference), totalSalesForPct),
-                color: "#EF4444",
+                color: "#B75A5A",
               },
               {
                 label: "Undercharged",
                 value: toNumberSafe(chargeUnder?.selling_fees),
                 diff: toNumberSafe(chargeUnder?.difference),
                 pct: pctOf(toNumberSafe(chargeUnder?.difference), totalSalesForPct),
-                color: "#F59E0B",
+                color: "#FDD36F",
               },
               {
                 label: "No ref fee",
                 value: toNumberSafe(chargeNoRef?.selling_fees),
                 diff: toNumberSafe(chargeNoRef?.difference),
                 pct: pctOf(toNumberSafe(chargeNoRef?.difference), totalSalesForPct),
-                color: "#94A3B8",
+                color: "#ED9F50",
               },
             ];
 

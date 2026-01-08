@@ -808,7 +808,7 @@ const handleViewBusinessInsights = async () => {
           ticks: {
             callback: function (val: any) {
               // "this" is the X scale; get the raw label ("October", etc.)
-              // @ts-ignore
+             // @ts-expect-error -- Chart.js scale context typing is incorrect for getLabelForValue
               const rawLabel = this.getLabelForValue(val) as string;
               return formatAxisMonth(rawLabel, selectedYear || "");
             },

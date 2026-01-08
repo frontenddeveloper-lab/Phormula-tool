@@ -1183,9 +1183,22 @@ setAiPanel({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Summary */}
           <div className="rounded-xl border border-slate-200 bg-white p-4">
+<<<<<<< HEAD
             <div className="text-sm font-semibold text-charcoal-500 mb-2">
               Month-end Business Summary
             </div>
+=======
+            {/* <div className="text-sm font-semibold text-charcoal-500 mb-2">
+              Month-end Business Summary
+            </div> */}
+<PageBreadcrumb
+              pageTitle="Month-end Business Summary"
+              variant="page"
+              align="left"
+              textSize="2xl"
+            />
+
+>>>>>>> origin
 
             {showLoading ? (
               <div className="text-xs text-charcoal-500">Loading…</div>
@@ -1216,9 +1229,21 @@ setAiPanel({
 
           {/* Recommendations */}
           <div className="rounded-xl border border-slate-200 bg-white p-4">
+<<<<<<< HEAD
             <div className="text-sm font-semibold text-charcoal-500 mb-2">
               Recommendations
             </div>
+=======
+            {/* <div className="text-sm font-semibold text-charcoal-500 mb-2">
+              Recommendations
+            </div> */}
+            <PageBreadcrumb
+              pageTitle="Recommendations"
+              variant="page"
+              align="left"
+              textSize="2xl"
+            />
+>>>>>>> origin
 
             {showLoading ? (
               <div className="text-xs text-charcoal-500">Loading…</div>
@@ -1756,7 +1781,7 @@ setAiPanel({
                 </div>
 
                 {/* Cost of Advertisement */}
-                <div className="w-full rounded-2xl border border-[#A78BFA] bg-[#A78BFA26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#C49466] bg-[#C494664D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">Cost of Advertisement</span>
                   </div>
@@ -1767,7 +1792,7 @@ setAiPanel({
                 </div>
 
                 {/* ROAS */}
-                <div className="w-full rounded-2xl border border-[#10B981] bg-[#10B98126] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#3A8EA4] bg-[#3A8EA44D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">TACoS</span>
                   </div>
@@ -1780,7 +1805,7 @@ setAiPanel({
 
 
                 {/* CM2 Profit */}
-                <div className="w-full rounded-2xl border border-[#2DA49A] bg-[#2DA49A26] shadow-sm px-4 py-3 flex flex-col justify-between">
+                <div className="w-full rounded-2xl border border-[#B8C78C] bg-[#B8C78C4D] shadow-sm px-4 py-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] 2xl:text-xs text-charcoal-500">CM2 Profit</span>
                   </div>

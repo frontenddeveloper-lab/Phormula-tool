@@ -503,10 +503,7 @@ def process_skuwise_data(user_id, country, month, year):
 
 
 
-        print("\n========== [TOP CALC] refund_sales (refund keyword rows only) ==========")
-        print(newrefundsales_df.sort_values("refund_sales", ascending=False).head(15).to_string(index=False))
-        print("TOTAL refund_sales:", float(newrefundsales_df["refund_sales"].sum()))
-        print("=======================================================================\n")
+
 
 
 
@@ -544,15 +541,7 @@ def process_skuwise_data(user_id, country, month, year):
 
         digital_tax_non_refund_df = digital_tax_non_refund_df[["sku", "digital_transaction_tax"]]
 
-        print("\n========== [TOP CALC] digital_transaction_tax (NON-refund rows only) ==========")
-        print(digital_tax_non_refund_df.sort_values("digital_transaction_tax", ascending=False).head(15).to_string(index=False))
-        print("TOTAL digital_transaction_tax:", float(digital_tax_non_refund_df["digital_transaction_tax"].sum()))
-        print("========================================================================================\n")
-
-        # build net_tax sku-wise (NON-refund rows only)
         
-
-        # merge non-refund digital tax into it
         
 # ============================================================
 
@@ -938,15 +927,7 @@ def process_skuwise_data(user_id, country, month, year):
 
         sku_grouped["platform_fee"] = sku_grouped["platform_fee"] + sku_grouped["lost_total"]
 
-        print("\n====== PLATFORM_FEE + LOST_TOTAL (SKU-WISE CHECK) ======")
-        print(
-            sku_grouped[["sku","platform_fee","lost_total"]]
-            .sort_values("platform_fee", ascending=False)
-            .head(25)
-            .to_string(index=False)
-        )
-        print("TOTAL platform_fee (after +lost_total):", float(sku_grouped["platform_fee"].sum()))
-        print("=======================================================\n")
+       
 
 
         if not advertising_by_sku.empty:
@@ -1088,23 +1069,7 @@ def process_skuwise_data(user_id, country, month, year):
            
         )
 
-        print("\n========== FINAL NET TAX BREAKUP (SKU-WISE) ==========")
-        print(
-            sku_grouped[
-                ["sku",
-                "product_sales_tax",
-                postage_credit_tax_col,
-                "promotional_rebates_tax",
-                "marketplace_facilitator_tax",
-                "sales_tax_refund",
-                "refund_rebate",
-                "digital_transaction_tax",
-               
-                "net_tax"]
-            ].sort_values("net_tax", ascending=False).head(25).to_string(index=False)
-        )
-        print("\nTOTAL NET TAX:", float(sku_grouped["net_tax"].sum()))
-        print("=====================================================\n")
+        
 
         # ✅ IMPORTANT: so downstream expense formulas work
         sku_grouped["Net Taxes"] = sku_grouped["net_tax"]
@@ -1131,7 +1096,7 @@ def process_skuwise_data(user_id, country, month, year):
         )
         # ------------------------------------------------------
 
-        print("\n================ SKU-WISE PROFIT DEBUG ==================")
+        
 
         debug_cols = [
             "sku",
@@ -1143,23 +1108,7 @@ def process_skuwise_data(user_id, country, month, year):
             "profit"
         ]
 
-        # Sort by highest profit for readability
-        print(
-            sku_grouped[debug_cols]
-            .sort_values("profit", ascending=False)
-            .head(25)
-            .to_string(index=False)
-        )
-
-        print("\n---------------- PROFIT TOTAL CHECK ----------------")
-        print("TOTAL Net Sales        :", float(sku_grouped["Net Sales"].sum()))
-        print("TOTAL Net Credits      :", float(sku_grouped["Net Credits"].sum()))
-        print("TOTAL Net Taxes        :", float(sku_grouped["Net Taxes"].sum()))
-        print("TOTAL Amazon Fee       :", float(sku_grouped["amazon_fee"].sum()))
-        print("TOTAL Cost of Unit Sold:", float(sku_grouped["cost_of_unit_sold"].sum()))
-        print("TOTAL PROFIT           :", float(sku_grouped["profit"].sum()))
-        print("=====================================================\n")
-        # -----------------------------------------------------------
+        
 
         total_profit = abs(sku_grouped["profit"].sum())
         total_Previous_profit = abs(sku_grouped["previous_profit"].sum())
@@ -1283,9 +1232,10 @@ def process_skuwise_data(user_id, country, month, year):
         sum_row["promotional_rebates_percentage"] = (total_pr / total_ns) * 100 if total_ns != 0 else 0.0
 
 
-        sum_row["platform_fee"] = abs(platform_fee)
+        # sum_row["platform_fee"] = abs(platform_fee)
         # sum_row["rembursement_fee"]= abs(rembursement_fee)
-        lost_total_total = float(sum_row.get("lost_total", 0) or 0)
+        lost_total_total = float(sum_row.get("lost_total", 0) or 0)  # this is -334.62 in your case
+        sum_row["platform_fee"] = float(platform_total) + lost_total_total
         sum_row["rembursement_fee"] = abs(rembursement_fee) 
 
         sum_row["advertising_total"]= abs(advertising_total)

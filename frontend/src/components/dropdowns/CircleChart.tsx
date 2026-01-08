@@ -108,41 +108,41 @@ const CircleChart: React.FC<CircleChartProps> = ({
 
   const chartRef = useRef<any>(null);
 
- const exportChartBase64 = () => {
-  try {
-    const chart = chartRef.current;
-    if (!chart) return null;
+  const exportChartBase64 = () => {
+    try {
+      const chart = chartRef.current;
+      if (!chart) return null;
 
-    // ✅ ensure fully rendered frame
-    chart.update("none");
+      // ✅ ensure fully rendered frame
+      chart.update("none");
 
-    const srcCanvas = chart.canvas as HTMLCanvasElement;
+      const srcCanvas = chart.canvas as HTMLCanvasElement;
 
-    // ✅ upscale helps a LOT for Excel
-    const scale = 3;
+      // ✅ upscale helps a LOT for Excel
+      const scale = 3;
 
-    const out = document.createElement("canvas");
-    out.width = srcCanvas.width * scale;
-    out.height = srcCanvas.height * scale;
+      const out = document.createElement("canvas");
+      out.width = srcCanvas.width * scale;
+      out.height = srcCanvas.height * scale;
 
-    const ctx = out.getContext("2d");
-    if (!ctx) return null;
+      const ctx = out.getContext("2d");
+      if (!ctx) return null;
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
 
-    // ✅ force solid background (removes alpha seams)
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(0, 0, out.width, out.height);
+      // ✅ force solid background (removes alpha seams)
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, out.width, out.height);
 
-    ctx.drawImage(srcCanvas, 0, 0, out.width, out.height);
+      ctx.drawImage(srcCanvas, 0, 0, out.width, out.height);
 
-    // ✅ export JPEG (no alpha)
-    return out.toDataURL("image/jpeg", 0.98);
-  } catch {
-    return null;
-  }
-};
+      // ✅ export JPEG (no alpha)
+      return out.toDataURL("image/jpeg", 0.98);
+    } catch {
+      return null;
+    }
+  };
 
 
 
@@ -230,7 +230,7 @@ const CircleChart: React.FC<CircleChartProps> = ({
       Math.abs(s.cm2_profit || 0),
     ];
 
-    const colors = ["#FDD36F", "#B75A5A", "#C49466", "#ED9F50", "#3A8EA4", "#7B9A6D"];
+    const colors = ["#FDD36F", "#B75A5A", "#ED9F50", "#C49466", "#3A8EA4", "#B8C78C"];
 
     const next: ChartData<"pie", number[], string> = {
       labels,
@@ -274,12 +274,7 @@ const CircleChart: React.FC<CircleChartProps> = ({
           {
             data: dummyValues,
             backgroundColor: [
-              "#FDD36F",
-              "#B75A5A",
-              "#C49466",
-              "#ED9F50",
-              "#3A8EA4",
-              "#7B9A6D",
+              "#FDD36F", "#B75A5A", "#ED9F50", "#C49466", "#3A8EA4", "#B8C78C"
             ],
             borderWidth: 1,
           },

@@ -109,7 +109,7 @@ export default function GroupedCollapsibleTable<RowT>({
   }, [groups, collapsed]);
 
   const thBase =
-    "whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)]";
+    "whitespace-nowrap border border-gray-300 px-2 py-2 text-xs 2xl:text-sm";
 
   return (
     <table className={tableClassName}>
@@ -193,7 +193,7 @@ export default function GroupedCollapsibleTable<RowT>({
               return (
                 <td
                   key={c.key}
-                  className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ${
+                  className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-xs 2xl:text-sm ${
                     sign?.className || ""
                   }`}
                 >
@@ -213,7 +213,7 @@ export default function GroupedCollapsibleTable<RowT>({
               {visibleLeafCols.map((c) => (
                 <td
                   key={c.key}
-                  className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-[clamp(12px,0.729vw,16px)] ${alignClass(
+                  className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-xs 2xl:text-sm ${alignClass(
                     c.align
                   )} ${c.tdClassName || ""}`}
                 >
