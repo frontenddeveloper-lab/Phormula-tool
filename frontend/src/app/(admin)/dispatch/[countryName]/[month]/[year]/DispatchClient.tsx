@@ -131,7 +131,7 @@ export default function DispatchPage() {
   }
 
   function handleRedirectToForecast() {
-    router.push(`/inventoryChoice/${countryName}/${month}/${year}`)
+    router.push(`/inventory-forecast/${countryName}/${month}/${year}`)
   }
 
   useEffect(() => {
