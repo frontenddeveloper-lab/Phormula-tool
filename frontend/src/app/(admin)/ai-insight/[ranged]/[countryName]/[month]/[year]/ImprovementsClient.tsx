@@ -494,10 +494,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
-                { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+                { offset: 0.0, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.49, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.51, color: hexToRgba("#7B9A6D", 0.28) },
+                { offset: 1.0, color: hexToRgba("#7B9A6D", 0.28) },
               ]),
             },
             data: [newRev_m1, newRev_m1, newRev_m2],
@@ -510,10 +510,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
-                { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+                { offset: 0.0, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.49, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.51, color: hexToRgba("#3A8ea4", 0.28) },
+                { offset: 1.0, color: hexToRgba("#3A8ea4", 0.28) },
               ]),
             },
             data: [other_m1, other_m1, other_m2],
@@ -526,10 +526,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
-                { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+                { offset: 0.0, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.49, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.51, color: hexToRgba("#ed9f50", 0.28) },
+                { offset: 1.0, color: hexToRgba("#ed9f50", 0.28) },
               ]),
             },
             data: [top80_m1, top80_m1, top80_m2],
@@ -625,7 +625,7 @@ const MonthsforBI: React.FC = () => {
         legend: { show: false },
 
         grid: { left: 50, right: 20, top: 40, bottom: 35 },
-        color: ['#87AD12', '#AB64B5', '#F47A00',], // Net Sales palette
+        color: ['#7B9A6D', '#3A8ea4', '#ed9f50',], // Net Sales palette
         xAxis: {
           type: 'category',
           boundaryGap: false,
@@ -676,10 +676,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
-                { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+                { offset: 0.0, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.49, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.51, color: hexToRgba("#7B9A6D", 0.28) },
+                { offset: 1.0, color: hexToRgba("#7B9A6D", 0.28) },
               ]),
             },
             data: [newRev_m1, newRev_m1, newRev_m2],
@@ -692,10 +692,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
-                { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+                { offset: 0.0, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.49, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.51, color: hexToRgba("#3A8ea4", 0.28) },
+                { offset: 1.0, color: hexToRgba("#3A8ea4", 0.28) },
               ]),
             },
             data: [other_m1, other_m1, other_m2],
@@ -709,10 +709,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
-                { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+                { offset: 0.0, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.49, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.51, color: hexToRgba("#ed9f50", 0.28) },
+                { offset: 1.0, color: hexToRgba("#ed9f50", 0.28) },
               ]),
             },
 
@@ -805,7 +805,7 @@ const MonthsforBI: React.FC = () => {
 
         legend: { show: false },
         grid: { left: 50, right: 20, top: 40, bottom: 35 },
-        color: ['#87AD12', '#AB64B5', '#F47A00'],
+        color: ['#7B9A6D', '#3A8ea4', '#ed9f50'],
         xAxis: {
           type: 'category',
           boundaryGap: false,
@@ -848,10 +848,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
-                { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+                { offset: 0.0, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.49, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.51, color: hexToRgba("#7B9A6D", 0.28) },
+                { offset: 1.0, color: hexToRgba("#7B9A6D", 0.28) },
               ]),
             },
             data: [newRev_m1, newRev_m1, newRev_m2],
@@ -864,10 +864,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
-                { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+                { offset: 0.0, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.49, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.51, color: hexToRgba("#3A8ea4", 0.28) },
+                { offset: 1.0, color: hexToRgba("#3A8ea4", 0.28) },
               ]),
             },
             data: [other_m1, other_m1, other_m2],
@@ -880,10 +880,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
-                { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+                { offset: 0.0, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.49, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.51, color: hexToRgba("#ed9f50", 0.28) },
+                { offset: 1.0, color: hexToRgba("#ed9f50", 0.28) },
               ]),
             },
             data: [top80_m1, top80_m1, top80_m2],
@@ -974,7 +974,7 @@ const MonthsforBI: React.FC = () => {
         },
         legend: { show: false },
         grid: { left: 50, right: 20, top: 40, bottom: 35 },
-        color: ['#87AD12', '#AB64B5', '#F47A00'],
+        color: ['#7B9A6D', '#3A8ea4', '#ed9f50'],
         xAxis: {
           type: 'category',
           boundaryGap: false,
@@ -1019,10 +1019,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.49, color: hexToRgba("#87AD12", 0.12) },
-                { offset: 0.51, color: hexToRgba("#87AD12", 0.28) },
-                { offset: 1.0, color: hexToRgba("#87AD12", 0.28) },
+                { offset: 0.0, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.49, color: hexToRgba("#7B9A6D", 0.12) },
+                { offset: 0.51, color: hexToRgba("#7B9A6D", 0.28) },
+                { offset: 1.0, color: hexToRgba("#7B9A6D", 0.28) },
               ]),
             },
             data: [newRev_m1, newRev_m1, newRev_m2],
@@ -1035,10 +1035,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.49, color: hexToRgba("#AB64B5", 0.12) },
-                { offset: 0.51, color: hexToRgba("#AB64B5", 0.28) },
-                { offset: 1.0, color: hexToRgba("#AB64B5", 0.28) },
+                { offset: 0.0, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.49, color: hexToRgba("#3A8ea4", 0.12) },
+                { offset: 0.51, color: hexToRgba("#3A8ea4", 0.28) },
+                { offset: 1.0, color: hexToRgba("#3A8ea4", 0.28) },
               ]),
             },
             data: [other_m1, other_m1, other_m2],
@@ -1051,10 +1051,10 @@ const MonthsforBI: React.FC = () => {
             symbol: 'none',
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0.0, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.49, color: hexToRgba("#F47A00", 0.12) },
-                { offset: 0.51, color: hexToRgba("#F47A00", 0.28) },
-                { offset: 1.0, color: hexToRgba("#F47A00", 0.28) },
+                { offset: 0.0, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.49, color: hexToRgba("#ed9f50", 0.12) },
+                { offset: 0.51, color: hexToRgba("#ed9f50", 0.28) },
+                { offset: 1.0, color: hexToRgba("#ed9f50", 0.28) },
               ]),
             },
             data: [top80_m1, top80_m1, top80_m2],
@@ -1595,9 +1595,9 @@ const MonthsforBI: React.FC = () => {
   const fmtNum = (v: any) => Math.round(Number(v || 0)).toLocaleString();
 
   const SERIES_ORDER = [
-    { name: 'Top 80%', color: '#F47A00' },
-    { name: 'Other SKUs', color: '#AB64B5' },
-    { name: 'New/Reviving', color: '#87AD12' },
+    { name: 'Top 80%', color: '#ed9f50' },
+    { name: 'Other SKUs', color: '#3A8ea4' },
+    { name: 'New/Reviving', color: '#7B9A6D' },
   ];
 
 
