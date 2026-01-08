@@ -374,6 +374,29 @@ def process_skuwise_data(user_id, country, month, year):
         )
         lost_total_df["lost_total"] = pd.to_numeric(lost_total_df["lost_total"], errors="coerce").fillna(0)
 
+
+        # ---------- BASE DF (exclude Refund + LOST rows from core metrics) ----------
+        type_str_main = df.get("type", pd.Series("", index=df.index)).astype(str).str.strip()
+        desc_str_main = df.get("description", pd.Series("", index=df.index)).astype(str).str.strip()
+
+        LOST_DESCRIPTIONS = {
+            "REVERSAL_REIMBURSEMENT",
+            "WAREHOUSE_LOST",
+            "WAREHOUSE_DAMAGE",
+            "MISSING_FROM_INBOUND",
+        }
+
+        is_refund = type_str_main.str.contains("refund", case=False, na=False)  # type me refund likha ho
+        is_lost   = desc_str_main.isin(LOST_DESCRIPTIONS)
+
+        df_base = df.loc[~is_refund & ~is_lost].copy()     # ✅ core metrics only
+        df_refund = df.loc[is_refund].copy()              # ✅ refund-only metrics
+        # --------------------------------------------------------------------------
+        # ---------- BASE DF (exclude Refund + LOST rows from core metrics) ----------
+                     # ✅ refund-only metrics
+        # --------------------------------------------------------------------------
+
+
         
 # ------------------- END NEW LOGIC -------------------
 
@@ -440,6 +463,100 @@ def process_skuwise_data(user_id, country, month, year):
         df = df[df["sku"].astype(str).str.strip() != "0"]
         df = df[df["sku"].notna() & (df["sku"].astype(str).str.strip() != "")]
 
+        # ============================================================
+# NEW (TOP): Refund-only Sales + Non-refund Net Tax + Non-refund Digital Tax (SKU-wise)
+# ============================================================
+
+# make sure type/sku string
+        df["sku"] = df["sku"].astype(str).str.strip()
+        df["type"] = df.get("type", "").astype(str).str.strip()
+
+        refund_mask = df["type"].str.contains("refund", case=False, na=False)
+        df_refund_kw = df.loc[refund_mask].copy()
+        df_non_refund = df.loc[~refund_mask].copy()
+
+        # ---------- 1) newrefundsales (refund keyword rows only) ----------
+        refund_sales_cols = ["product_sales"]
+        for c in refund_sales_cols:
+            if c not in df_refund_kw.columns:
+                df_refund_kw[c] = 0.0
+
+        newrefundsales_df = (
+            df_refund_kw.groupby("sku", as_index=False)[refund_sales_cols].sum()
+        )
+
+        newrefundsales_df["newrefundsales"] = (
+            pd.to_numeric(newrefundsales_df["product_sales"], errors="coerce").fillna(0.0)
+            
+            
+        )
+
+        newrefundsales_df["newrefundsales"] = newrefundsales_df["newrefundsales"].apply(
+            lambda x: 0.0 if abs(x) < 1e-6 else x
+        )
+
+        # newrefundsales_df = newrefundsales_df[["sku", "newrefundsales"]]
+        # final name should be refund_sales (same as tables)
+        newrefundsales_df = newrefundsales_df[["sku", "newrefundsales"]].rename(
+            columns={"newrefundsales": "refund_sales"}
+        )
+
+
+
+        print("\n========== [TOP CALC] refund_sales (refund keyword rows only) ==========")
+        print(newrefundsales_df.sort_values("refund_sales", ascending=False).head(15).to_string(index=False))
+        print("TOTAL refund_sales:", float(newrefundsales_df["refund_sales"].sum()))
+        print("=======================================================================\n")
+
+
+
+        # ============================================================
+# FIXED: Refund-only Sales + Net Tax (SKU-wise) with breakup prints
+# ============================================================
+
+# make sure sku/type are strings
+        df["sku"] = df["sku"].astype(str).str.strip()
+        df["type"] = df.get("type", "").astype(str).str.strip()
+
+        refund_mask = df["type"].str.contains("refund", case=False, na=False)
+        df_refund_kw   = df.loc[refund_mask].copy()
+        df_non_refund  = df.loc[~refund_mask].copy()
+
+        
+
+        # ---------- 3) digital_transaction_tax (NON-refund rows only) ----------
+        # formula you gave, but for non-refund rows
+        non_refund_digital_cols = ["product_sales_tax", "shipping_credits", "shipping_credits_tax", "promotional_rebates_tax"]
+        for c in non_refund_digital_cols:
+            if c not in df_refund_kw.columns:
+                df_refund_kw[c] = 0.0
+
+        digital_tax_non_refund_df = (
+            df_refund_kw.groupby("sku", as_index=False)[non_refund_digital_cols].sum()
+        )
+
+        digital_tax_non_refund_df["digital_transaction_tax"] = (
+            pd.to_numeric(digital_tax_non_refund_df["product_sales_tax"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(digital_tax_non_refund_df["shipping_credits"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(digital_tax_non_refund_df["shipping_credits_tax"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(digital_tax_non_refund_df["promotional_rebates_tax"], errors="coerce").fillna(0.0)
+        )
+
+        digital_tax_non_refund_df = digital_tax_non_refund_df[["sku", "digital_transaction_tax"]]
+
+        print("\n========== [TOP CALC] digital_transaction_tax (NON-refund rows only) ==========")
+        print(digital_tax_non_refund_df.sort_values("digital_transaction_tax", ascending=False).head(15).to_string(index=False))
+        print("TOTAL digital_transaction_tax:", float(digital_tax_non_refund_df["digital_transaction_tax"].sum()))
+        print("========================================================================================\n")
+
+        # build net_tax sku-wise (NON-refund rows only)
+        
+
+        # merge non-refund digital tax into it
+        
+# ============================================================
+
+
         refund_fees = df[type_str.eq("Refund")].groupby("sku")["selling_fees"].sum().reset_index()
         refund_fees.rename(columns={"selling_fees": "refund_selling_fees"}, inplace=True)
         refund_fees["sku"] = refund_fees["sku"].astype(str).str.strip()
@@ -447,7 +564,7 @@ def process_skuwise_data(user_id, country, month, year):
 
         df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
 
-        # ---------------- REFUND / RETURN QTY ----------------
+# ---------------- REFUND / RETURN QTY ----------------
         df_refund = df[type_str.eq("Refund")].copy()
 
         # return_quantity = sum(quantity) where type == "Refund" (SKU wise)
@@ -457,49 +574,154 @@ def process_skuwise_data(user_id, country, month, year):
             .rename(columns={"quantity": "return_quantity"})
         )
 
-        # optional safety: if refunds come negative in raw, convert to positive
-        return_qty_df["return_quantity"] = pd.to_numeric(return_qty_df["return_quantity"], errors="coerce").fillna(0)
-        return_qty_df["return_quantity"] = return_qty_df["return_quantity"].abs()
+        # refunds should be treated as positive units (safe)
+        return_qty_df["return_quantity"] = (
+            pd.to_numeric(return_qty_df["return_quantity"], errors="coerce")
+            .fillna(0)
+            .abs()
+        )
 
-# total quantity = total quantity - return_quantity (SKU wise)
-# (note: total quantity will be created AFTER we merge total quantity)
-
-
-        # quantity_df = (
-        #     df.groupby("sku", as_index=False)["quantity"]
-        #     .sum()
-        # )
-
+        # ---------------- TOTAL QTY (per SKU) ----------------
         quantity_df = (
             df.groupby("sku", as_index=False)["quantity"]
             .sum()
+            .rename(columns={"quantity": "quantity"})
         )
 
-        # subtract lost quantities
+        # merge lost quantities
         quantity_df = quantity_df.merge(lost_qty_df, on="sku", how="left")
-        quantity_df["lost_quantity"] = pd.to_numeric(quantity_df["lost_quantity"], errors="coerce").fillna(0)
+        quantity_df["lost_quantity"] = (
+            pd.to_numeric(quantity_df.get("lost_quantity", 0), errors="coerce")
+            .fillna(0)
+            .abs()
+        )
 
+        # merge refund quantities
+        quantity_df = quantity_df.merge(return_qty_df, on="sku", how="left")
+        quantity_df["return_quantity"] = (
+            pd.to_numeric(quantity_df.get("return_quantity", 0), errors="coerce")
+            .fillna(0)
+            .abs()
+        )
+
+        # ✅ FINAL: quantity = total - lost - refund
         quantity_df["quantity"] = (
             pd.to_numeric(quantity_df["quantity"], errors="coerce").fillna(0)
             - quantity_df["lost_quantity"]
+            - quantity_df["return_quantity"]
         )
 
+        # optional: drop helper cols if you don't want them here
         quantity_df.drop(columns=["lost_quantity"], inplace=True)
+        # quantity_df already contains return_quantity; avoid duplicate merge collisions
+        quantity_df = quantity_df.drop(columns=["return_quantity"], errors="ignore")
 
 
-        # Aggregate data SKU-wise (base columns)
-        sku_grouped = df.groupby('sku').agg({
-            "price_in_gbp": "mean", "product_sales": "sum", "promotional_rebates": "sum",
-            "promotional_rebates_tax": "sum", "product_sales_tax": "sum",
-            "selling_fees": "sum", "fba_fees": "sum", "other": "sum", "answer": "sum", "difference": "sum",
-            "marketplace_facilitator_tax": "sum", "shipping_credits_tax": "sum",
-            "giftwrap_credits_tax": "sum", "postage_credits": "sum", 
-            "gift_wrap_credits": "sum", "cost_of_unit_sold": "sum",
-            "total": "sum", "other_transaction_fees": "sum", "product_name": "first",
+
+        type_str_main = df.get("type", pd.Series("", index=df.index)).astype(str).str.strip()
+        desc_str_main = df.get("description", pd.Series("", index=df.index)).astype(str).str.strip()
+
+        LOST_DESCRIPTIONS = {
+            "REVERSAL_REIMBURSEMENT",
+            "WAREHOUSE_LOST",
+            "WAREHOUSE_DAMAGE",
+            "MISSING_FROM_INBOUND",
+        }
+
+        is_refund = type_str_main.str.contains("refund", case=False, na=False)  # type me refund likha ho
+        is_lost   = desc_str_main.isin(LOST_DESCRIPTIONS)
+
+        df_base = df.loc[~is_refund & ~is_lost].copy()     # ✅ core metrics only
+        df_refund = df.loc[is_refund].copy() 
+
+
+        sku_grouped = df_base.groupby('sku').agg({
+            "price_in_gbp": "mean",
+            "product_sales": "sum",
+            "promotional_rebates": "sum",
+            "promotional_rebates_tax": "sum",
+            "product_sales_tax": "sum",
+            "selling_fees": "sum",
+            "fba_fees": "sum",
+            "other": "sum",
+            "answer": "sum",
+            "difference": "sum",
+            "marketplace_facilitator_tax": "sum",
+            "shipping_credits_tax": "sum",
+            "giftwrap_credits_tax": "sum",
+            "postage_credits": "sum",
+            "gift_wrap_credits": "sum",
+            "cost_of_unit_sold": "sum",
+            "total": "sum",
+            "other_transaction_fees": "sum",
+            "product_name": "first",
             "errorstatus": "first",
-            **({"shipping_credits": "sum"} if "shipping_credits" in df.columns else {}),
-            **({"shipment_charges": "sum"} if "shipment_charges" in df.columns else {}),
+            **({"shipping_credits": "sum"} if "shipping_credits" in df_base.columns else {}),
+            **({"shipment_charges": "sum"} if "shipment_charges" in df_base.columns else {}),
         }).reset_index()
+
+
+        # make sure sku/type are strings
+        df["sku"]  = df["sku"].astype(str).str.strip()
+        df["type"] = df.get("type", "").astype(str).str.strip()
+
+        refund_mask = df["type"].str.contains("refund", case=False, na=False)
+
+        # split
+        df_refund_kw   = df.loc[refund_mask].copy()
+        df_non_refund  = df.loc[~refund_mask].copy()
+
+        # ---------------------------
+        # ✅ COGS ONLY NON-REFUND (SKU-wise)
+        # ---------------------------
+        if "cost_of_unit_sold" not in df_non_refund.columns:
+            df_non_refund["cost_of_unit_sold"] = 0.0
+
+        cogs_by_sku = (
+            df_non_refund.groupby("sku", as_index=False)["cost_of_unit_sold"]
+            .sum()
+            .rename(columns={"cost_of_unit_sold": "cost_of_unit_sold_non_refund"})
+        )
+
+        cogs_by_sku["cost_of_unit_sold_non_refund"] = pd.to_numeric(
+            cogs_by_sku["cost_of_unit_sold_non_refund"], errors="coerce"
+        ).fillna(0.0)
+
+
+        # after sku_grouped is created (and sku cleaned)
+        sku_grouped["sku"] = sku_grouped["sku"].astype(str).str.strip()
+
+        # merge non-refund cogs and override
+        sku_grouped = sku_grouped.merge(cogs_by_sku, on="sku", how="left")
+        sku_grouped["cost_of_unit_sold_non_refund"] = pd.to_numeric(
+            sku_grouped.get("cost_of_unit_sold_non_refund", 0), errors="coerce"
+        ).fillna(0.0)
+
+        # ✅ force final COGS = NON-REFUND only
+        sku_grouped["cost_of_unit_sold"] = sku_grouped["cost_of_unit_sold_non_refund"]
+        sku_grouped.drop(columns=["cost_of_unit_sold_non_refund"], inplace=True, errors="ignore")
+
+
+
+
+                # ---------------- merge TOP computed columns into sku_grouped ----------------
+        sku_grouped["sku"] = sku_grouped["sku"].astype(str).str.strip()
+
+        # 1) newrefundsales
+        sku_grouped = sku_grouped.merge(newrefundsales_df, on="sku", how="left")
+        sku_grouped["refund_sales"] = pd.to_numeric(sku_grouped.get("refund_sales", 0), errors="coerce").fillna(0.0)
+
+        # 2) net_tax + digital_transaction_tax
+      
+        sku_grouped = sku_grouped.merge(digital_tax_non_refund_df, on="sku", how="left")
+        sku_grouped["digital_transaction_tax"] = pd.to_numeric(
+            sku_grouped.get("digital_transaction_tax", 0),
+            errors="coerce"
+        ).fillna(0.0)
+
+        
+
+
 
         sku_grouped = sku_grouped.merge(lost_total_df, on="sku", how="left")
         sku_grouped["lost_total"] = pd.to_numeric(sku_grouped["lost_total"], errors="coerce").fillna(0)
@@ -518,16 +740,14 @@ def process_skuwise_data(user_id, country, month, year):
         sku_grouped = sku_grouped.merge(return_qty_df, on="sku", how="left")
         sku_grouped["return_quantity"] = pd.to_numeric(sku_grouped["return_quantity"], errors="coerce").fillna(0).astype(int)
 
-        # total_quantity = quantity - return_quantity
+      
         sku_grouped["total_quantity"] = (
             pd.to_numeric(sku_grouped["quantity"], errors="coerce").fillna(0).astype(int)
-            - 2*(sku_grouped["return_quantity"])
+            - sku_grouped["return_quantity"]
         ).astype(int)
 
-        sku_grouped["quantity"] = sku_grouped["quantity"].fillna(0)
+        
 
-        # Total quantity
-        total_quantity = sku_grouped["quantity"].sum()
 
         # Refund fee adjustment
         sku_grouped["selling_fees"] = pd.to_numeric(sku_grouped["selling_fees"], errors='coerce').fillna(0)
@@ -537,25 +757,27 @@ def process_skuwise_data(user_id, country, month, year):
         # ---------------------------------------------------------------------
         # SHARED UK formulas for Net Sales / Net Taxes / Net Credits / Fees / Profit
         # ---------------------------------------------------------------------
-        sales_total, sales_by_sku, _ = uk_sales(df)
-        tax_total, tax_by_sku, _ = uk_tax(df)
+        
         credits_total, credits_by_sku, _ = uk_credits(df)
-        fee_total, fees_by_sku, _ = uk_amazon_fee(df)
-        profit_total, profit_by_sku, _ = uk_profit(df)
+        sales_total, sales_by_sku, _ = uk_sales(df_base)
+        tax_total,   tax_by_sku,   _ = uk_tax(df_base)
+        fee_total,   fees_by_sku,  _ = uk_amazon_fee(df_base)
+        profit_total, profit_by_sku, _ = uk_profit(df_base)
+
 
         # ---------------- REFUND METRICS USING SAME FORMULAS ----------------
-        refund_sales_total, refund_sales_by_sku, _ = uk_sales(df_refund) if not df_refund.empty else (0, pd.DataFrame(), None)
+        # refund_sales_total, refund_sales_by_sku, _ = uk_sales(df_refund) if not df_refund.empty else (0, pd.DataFrame(), None)
         refund_tax_total, refund_tax_by_sku, _     = uk_tax(df_refund)  if not df_refund.empty else (0, pd.DataFrame(), None)
         refund_cred_total, refund_cred_by_sku, _   = uk_credits(df_refund) if not df_refund.empty else (0, pd.DataFrame(), None)
 
         # Merge refund sales
-        if not refund_sales_by_sku.empty:
-            sku_grouped = sku_grouped.merge(
-                refund_sales_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "refund_sales"}),
-                on="sku", how="left"
-            )
-        else:
-            sku_grouped["refund_sales"] = 0.0
+        # if not refund_sales_by_sku.empty:
+        #     sku_grouped = sku_grouped.merge(
+        #         refund_sales_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "refund_sales"}),
+        #         on="sku", how="left"
+        #     )
+        # else:
+        #     sku_grouped["refund_sales"] = 0.0
 
         # Merge refund tax
         if not refund_tax_by_sku.empty:
@@ -608,6 +830,7 @@ def process_skuwise_data(user_id, country, month, year):
         sku_grouped["Net Sales"] = (
             pd.to_numeric(sku_grouped.get("Net Sales", 0), errors="coerce").fillna(0.0)
             + pd.to_numeric(sku_grouped.get("refund_sales", 0), errors="coerce").fillna(0.0)
+            
         )
         # --------------------------------------------------------------
 
@@ -633,8 +856,8 @@ def process_skuwise_data(user_id, country, month, year):
             + pd.to_numeric(sku_grouped["gift_wrap_credits"], errors="coerce").fillna(0.0)
             + pd.to_numeric(sku_grouped["shipping_credits_tax"], errors="coerce").fillna(0.0)
             + pd.to_numeric(sku_grouped["giftwrap_credits_tax"], errors="coerce").fillna(0.0)
-            - pd.to_numeric(sku_grouped["promotional_rebates"], errors="coerce").fillna(0.0)
-            - pd.to_numeric(sku_grouped["promotional_rebates_tax"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(sku_grouped["promotional_rebates"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(sku_grouped["promotional_rebates_tax"], errors="coerce").fillna(0.0)
         )
 
         # ---------- NEW: tex_and_credits (SKU-wise) ----------
@@ -660,16 +883,16 @@ def process_skuwise_data(user_id, country, month, year):
 
 
 
-        for _col in ["refund_sales", "sales_tax_refund", "sales_credit_refund", "refund_rebate", "gross_sales"]:
+        for _col in [ "sales_tax_refund", "sales_credit_refund", "refund_rebate", "gross_sales"]:
             sku_grouped[_col] = pd.to_numeric(sku_grouped[_col], errors="coerce").fillna(0.0)
 
-        if not tax_by_sku.empty:
-            sku_grouped = sku_grouped.merge(
-                tax_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "Net Taxes"}),
-                on="sku", how="left"
-            )
-        else:
-            sku_grouped["Net Taxes"] = 0.0
+        # if not tax_by_sku.empty:
+        #     sku_grouped = sku_grouped.merge(
+        #         tax_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "Net Taxes"}),
+        #         on="sku", how="left"
+        #     )
+        # else:
+        #     sku_grouped["Net Taxes"] = 0.0
 
         if not credits_by_sku.empty:
             sku_grouped = sku_grouped.merge(
@@ -687,13 +910,13 @@ def process_skuwise_data(user_id, country, month, year):
         else:
             sku_grouped["amazon_fee"] = 0.0
 
-        if not profit_by_sku.empty:
-            sku_grouped = sku_grouped.merge(
-                profit_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "profit"}),
-                on="sku", how="left"
-            )
-        else:
-            sku_grouped["profit"] = 0.0
+        # if not profit_by_sku.empty:
+        #     sku_grouped = sku_grouped.merge(
+        #         profit_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "profit"}),
+        #         on="sku", how="left"
+        #     )
+        # else:
+        #     sku_grouped["profit"] = 0.0
 
         # NEW: merge centralized platform/ad per-SKU into sku_grouped
         if not platform_by_sku.empty:
@@ -704,6 +927,23 @@ def process_skuwise_data(user_id, country, month, year):
         else:
             sku_grouped["platform_fee"] = 0.0
 
+        # ✅ platform_fee = platform_fee + lost_total (SKU-wise)
+        sku_grouped["platform_fee"] = pd.to_numeric(sku_grouped.get("platform_fee", 0), errors="coerce").fillna(0.0)
+        sku_grouped["lost_total"]   = pd.to_numeric(sku_grouped.get("lost_total", 0), errors="coerce").fillna(0.0)
+
+        sku_grouped["platform_fee"] = sku_grouped["platform_fee"] + sku_grouped["lost_total"]
+
+        print("\n====== PLATFORM_FEE + LOST_TOTAL (SKU-WISE CHECK) ======")
+        print(
+            sku_grouped[["sku","platform_fee","lost_total"]]
+            .sort_values("platform_fee", ascending=False)
+            .head(25)
+            .to_string(index=False)
+        )
+        print("TOTAL platform_fee (after +lost_total):", float(sku_grouped["platform_fee"].sum()))
+        print("=======================================================\n")
+
+
         if not advertising_by_sku.empty:
             sku_grouped = sku_grouped.merge(
                 advertising_by_sku[["sku", "__metric__"]].rename(columns={"__metric__": "advertising_total"}),
@@ -712,93 +952,57 @@ def process_skuwise_data(user_id, country, month, year):
         else:
             sku_grouped["advertising_total"] = 0.0
 
-        for _col in ["Net Sales", "Net Taxes", "Net Credits", "amazon_fee", "profit", "platform_fee", "advertising_total"]:
+        for _col in ["Net Sales", "Net Credits", "amazon_fee",  "platform_fee", "advertising_total"]:
             if _col in sku_grouped.columns:
                 sku_grouped[_col] = pd.to_numeric(sku_grouped[_col], errors="coerce").fillna(0.0)
 
         total_product_sales = sku_grouped["product_sales"].sum()
 
-        total_profit_final = sku_grouped["profit"].sum()
-
-        sku_grouped["profit%"] = abs((sku_grouped["profit"] / abs(sku_grouped["Net Sales"])) * 100)
-        sku_grouped["profit%"] = sku_grouped["profit%"].replace([float('inf'), -float('inf')], 0).fillna(0)
-
-
+        
         # Unit-wise profitability
-        sku_grouped["profit"] = pd.to_numeric(sku_grouped["profit"], errors="coerce")
-        sku_grouped["quantity"] = pd.to_numeric(sku_grouped["quantity"], errors="coerce")
-        sku_grouped["unit_wise_profitability"] = (sku_grouped["profit"] / sku_grouped["quantity"]).replace([float("inf"), -float("inf")], 0).fillna(0)
-
+        
         # Previous unit-wise profitability
-        sku_grouped["previous_profit"] = pd.to_numeric(sku_grouped["previous_profit"], errors="coerce")
-        sku_grouped["previous_quantity"] = pd.to_numeric(sku_grouped["previous_quantity"], errors="coerce")
-        sku_grouped["previous_unit_wise_profitability"] = (sku_grouped["previous_profit"] / sku_grouped["previous_quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
+        # sku_grouped["previous_profit"] = pd.to_numeric(sku_grouped["previous_profit"], errors="coerce")
+        # sku_grouped["previous_quantity"] = pd.to_numeric(sku_grouped["previous_quantity"], errors="coerce")
+        # sku_grouped["previous_unit_wise_profitability"] = (sku_grouped["previous_profit"] / sku_grouped["previous_quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
 
         # % change and growth buckets
-        sku_grouped["unit_wise_profitability_percentage"] = (
-            (sku_grouped["unit_wise_profitability"] - sku_grouped["previous_unit_wise_profitability"]) /
-            sku_grouped["previous_unit_wise_profitability"]
-        ) * 100
-        sku_grouped["unit_wise_profitability_percentage"] = sku_grouped["unit_wise_profitability_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["unit_wise_profitability_growth"] = np.select(
-            [
-                sku_grouped["unit_wise_profitability_percentage"] >= 5,
-                sku_grouped["unit_wise_profitability_percentage"] > 0.5,
-                sku_grouped["unit_wise_profitability_percentage"] < -0.5
-            ],
-            ["High Growth", "Low Growth", "Negative Growth"],
-            default="No Growth"
-        )
+        # sku_grouped["unit_wise_profitability_percentage"] = (
+        #     (sku_grouped["unit_wise_profitability"] - sku_grouped["previous_unit_wise_profitability"]) /
+        #     sku_grouped["previous_unit_wise_profitability"]
+        # ) * 100
+        # sku_grouped["unit_wise_profitability_percentage"] = sku_grouped["unit_wise_profitability_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
+        # # sku_grouped["unit_wise_profitability_growth"] = np.select(
+        # #     [
+        #         sku_grouped["unit_wise_profitability_percentage"] >= 5,
+        #         sku_grouped["unit_wise_profitability_percentage"] > 0.5,
+        #         sku_grouped["unit_wise_profitability_percentage"] < -0.5
+        #     ],
+        #     ["High Growth", "Low Growth", "Negative Growth"],
+        #     default="No Growth"
+        # )
 
         # ASP & growth
         sku_grouped["asp"] = (sku_grouped["Net Sales"] / sku_grouped["quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["previous_asp"] = (sku_grouped["previous_net_sales"] / sku_grouped["previous_quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["asp_percentag"] = ((sku_grouped["asp"] - sku_grouped["previous_asp"]) / sku_grouped["previous_asp"]) * 100
-        sku_grouped["asp_percentag"] = sku_grouped["asp_percentag"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["asp_growth"] = np.select(
-            [
-                sku_grouped["asp_percentag"] >= 5,
-                sku_grouped["asp_percentag"] > 0.5,
-                sku_grouped["asp_percentag"] < -0.5
-            ],
-            ["High Growth", "Low Growth", "Negative Growth"],
-            default="No Growth"
-        )
+        # sku_grouped["previous_asp"] = (sku_grouped["previous_net_sales"] / sku_grouped["previous_quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
+        # sku_grouped["asp_percentag"] = ((sku_grouped["asp"] - sku_grouped["previous_asp"]) / sku_grouped["previous_asp"]) * 100
+        # sku_grouped["asp_percentag"] = sku_grouped["asp_percentag"].replace([float('inf'), -float('inf')], 0).fillna(0)
+        # sku_grouped["asp_growth"] = np.select(
+        #     [
+        #         sku_grouped["asp_percentag"] >= 5,
+        #         sku_grouped["asp_percentag"] > 0.5,
+        #         sku_grouped["asp_percentag"] < -0.5
+        #     ],
+        #     ["High Growth", "Low Growth", "Negative Growth"],
+        #     default="No Growth"
+        # )
 
         # Tax/Credit per unit
-        sku_grouped["text_credit_change"] = ((sku_grouped["Net Taxes"] - sku_grouped["Net Credits"]) / sku_grouped["quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
+        # sku_grouped["text_credit_change"] = ((sku_grouped["Net Taxes"] - sku_grouped["Net Credits"]) / sku_grouped["quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
         sku_grouped["previous_text_credit_change"] = ((sku_grouped["previous_net_taxes"] - sku_grouped["previous_net_credits"]) / sku_grouped["previous_quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
 
         # Profit change & growth
-        sku_grouped["profit_change"] = ((sku_grouped["profit"] - sku_grouped["previous_profit"]) / sku_grouped["previous_profit"]) * 100
-        sku_grouped["profit_change"] = sku_grouped["profit_change"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["profit_growth"] = np.select(
-            [
-                sku_grouped["profit_change"] >= 5,
-                sku_grouped["profit_change"] > 0.5,
-                sku_grouped["profit_change"] < -0.5
-            ],
-            ["High Growth", "Low Growth", "Negative Growth"],
-            default="No Growth"
-        )
 
-        # Units & growth
-        sku_grouped["unit_increase"] = ((sku_grouped["quantity"] - sku_grouped["previous_quantity"]) / sku_grouped["previous_quantity"]) * 100
-        sku_grouped["unit_increase"] = sku_grouped["unit_increase"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["unit_growth"] = np.select(
-            [
-                sku_grouped["unit_increase"] >= 5,
-                sku_grouped["unit_increase"] > 0.5,
-                sku_grouped["unit_increase"] < -0.5
-            ],
-            ["High Growth", "Low Growth", "Negative Growth"],
-            default="No Growth"
-        )
-
-        # Static descriptor fields
-        sku_grouped["category"] = ""
-        sku_grouped["positive"] = ""
-        sku_grouped["improvements"] = ""
         sku_grouped["month"] = month
         sku_grouped["year"] = year
         sku_grouped["country"] = country
@@ -843,6 +1047,115 @@ def process_skuwise_data(user_id, country, month, year):
 
         # Totals
         total_sales = abs(sku_grouped["Net Sales"].sum())
+        
+        # Fee ratios
+        
+        
+        # ---- merge refund digital tax into sku_grouped
+        
+
+        # ---- postage_credit_tax column fallback
+        postage_credit_tax_col = "postage_credits_tax" if "postage_credits_tax" in sku_grouped.columns else "shipping_credits_tax"
+        if postage_credit_tax_col not in sku_grouped.columns:
+            sku_grouped[postage_credit_tax_col] = 0.0
+
+        # ---- ensure non-refund base cols exist
+        for _c in ["product_sales_tax", "promotional_rebates_tax", "marketplace_facilitator_tax"]:
+            if _c not in sku_grouped.columns:
+                sku_grouped[_c] = 0.0
+            sku_grouped[_c] = pd.to_numeric(sku_grouped[_c], errors="coerce").fillna(0.0)
+
+        # ---- ensure refund cols exist
+        for _c in ["sales_tax_refund", "refund_rebate"]:
+            if _c not in sku_grouped.columns:
+                sku_grouped[_c] = 0.0
+            sku_grouped[_c] = pd.to_numeric(sku_grouped[_c], errors="coerce").fillna(0.0)
+
+        # ✅ FINAL net_tax (mixed: non-refund + refund)
+        sku_grouped["net_tax"] = (
+            sku_grouped["product_sales_tax"]
+            + sku_grouped[postage_credit_tax_col]
+            + sku_grouped["promotional_rebates_tax"]
+            + sku_grouped["marketplace_facilitator_tax"]
+            + sku_grouped["sales_tax_refund"]
+            - sku_grouped["refund_rebate"]
+            - sku_grouped["digital_transaction_tax"]
+           
+        )
+
+        print("\n========== FINAL NET TAX BREAKUP (SKU-WISE) ==========")
+        print(
+            sku_grouped[
+                ["sku",
+                "product_sales_tax",
+                postage_credit_tax_col,
+                "promotional_rebates_tax",
+                "marketplace_facilitator_tax",
+                "sales_tax_refund",
+                "refund_rebate",
+                "digital_transaction_tax",
+               
+                "net_tax"]
+            ].sort_values("net_tax", ascending=False).head(25).to_string(index=False)
+        )
+        print("\nTOTAL NET TAX:", float(sku_grouped["net_tax"].sum()))
+        print("=====================================================\n")
+
+        # ✅ IMPORTANT: so downstream expense formulas work
+        sku_grouped["Net Taxes"] = sku_grouped["net_tax"]
+
+        # ---------------- PROFIT (NEW FORMULA) ----------------
+# profit = net_sales + credits - taxes - amazon_fee - cost_of_unit_sold
+
+# Ensure required columns exist
+        for c in ["Net Sales", "Net Credits", "Net Taxes", "amazon_fee", "cost_of_unit_sold"]:
+            if c not in sku_grouped.columns:
+                sku_grouped[c] = 0.0
+
+        # Force numeric
+        for c in ["Net Sales", "Net Credits", "Net Taxes", "amazon_fee", "cost_of_unit_sold"]:
+            sku_grouped[c] = pd.to_numeric(sku_grouped[c], errors="coerce").fillna(0.0)
+
+        # Compute profit SKU-wise
+        sku_grouped["profit"] = (
+            sku_grouped["Net Sales"]
+            + sku_grouped["Net Credits"]
+            - sku_grouped["Net Taxes"]
+            - sku_grouped["amazon_fee"]
+            - sku_grouped["cost_of_unit_sold"]
+        )
+        # ------------------------------------------------------
+
+        print("\n================ SKU-WISE PROFIT DEBUG ==================")
+
+        debug_cols = [
+            "sku",
+            "Net Sales",
+            "Net Credits",
+            "Net Taxes",
+            "amazon_fee",
+            "cost_of_unit_sold",
+            "profit"
+        ]
+
+        # Sort by highest profit for readability
+        print(
+            sku_grouped[debug_cols]
+            .sort_values("profit", ascending=False)
+            .head(25)
+            .to_string(index=False)
+        )
+
+        print("\n---------------- PROFIT TOTAL CHECK ----------------")
+        print("TOTAL Net Sales        :", float(sku_grouped["Net Sales"].sum()))
+        print("TOTAL Net Credits      :", float(sku_grouped["Net Credits"].sum()))
+        print("TOTAL Net Taxes        :", float(sku_grouped["Net Taxes"].sum()))
+        print("TOTAL Amazon Fee       :", float(sku_grouped["amazon_fee"].sum()))
+        print("TOTAL Cost of Unit Sold:", float(sku_grouped["cost_of_unit_sold"].sum()))
+        print("TOTAL PROFIT           :", float(sku_grouped["profit"].sum()))
+        print("=====================================================\n")
+        # -----------------------------------------------------------
+
         total_profit = abs(sku_grouped["profit"].sum())
         total_Previous_profit = abs(sku_grouped["previous_profit"].sum())
         total_Previous_sales = abs(sku_grouped["previous_net_sales"].sum())
@@ -852,77 +1165,26 @@ def process_skuwise_data(user_id, country, month, year):
 
         sku_grouped["profit_mix"] = (sku_grouped["profit"] / total_profit) * 100
         sku_grouped["profit_mix"] = sku_grouped["profit_mix"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["previous_profit_mix"] = (sku_grouped["previous_profit"] / total_Previous_profit) * 100
-        sku_grouped["previous_profit_mix"] = sku_grouped["previous_profit_mix"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["profit_mix_percentage"] = ((sku_grouped["profit_mix"] - sku_grouped["previous_profit_mix"]) / sku_grouped["previous_profit_mix"]) * 100
 
-        sku_grouped["profit_mix_percentage"] = sku_grouped["profit_mix_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["profit_mix_growth"] = np.select(
-            [
-                sku_grouped["profit_mix_percentage"] >= 5,
-                sku_grouped["profit_mix_percentage"] > 0.5,
-                sku_grouped["profit_mix_percentage"] < -0.5
-            ],
-            ["High Growth", "Low Growth", "Negative Growth"],
-            default="No Growth"
-        )
-        sku_grouped["profit_mix_analysis"] = sku_grouped["profit_mix_percentage"].apply(lambda x: "High" if (x / 100) > 0.2 else "Low")
+        total_profit_final = sku_grouped["profit"].sum()
 
-        # Fee ratios
-        sku_grouped["change_in_fee"] = (sku_grouped["amazon_fee"] / sku_grouped["Net Sales"]) * 100
-        sku_grouped["change_in_fee"] = sku_grouped["change_in_fee"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["previous_change_in_fee"] = (sku_grouped["previous_amazon_fee"] / sku_grouped["previous_net_sales"]) * 100
-        sku_grouped["previous_change_in_fee"] = sku_grouped["previous_change_in_fee"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["precentage_change_in_fee"] = sku_grouped["change_in_fee"] - sku_grouped["previous_change_in_fee"]
-        sku_grouped["sales_mix_analysis"] = sku_grouped["sales_mix"].apply(lambda x: "High" if (x / 100) > 0.2 else "Low")
-        sku_grouped["unit_wise_amazon_fee"] = ((sku_grouped["amazon_fee"] - sku_grouped["Net Taxes"]) / sku_grouped["quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
+        sku_grouped["profit%"] = abs((sku_grouped["profit"] / abs(sku_grouped["Net Sales"])) * 100)
+        sku_grouped["profit%"] = sku_grouped["profit%"].replace([float('inf'), -float('inf')], 0).fillna(0)
 
-        sku_grouped["previous_amazon_fee"] = pd.to_numeric(sku_grouped["previous_amazon_fee"], errors='coerce')
-        sku_grouped["previous_net_taxes"] = pd.to_numeric(sku_grouped["previous_net_taxes"], errors='coerce')
-        sku_grouped["previous_quantity"] = pd.to_numeric(sku_grouped["previous_quantity"], errors='coerce')
-        sku_grouped["previous_unit_wise_amazon_fee"] = ((sku_grouped["previous_amazon_fee"] - sku_grouped["previous_net_taxes"]) / sku_grouped["previous_quantity"]).replace([float('inf'), -float('inf')], 0).fillna(0)
+        sku_grouped["unit_wise_profitability"] = (sku_grouped["profit"] / sku_grouped["total_quantity"]).replace([float("inf"), -float("inf")], 0).fillna(0)
 
-        sku_grouped["unit_wise_amazon_fee_percentage"] = (
-            (sku_grouped["unit_wise_amazon_fee"] - sku_grouped["previous_unit_wise_amazon_fee"]) /
-            sku_grouped["previous_unit_wise_amazon_fee"]
-        ) * 100
+        sku_grouped["month"] = month
+        sku_grouped["year"] = year
+        sku_grouped["country"] = country
 
-        sku_grouped["unit_wise_amazon_fee_percentage"] = sku_grouped["unit_wise_amazon_fee_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["amazon_fee_growth"] = np.select(
-            [
-                -sku_grouped["unit_wise_amazon_fee_percentage"] >= 5,
-                -sku_grouped["unit_wise_amazon_fee_percentage"] > 0.5,
-                -sku_grouped["unit_wise_amazon_fee_percentage"] < -0.5
-            ],
-            ["High Growth", "Low Growth", "Negative Growth"],
-            default="No Growth"
-        )
 
-        sku_grouped["unit_sales_analysis"] = ((sku_grouped["quantity"] - sku_grouped["previous_quantity"]) * sku_grouped["unit_wise_profitability"]).replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["unit_asp_analysis"] = (((sku_grouped["asp"] - sku_grouped["previous_asp"]) * sku_grouped["quantity"])).replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["amazon_fee_increase"] = (((sku_grouped["previous_unit_wise_amazon_fee"] - sku_grouped["unit_wise_amazon_fee"]) * sku_grouped["quantity"])).replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["total_analysis"] = (sku_grouped["profit"] - sku_grouped["previous_profit"])
-        sku_grouped["text_credit_increase"] = (((sku_grouped["previous_text_credit_change"] - sku_grouped["text_credit_change"]) * sku_grouped["quantity"])).replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["final_total_analysis"] = (sku_grouped["amazon_fee_increase"] + sku_grouped["unit_asp_analysis"] + sku_grouped["unit_sales_analysis"] + sku_grouped["text_credit_increase"])
 
-        columns_to_sum = ["amazon_fee_increase", "unit_asp_analysis", "unit_sales_analysis", "text_credit_increase"]
-        sku_grouped["positive_action"] = sku_grouped[columns_to_sum].apply(lambda row: row[row > 0].sum(), axis=1)
-        sku_grouped["negative_action"] = sku_grouped[columns_to_sum].apply(lambda row: row[row < 0].sum(), axis=1)
-        sku_grouped["cross_check_analysis"] = (sku_grouped["total_analysis"] - sku_grouped["final_total_analysis"])
-        sku_grouped["cross_check_analysis_backup"] = ((sku_grouped["positive_action"] + sku_grouped["negative_action"]) - (sku_grouped["final_total_analysis"]))
-        sku_grouped["previous_sales_mix"] = (sku_grouped["previous_net_sales"] / total_Previous_sales) * 100
-        sku_grouped["previous_sales_mix"] = sku_grouped["previous_sales_mix"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["sales_mix_percentage"] = ((sku_grouped["sales_mix"] - sku_grouped["previous_sales_mix"]) / sku_grouped["previous_sales_mix"]) * 100
-        sku_grouped["sales_mix_percentage"] = sku_grouped["sales_mix_percentage"].replace([float('inf'), -float('inf')], 0).fillna(0)
-        sku_grouped["sales_mix_growth"] = np.select(
-            [
-                sku_grouped["sales_mix_percentage"] >= 5,
-                sku_grouped["sales_mix_percentage"] > 0.5,
-                sku_grouped["sales_mix_percentage"] < -0.5
-            ],
-            ["High Growth", "Low Growth", "Negative Growth"],
-            default="No Growth"
-        )
+        
+
+
+
+
+
 
         # Ensure integer quantities for DB
         sku_grouped["quantity"] = pd.to_numeric(sku_grouped["quantity"], errors="coerce").fillna(0).astype(int)
@@ -1061,26 +1323,30 @@ def process_skuwise_data(user_id, country, month, year):
             + float(sum_row.get("promotional_rebates_tax", 0) or 0)
         )
 
+        sum_row["digital_transaction_tax"] = int(float(sum_row.get("digital_transaction_tax", 0) or 0))
+
+
 
 
 
         # Totals part 2 (derived)
-        qty = float(sum_row.get("quantity", 0) or 0)
+        qty = float(sum_row.get("total_quantity", 0) or 0)
         prev_qty = float(sum_row.get("previous_quantity", 0) or 0)
         net_sales_total = float(sum_row.get("Net Sales", 0) or 0)
         prev_net_sales_total = float(sum_row.get("previous_net_sales", 0) or 0)
 
         sum_row["unit_wise_profitability"] = ((float(sum_row.get("profit", 0))) / qty) if qty != 0 else 0
 
-        sum_row["previous_unit_wise_profitability"] = (
-            (float(sum_row.get("previous_profit", 0)) - float(sum_row.get("previous_net_taxes", 0))) /
-            prev_qty
-        ) * 100 if prev_qty != 0 else 0
 
-        prev_uwp = float(sum_row.get("previous_unit_wise_profitability", 0) or 0)
-        sum_row["unit_wise_profitability_percentage"] = (
-            (float(sum_row["unit_wise_profitability"]) - prev_uwp) / prev_uwp
-        ) * 100 if prev_uwp != 0 else 0
+        # sum_row["previous_unit_wise_profitability"] = (
+        #     (float(sum_row.get("previous_profit", 0)) - float(sum_row.get("previous_net_taxes", 0))) /
+        #     prev_qty
+        # ) * 100 if prev_qty != 0 else 0
+
+        # prev_uwp = float(sum_row.get("previous_unit_wise_profitability", 0) or 0)
+        # sum_row["unit_wise_profitability_percentage"] = (
+        #     (float(sum_row["unit_wise_profitability"]) - prev_uwp) / prev_uwp
+        # ) * 100 if prev_uwp != 0 else 0
 
         sum_row["unit_increase"] = (
             (qty - prev_qty) / prev_qty
@@ -1115,10 +1381,7 @@ def process_skuwise_data(user_id, country, month, year):
         ) * 100 if prev_uwaf != 0 else 0
 
         prev_profit_total = float(sum_row.get("previous_profit", 0) or 0)
-        sum_row["profit_change"] = (
-            (float(sum_row.get("profit", 0)) - prev_profit_total) /
-            prev_profit_total
-        ) * 100  if prev_profit_total != 0 else 0
+        
 
         prev_profit_mix_total = float(sum_row.get("previous_profit_mix", 0) or 0)
         sum_row["profit_mix_percentage"] = (
@@ -1142,77 +1405,77 @@ def process_skuwise_data(user_id, country, month, year):
         ) if prev_net_sales_total != 0 else 0
 
         # Growth buckets (unchanged logic)
-        if sum_row["unit_wise_profitability_percentage"] >= 5:
-            sum_row["unit_wise_profitability_growth"] = "High Growth"
-        elif sum_row["unit_wise_profitability_percentage"] > 0.5:
-            sum_row["unit_wise_profitability_growth"] = "Low Growth"
-        elif sum_row["unit_wise_profitability_percentage"] < -0.5:
-            sum_row["unit_wise_profitability_growth"] = "Negative Growth"
-        else:
-            sum_row["unit_wise_profitability_growth"] = "No Growth"
+        # if sum_row["unit_wise_profitability_percentage"] >= 5:
+        #     sum_row["unit_wise_profitability_growth"] = "High Growth"
+        # elif sum_row["unit_wise_profitability_percentage"] > 0.5:
+        #     sum_row["unit_wise_profitability_growth"] = "Low Growth"
+        # elif sum_row["unit_wise_profitability_percentage"] < -0.5:
+        #     sum_row["unit_wise_profitability_growth"] = "Negative Growth"
+        # else:
+        #     sum_row["unit_wise_profitability_growth"] = "No Growth"
 
-        if sum_row["asp_percentag"] >= 5:
-            sum_row["asp_growth"] = "High Growth"
-        elif sum_row["asp_percentag"] > 0.5:
-            sum_row["asp_growth"] = "Low Growth"
-        elif sum_row["asp_percentag"] < -0.5:
-            sum_row["asp_growth"] = "Negative Growth"
-        else:
-            sum_row["asp_growth"] = "No Growth"
+        # if sum_row["asp_percentag"] >= 5:
+        #     sum_row["asp_growth"] = "High Growth"
+        # elif sum_row["asp_percentag"] > 0.5:
+        #     sum_row["asp_growth"] = "Low Growth"
+        # elif sum_row["asp_percentag"] < -0.5:
+        #     sum_row["asp_growth"] = "Negative Growth"
+        # else:
+        #     sum_row["asp_growth"] = "No Growth"
 
-        if sum_row["profit_change"] >= 5:
-            sum_row["profit_growth"] = "High Growth"
-        elif sum_row["profit_change"] > 0.5:
-            sum_row["profit_growth"] = "Low Growth"
-        elif sum_row["profit_change"] < -0.5:
-            sum_row["profit_growth"] = "Negative Growth"
-        else:
-            sum_row["profit_growth"] = "No Growth"
+        # if sum_row["profit_change"] >= 5:
+        #     sum_row["profit_growth"] = "High Growth"
+        # elif sum_row["profit_change"] > 0.5:
+        #     sum_row["profit_growth"] = "Low Growth"
+        # elif sum_row["profit_change"] < -0.5:
+        #     sum_row["profit_growth"] = "Negative Growth"
+        # else:
+        #     sum_row["profit_growth"] = "No Growth"
 
-        if sum_row["unit_increase"] >= 5:
-            sum_row["unit_growth"] = "High Growth"
-        elif sum_row["unit_increase"] > 0.5:
-            sum_row["unit_growth"] = "Low Growth"
-        elif sum_row["unit_increase"] < -0.5:
-            sum_row["unit_growth"] = "Negative Growth"
-        else:
-            sum_row["unit_growth"] = "No Growth"
+        # if sum_row["unit_increase"] >= 5:
+        #     sum_row["unit_growth"] = "High Growth"
+        # elif sum_row["unit_increase"] > 0.5:
+        #     sum_row["unit_growth"] = "Low Growth"
+        # elif sum_row["unit_increase"] < -0.5:
+        #     sum_row["unit_growth"] = "Negative Growth"
+        # else:
+        #     sum_row["unit_growth"] = "No Growth"
 
-        if sum_row["profit_mix_percentage"] >= 5:
-            sum_row["profit_mix_growth"] = "High Growth"
-        elif sum_row["profit_mix_percentage"] > 0.5:
-            sum_row["profit_mix_growth"] = "Low Growth"
-        elif sum_row["profit_mix_percentage"] < -0.5:
-            sum_row["profit_mix_growth"] = "Negative Growth"
-        else:
-            sum_row["profit_mix_growth"] = "No Growth"
+        # if sum_row["profit_mix_percentage"] >= 5:
+        #     sum_row["profit_mix_growth"] = "High Growth"
+        # elif sum_row["profit_mix_percentage"] > 0.5:
+        #     sum_row["profit_mix_growth"] = "Low Growth"
+        # elif sum_row["profit_mix_percentage"] < -0.5:
+        #     sum_row["profit_mix_growth"] = "Negative Growth"
+        # else:
+        #     sum_row["profit_mix_growth"] = "No Growth"
 
-        if sum_row["sales_percentage"] >= 5:
-            sum_row["sales_growth"] = "High Growth"
-        elif sum_row["sales_percentage"] > 0.5:
-            sum_row["sales_growth"] = "Low Growth"
-        elif sum_row["sales_percentage"] < -0.5:
-            sum_row["sales_growth"] = "Negative Growth"
-        else:
-            sum_row["sales_growth"] = "No Growth"
+        # if sum_row["sales_percentage"] >= 5:
+        #     sum_row["sales_growth"] = "High Growth"
+        # elif sum_row["sales_percentage"] > 0.5:
+        #     sum_row["sales_growth"] = "Low Growth"
+        # elif sum_row["sales_percentage"] < -0.5:
+        #     sum_row["sales_growth"] = "Negative Growth"
+        # else:
+        #     sum_row["sales_growth"] = "No Growth"
 
-        if sum_row["unit_wise_amazon_fee_percentage"] >= 5:
-            sum_row["amazon_fee_growth"] = "High Growth"
-        elif sum_row["unit_wise_amazon_fee_percentage"] > 0.5:
-            sum_row["amazon_fee_growth"] = "Low Growth"
-        elif sum_row["unit_wise_amazon_fee_percentage"] < -0.5:
-            sum_row["amazon_fee_growth"] = "Negative Growth"
-        else:
-            sum_row["amazon_fee_growth"] = "No Growth"
+        # if sum_row["unit_wise_amazon_fee_percentage"] >= 5:
+        #     sum_row["amazon_fee_growth"] = "High Growth"
+        # elif sum_row["unit_wise_amazon_fee_percentage"] > 0.5:
+        #     sum_row["amazon_fee_growth"] = "Low Growth"
+        # elif sum_row["unit_wise_amazon_fee_percentage"] < -0.5:
+        #     sum_row["amazon_fee_growth"] = "Negative Growth"
+        # else:
+        #     sum_row["amazon_fee_growth"] = "No Growth"
 
-        if sum_row["sales_mix_percentage"] >= 5:
-            sum_row["sales_mix_growth"] = "High Growth"
-        elif sum_row["sales_mix_percentage"] > 0.5:
-            sum_row["sales_mix_growth"] = "Low Growth"
-        elif sum_row["sales_mix_percentage"] < -0.5:
-            sum_row["sales_mix_growth"] = "Negative Growth"
-        else:
-            sum_row["sales_mix_growth"] = "No Growth"
+        # if sum_row["sales_mix_percentage"] >= 5:
+        #     sum_row["sales_mix_growth"] = "High Growth"
+        # elif sum_row["sales_mix_percentage"] > 0.5:
+        #     sum_row["sales_mix_growth"] = "Low Growth"
+        # elif sum_row["sales_mix_percentage"] < -0.5:
+        #     sum_row["sales_mix_growth"] = "Negative Growth"
+        # else:
+        #     sum_row["sales_mix_growth"] = "No Growth"
 
 
         # Ensure sku_grouped has unique columns BEFORE appending total row
@@ -1324,7 +1587,8 @@ def process_skuwise_data(user_id, country, month, year):
                     selling_fees REAL,
                     refund_selling_fees REAL,
                     fba_fees REAL,
-                    total REAL,
+                    amazon_fee REAL,
+                    digital_transaction_tax REAL,
                     net_taxes REAL,
                     net_credits REAL,
                     profit REAL,
@@ -1373,7 +1637,7 @@ def process_skuwise_data(user_id, country, month, year):
                     
                     
                     
-                    amazon_fee REAL,
+                    
                    
                     
                     
@@ -1382,61 +1646,29 @@ def process_skuwise_data(user_id, country, month, year):
                     
                     
                     
-                    profit_change REAL,
-                    profit_growth TEXT,
+                    
+                    
                    
                     unit_wise_profitability REAL,
                  
-                    unit_wise_profitability_percentage REAL,
-                    unit_wise_profitability_growth TEXT,
-                    cm1_profit TEXT,
-                    category TEXT,
-                    positive TEXT,
-                    improvements TEXT,
+                    
                     asp REAL,
-                    sales_percentage REAL,
-                    sales_growth TEXT,
-           
-                    asp_percentag REAL,
-                    text_credit_change REAL,
-                   
-                    asp_growth TEXT,
+                    
                     sales_mix REAL,
+                    profit_mix REAL,
+
                     sales_mix_analysis TEXT,
                   
-                    unit_increase REAL,
-                    unit_growth TEXT,
-                    change_in_fee REAL,
-                  
-                    precentage_change_in_fee REAL,
-                    unit_wise_amazon_fee REAL,
-                   
-                    unit_wise_amazon_fee_percentage REAL,
-                    amazon_fee_growth TEXT,
-                    profit_mix REAL,
-            
-                    profit_mix_percentage REAL,
-                    profit_mix_growth TEXT,
-                    profit_mix_analysis TEXT,
-                    unit_sales_analysis REAL,
-                    unit_asp_analysis REAL,
-                    amazon_fee_increase REAL,
-                    total_analysis REAL,
-                    cross_check_analysis REAL,
-                
-                    sales_mix_percentage REAL,
-                    sales_mix_growth TEXT,
-                    positive_action REAL,
-                    negative_action REAL,
-                    cross_check_analysis_backup REAL,
-                    text_credit_increase REAL,
-                    final_total_analysis REAL,
+                    
                    
                     shipping_credits REAL,
                     shipment_charges REAL,
                     errorstatus TEXT,
                     answer REAL,
                     difference REAL,
+                    month TEXT,
+                    year TEXT,
+                    country TEXT,
                     
                     
                     
@@ -1501,114 +1733,115 @@ def process_skuwise_data(user_id, country, month, year):
             conn.execute(text(f"""
                 CREATE TABLE IF NOT EXISTS {tbl} (
                     id SERIAL PRIMARY KEY,
+                    product_name TEXT,
                     sku TEXT,
-                    price_in_gbp REAL,
+                    quantity INTEGER,
+                    return_quantity INTEGER,
+                    total_quantity INTEGER,
                     product_sales REAL,
+                    product_sales_tax REAL,
+                    postage_credits REAL,
+                    gift_wrap_credits REAL,
+                    giftwrap_credits_tax REAL,
                     promotional_rebates REAL,
                     promotional_rebates_tax REAL,
-                    product_sales_tax REAL,
+                    gross_sales REAL,
+                    refund_sales REAL,
+                    net_sales REAL,
+                    cost_of_unit_sold REAL,
+
+                    sales_tax_refund REAL,
+                    sales_credit_refund REAL,
+                    refund_rebate REAL,
+                    marketplace_facilitator_tax REAL,
+                    other_transaction_fees REAL,
                     selling_fees REAL,
                     refund_selling_fees REAL,
                     fba_fees REAL,
-                    other REAL,
-                    marketplace_facilitator_tax REAL,
-                    shipping_credits_tax REAL,
-                    giftwrap_credits_tax REAL,
-                    postage_credits REAL,
-                    gift_wrap_credits REAL,
-                    net_sales REAL,
+                    total REAL,
                     net_taxes REAL,
+                    digital_transaction_tax REAL,
                     net_credits REAL,
                     profit REAL,
                     profit_percentage REAL,
-                    amazon_fee REAL,
-                    quantity INTEGER,
-                    cost_of_unit_sold REAL,
-                    other_transaction_fees REAL,
-                    platform_fee REAL,
-                    rembursement_fee REAL,
+                    lost_total REAL,
+                    visible_ads REAL,
+                    dealsvouchar_ads REAL,
                     advertising_total REAL,
-                    reimbursement_vs_sales REAL,
+                    platformfeenew REAL,
+                    platform_fee_inventory_storage REAL,
+                    platform_fee REAL,
                     cm2_profit REAL,
-                    cm2_margins REAL,
+                    cm2_profit_percentage REAL,
                     acos REAL,
+                    rembursement_fee REAL,
+                    
+                    reimbursement_vs_sales REAL,
+                    
+                    cm2_margins REAL,
                     rembursment_vs_cm2_margins REAL,
-                    total REAL,
-                    month TEXT,
-                    year TEXT,
-                  
-                    profit_change REAL,
-                    profit_growth TEXT,
-                  
+                    
+
+
+                    
+                    misc_transaction REAL,
+                    promotional_rebates_percentage REAL,
+
+                    
+                    
+                    tex_and_credits REAL,
+                    
+
+
+
+
+                    price_in_gbp REAL,
+                    
+                    
+                    
+                    
+                    
+                    shipping_credits_tax REAL,
+                    
+                    other REAL,
+                    
+                    
+                    
+                    
+                    amazon_fee REAL,
+                   
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                   
                     unit_wise_profitability REAL,
-                
-                    unit_wise_profitability_percentage REAL,
-                    unit_wise_profitability_growth TEXT,
-                    cm1_profit TEXT,
-                    category TEXT,
-                    positive TEXT,
-                    improvements TEXT,
-                    asp REAL,
-                    sales_percentage REAL,
-                    sales_growth TEXT,
-        
-                    asp_percentag REAL,
-                    text_credit_change REAL,
                  
-                    asp_growth TEXT,
+                    
+                    asp REAL,
+                    
                     sales_mix REAL,
                     sales_mix_analysis TEXT,
                   
-                    unit_increase REAL,
-                    unit_growth TEXT,
-                    change_in_fee REAL,
-                  
-                    precentage_change_in_fee REAL,
-                    unit_wise_amazon_fee REAL,
-            
-                    unit_wise_amazon_fee_percentage REAL,
-                    amazon_fee_growth TEXT,
-                    profit_mix REAL,
-          
-                    profit_mix_percentage REAL,
-                    profit_mix_growth TEXT,
-                    profit_mix_analysis TEXT,
-                    unit_sales_analysis REAL,
-                    unit_asp_analysis REAL,
-                    amazon_fee_increase REAL,
-                    total_analysis REAL,
-                    cross_check_analysis REAL,
-   
-                    sales_mix_percentage REAL,
-                    sales_mix_growth TEXT,
-                    positive_action REAL,
-                    negative_action REAL,
-                    cross_check_analysis_backup REAL,
-                    text_credit_increase REAL,
-                    final_total_analysis REAL,
-                    product_name TEXT,
-                    country TEXT,
+                    
+                   
                     shipping_credits REAL,
                     shipment_charges REAL,
                     errorstatus TEXT,
                     answer REAL,
                     difference REAL,
-                    return_quantity INTEGER,
-                    total_quantity INTEGER,
-                    refund_sales REAL,
-                    gross_sales REAL,
-                    sales_tax_refund REAL,
-                    sales_credit_refund REAL,
-                    refund_rebate REAL,
-                    lost_total REAL,
-                    misc_transaction REAL,
-                    promotional_rebates_percentage REAL,
-                    visible_ads REAL,
-                    dealsvouchar_ads REAL,
-                    platformfeenew REAL,
-                    platformfeeothertransectionplatform_fee_inventory_storage REAL,
-                    tex_and_credits REAL,
-                    cm2_profit_percentage REAL,
+                    month TEXT,
+                    year TEXT,
+                    country TEXT,
+                    profit_mix REAL,
+
+                    
+                    
 
 
 
@@ -1715,112 +1948,116 @@ def process_skuwise_data(user_id, country, month, year):
             conn.execute(text(f"""
                 CREATE TABLE IF NOT EXISTS {tbl} (
                     id SERIAL PRIMARY KEY,
-                    sku TEXT,
-                    price_in_gbp REAL,
-                    product_sales REAL,
-                    promotional_rebates REAL,
-                    promotional_rebates_tax REAL,
-                    product_sales_tax REAL,
-                    selling_fees REAL,
-                    refund_selling_fees REAL,
-                    postage_credits REAL,
-                    fba_fees REAL,
-                    other REAL,
-                    marketplace_facilitator_tax REAL,
-                    shipping_credits_tax REAL,
-                    giftwrap_credits_tax REAL,
-                    shipping_credits REAL,
-                    gift_wrap_credits REAL,
-                    net_sales REAL,
-                    net_taxes REAL,
-                    net_credits REAL,
-                    profit REAL,
-                    profit_percentage REAL,
-                    amazon_fee REAL,
-                    quantity INTEGER,
-                    cost_of_unit_sold REAL,
-                    other_transaction_fees REAL,
-                    platform_fee REAL,
-                    shipment_charges REAL,
-                    rembursement_fee REAL,
-                    advertising_total REAL,
-                    reimbursement_vs_sales REAL,
-                    cm2_profit REAL,
-                    cm2_margins REAL,
-                    acos REAL,
-                    rembursment_vs_cm2_margins REAL,
-                    total REAL,
-                    month TEXT,
-                    year TEXT,
-                   
-                    profit_change REAL,
-                    profit_growth TEXT,
-                    
-                    unit_wise_profitability REAL,
-                 
-                    unit_wise_profitability_percentage REAL,
-                    unit_wise_profitability_growth TEXT,
-                    cm1_profit TEXT,
-                    category TEXT,
-                    positive TEXT,
-                    improvements TEXT,
-                    asp REAL,
-                    sales_percentage REAL,
-                    sales_growth TEXT,
-             
-                    asp_percentag REAL,
-                    text_credit_change REAL,
-                    
-                    asp_growth TEXT,
-                    sales_mix REAL,
-                    sales_mix_analysis TEXT,
-                 
-                    unit_increase REAL,
-                    unit_growth TEXT,
-                    change_in_fee REAL,
-                   
-                    precentage_change_in_fee REAL,
-                    unit_wise_amazon_fee REAL,
-                   
-                    unit_wise_amazon_fee_percentage REAL,
-                    amazon_fee_growth TEXT,
-                    profit_mix REAL,
-                  
-                    profit_mix_percentage REAL,
-                    profit_mix_growth TEXT,
-                    profit_mix_analysis TEXT,
-                    unit_sales_analysis REAL,
-                    unit_asp_analysis REAL,
-                    amazon_fee_increase REAL,
-                    total_analysis REAL,
-                    cross_check_analysis REAL,
-                    
-                    sales_mix_percentage REAL,
-                    sales_mix_growth TEXT,
-                    positive_action REAL,
-                    negative_action REAL,
-                    cross_check_analysis_backup REAL,
-                    text_credit_increase REAL,
-                    final_total_analysis REAL,
                     product_name TEXT,
-                    country TEXT,
-                    errorstatus TEXT,
-                    answer REAL,
-                    difference REAL,
+                    sku TEXT,
+                    quantity INTEGER,
                     return_quantity INTEGER,
                     total_quantity INTEGER,
-                    refund_sales REAL,
+                    product_sales REAL,
+                    product_sales_tax REAL,
+                    postage_credits REAL,
+                    gift_wrap_credits REAL,
+                    giftwrap_credits_tax REAL,
+                    promotional_rebates REAL,
+                    promotional_rebates_tax REAL,
                     gross_sales REAL,
+                    refund_sales REAL,
+                    net_sales REAL,
+                    cost_of_unit_sold REAL,
+
                     sales_tax_refund REAL,
                     sales_credit_refund REAL,
                     refund_rebate REAL,
+                    marketplace_facilitator_tax REAL,
+                    other_transaction_fees REAL,
+                    selling_fees REAL,
+                    refund_selling_fees REAL,
+                    fba_fees REAL,
+                    total REAL,
+                    net_taxes REAL,
+                    digital_transaction_tax REAL,
+                    net_credits REAL,
+                    profit REAL,
+                    profit_percentage REAL,
                     lost_total REAL,
-                    misc_transaction REAL,
-                    promotional_rebates_percentage REAL,
                     visible_ads REAL,
                     dealsvouchar_ads REAL,
+                    advertising_total REAL,
                     platformfeenew REAL,
                     platform_fee_inventory_storage REAL,
+                    platform_fee REAL,
+                    cm2_profit REAL,
+                    cm2_profit_percentage REAL,
+                    acos REAL,
+                    rembursement_fee REAL,
+                    
+                    reimbursement_vs_sales REAL,
+                    
+                    cm2_margins REAL,
+                    rembursment_vs_cm2_margins REAL,
+                    
+
+
+                    
+                    misc_transaction REAL,
+                    promotional_rebates_percentage REAL,
+
+                    
+                    
+                    tex_and_credits REAL,
+                    
+
+
+
+
+                    price_in_gbp REAL,
+                    
+                    
+                    
+                    
+                    
+                    shipping_credits_tax REAL,
+                    
+                    other REAL,
+                    
+                    
+                    
+                    
+                    amazon_fee REAL,
+                    profit_mix REAL,
+
+                   
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                   
+                    unit_wise_profitability REAL,
+                 
+                    
+                    asp REAL,
+                    
+                    sales_mix REAL,
+                    sales_mix_analysis TEXT,
+                  
+                    
+                   
+                    shipping_credits REAL,
+                    shipment_charges REAL,
+                    errorstatus TEXT,
+                    answer REAL,
+                    difference REAL,
+                    month TEXT,
+                    year TEXT,
+                    country TEXT,
+                    
+                    
+                    
 
 
 
@@ -1860,6 +2097,7 @@ def process_skuwise_data(user_id, country, month, year):
                 pass
 
             # ✅ only DB-defined columns insert honge
+            df_conv = sanitize_for_db(df_conv)  # <-- IMPORTANT
             safe_to_sql(df_conv, tbl, conn, if_exists="append", index=False, method="multi", chunksize=100)
             # ==========================================================
 
@@ -2153,6 +2391,20 @@ def process_skuwise_data(user_id, country, month, year):
         except Exception as _:
             pass
 
+        # ---------------- FIX: total_quantity variable was never defined ----------------
+        total_quantity = 0
+        if "total_quantity" in sku_grouped.columns:
+            try:
+                total_row_qty = sku_grouped.loc[
+                    sku_grouped["sku"].astype(str).str.strip().str.lower() == "total",
+                    "total_quantity"
+                ]
+                if not total_row_qty.empty:
+                    total_quantity = int(pd.to_numeric(total_row_qty.iloc[0], errors="coerce") or 0)
+            except Exception:
+                total_quantity = int(pd.to_numeric(sku_grouped["total_quantity"], errors="coerce").fillna(0).sum())
+        # -------------------------------------------------------------------------------
+
 
         return (total_cous, total_amazon_fee, cm2_profit, abs(rembursement_fee), abs(platform_fee),
                 total_expense, total_profit_final, total_fba_fees, total_advertising, texncredit,
@@ -2228,22 +2480,42 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
             # Read full data for selected months from THIS source
             placeholders = ', '.join(['%s'] * len(selected_months))
             query = f"""
-                SELECT "user_id","price_in_gbp", "product_sales", "promotional_rebates", "promotional_rebates_tax",
-                "product_sales_tax", "selling_fees", "refund_selling_fees", "fba_fees", "other",
-                "marketplace_facilitator_tax", "shipping_credits_tax", "giftwrap_credits_tax",
-                "postage_credits", "gift_wrap_credits", "net_sales", "net_taxes", "net_credits",
-                "profit", "profit_percentage", "amazon_fee", "quantity",
-                "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
-                "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku","return_quantity",
+                SELECT "sku",
+                "product_name",
+                "quantity",
+                "return_quantity",
                 "total_quantity",
-                "refund_sales",
+                "asp",
                 "gross_sales",
-                "sales_tax_refund",
-                "sales_credit_refund",
-                "refund_rebate",
-                "lost_total",
-                "misc_transaction"
+                "refund_sales",
+                "tex_and_credits",
+                "net_sales",
+                "promotional_rebates",
+                "promotional_rebates_percentage",
+                "cost_of_unit_sold",
+                "selling_fees",
+                "fba_fees",
+                "amazon_fee",
+                "net_taxes",
+                "net_credits",
+                "misc_transaction",
+                "other_transaction_fees",
+                "profit",
+                "unit_wise_profitability",
+                "profit_percentage",
+                "visible_ads",
+                "dealsvouchar_ads",
+                "advertising_total",
+                "platformfeenew",
+                "platform_fee",
+                "platform_fee_inventory_storage",
+                "cm2_profit",
+                "cm2_profit_percentage",
+                "acos",
+                "rembursement_fee",
+                "rembursment_vs_cm2_margins",
+                "reimbursement_vs_sales",
+                "user_id"
 
                 FROM {source_table}
                 WHERE LOWER(month) IN ({placeholders}) AND year = %s
@@ -2257,45 +2529,44 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
             # ---------- AGGREGATION (same as tumhara) ----------
             sku_grouped = df.groupby('product_name').agg({
                 "sku": "first", 
-                "price_in_gbp": "mean",
-                "product_sales": "sum",
-                "promotional_rebates": "sum",
-                "promotional_rebates_tax": "sum",
-                "product_sales_tax": "sum",
-                "selling_fees": "sum",
-                "refund_selling_fees": "sum",
-                "fba_fees": "sum",
-                "other": "sum",
-                "marketplace_facilitator_tax": "sum",
-                "shipping_credits_tax": "sum",
-                "giftwrap_credits_tax": "sum",
-                "postage_credits": "sum",
-                "gift_wrap_credits": "sum",
-                "net_sales": "sum",
-                "net_taxes": "sum",
-                "net_credits": "sum",
-                "profit": "sum",
-                "amazon_fee": "sum",
                 "quantity": "sum",
-                "cost_of_unit_sold": "sum",
-                "other_transaction_fees": "sum",
-                "platform_fee": "sum",
-                "rembursement_fee": "sum",
-                "advertising_total": "sum",
-                "cm2_profit": "sum",
-                "shipment_charges": "sum",
-                "unit_wise_profitability": "sum",
-                "return_quantity": "sum",
-                "total_quantity": "sum",
-                "refund_sales": "sum",
-                "gross_sales": "sum",
-                "sales_tax_refund": "sum",
-                "sales_credit_refund": "sum",
-                "refund_rebate": "sum",
-                "lost_total": "sum",
-                "misc_transaction": "sum",
-                "user_id": "first"
+                    "return_quantity": "sum",
+                    "total_quantity": "sum",
+                    "asp": "mean",
+                    "gross_sales": "sum",
+                    "refund_sales": "sum",
+                    "tex_and_credits": "sum",
+                    "net_sales": "sum",
+                    "promotional_rebates": "sum",
+                    "promotional_rebates_percentage": "mean",
+                    "cost_of_unit_sold": "sum",
+                    "selling_fees": "sum",
+                    "fba_fees": "sum",
+                    "amazon_fee": "sum",
+                    "net_taxes": "sum",
+                    "net_credits": "sum",
+                    "misc_transaction": "sum",
+                    "other_transaction_fees": "sum",
+                    "profit": "sum",
+                    "unit_wise_profitability": "mean",
+                    "profit_percentage": "mean",
+                    "visible_ads": "sum",
+                    "dealsvouchar_ads": "sum",
+                    "advertising_total": "sum",
+                    "platformfeenew": "sum",
+                    "platform_fee": "sum",
+                    "platform_fee_inventory_storage": "sum",
+                    "cm2_profit": "sum",
+                    "cm2_profit_percentage": "mean",
+                    "acos": "mean",
+                    "rembursement_fee": "sum",
+                    "rembursment_vs_cm2_margins": "mean",
+                    "reimbursement_vs_sales": "mean",
+                    "user_id": "first"
             }).reset_index()
+
+
+
 
             sku_grouped["product_name"] = sku_grouped["product_name"].astype(str).str.strip()
 
@@ -2357,53 +2628,56 @@ def process_quarterly_skuwise_data(user_id, country, month, year, q, db_url):
                 conn_inner.execute(text(f"""
                     CREATE TABLE IF NOT EXISTS {quarter_table} (
                         id SERIAL PRIMARY KEY,
-                        product_name TEXT,
+
                         sku TEXT,
-                        price_in_gbp DOUBLE PRECISION,
-                        product_sales DOUBLE PRECISION,
-                        promotional_rebates DOUBLE PRECISION,
-                        promotional_rebates_tax DOUBLE PRECISION,
-                        product_sales_tax DOUBLE PRECISION,
-                        selling_fees DOUBLE PRECISION,
-                        refund_selling_fees DOUBLE PRECISION,
-                        fba_fees DOUBLE PRECISION,
-                        other DOUBLE PRECISION,
-                        marketplace_facilitator_tax DOUBLE PRECISION,
-                        shipping_credits_tax DOUBLE PRECISION,
-                        giftwrap_credits_tax DOUBLE PRECISION,
-                        postage_credits DOUBLE PRECISION,
-                        gift_wrap_credits DOUBLE PRECISION,
-                        net_sales DOUBLE PRECISION,
-                        net_taxes DOUBLE PRECISION,
-                        net_credits DOUBLE PRECISION,
-                        profit DOUBLE PRECISION,
-                        profit_percentage DOUBLE PRECISION,
-                        amazon_fee DOUBLE PRECISION,
+                        product_name TEXT,
+
                         quantity INTEGER,
-                        cost_of_unit_sold DOUBLE PRECISION,
-                        other_transaction_fees DOUBLE PRECISION,
-                        platform_fee DOUBLE PRECISION,
-                        rembursement_fee DOUBLE PRECISION,
-                        advertising_total DOUBLE PRECISION,
-                        reimbursement_vs_sales DOUBLE PRECISION,
-                        cm2_profit DOUBLE PRECISION,
-                        cm2_margins DOUBLE PRECISION,
-                        acos DOUBLE PRECISION,
-                        asp DOUBLE PRECISION,
-                        rembursment_vs_cm2_margins DOUBLE PRECISION,
-                        sales_mix DOUBLE PRECISION,
-                        profit_mix DOUBLE PRECISION,
-                        shipment_charges DOUBLE PRECISION, 
-                        unit_wise_profitability DOUBLE PRECISION,
                         return_quantity INTEGER,
                         total_quantity INTEGER,
-                        refund_sales DOUBLE PRECISION,
+
+                        asp DOUBLE PRECISION,
                         gross_sales DOUBLE PRECISION,
-                        sales_tax_refund DOUBLE PRECISION,
-                        sales_credit_refund DOUBLE PRECISION,
-                        refund_rebate DOUBLE PRECISION,
-                        lost_total DOUBLE PRECISION,
+                        refund_sales DOUBLE PRECISION,
+                        tex_and_credits DOUBLE PRECISION,
+
+                        net_sales DOUBLE PRECISION,
+                        promotional_rebates DOUBLE PRECISION,
+                        promotional_rebates_percentage DOUBLE PRECISION,
+
+                        cost_of_unit_sold DOUBLE PRECISION,
+                        selling_fees DOUBLE PRECISION,
+                        fba_fees DOUBLE PRECISION,
+                        amazon_fee DOUBLE PRECISION,
+
+                        net_taxes DOUBLE PRECISION,
+                        net_credits DOUBLE PRECISION,
+
                         misc_transaction DOUBLE PRECISION,
+                        other_transaction_fees DOUBLE PRECISION,
+
+                        profit DOUBLE PRECISION,
+                        unit_wise_profitability DOUBLE PRECISION,
+                        profit_percentage DOUBLE PRECISION,
+
+                        visible_ads DOUBLE PRECISION,
+                        dealsvouchar_ads DOUBLE PRECISION,
+                        advertising_total DOUBLE PRECISION,
+
+                        platformfeenew DOUBLE PRECISION,
+                        platform_fee DOUBLE PRECISION,
+                        platform_fee_inventory_storage DOUBLE PRECISION,
+
+                        cm2_profit DOUBLE PRECISION,
+                        cm2_profit_percentage DOUBLE PRECISION,
+                        acos DOUBLE PRECISION,
+
+                        rembursement_fee DOUBLE PRECISION,
+                        rembursment_vs_cm2_margins DOUBLE PRECISION,
+                        reimbursement_vs_sales DOUBLE PRECISION,
+
+                        profit_mix DOUBLE PRECISION,
+                        sales_mix DOUBLE PRECISION,
 
                         user_id INTEGER
                     )
@@ -2442,21 +2716,42 @@ def process_yearly_skuwise_data(user_id, country, year):
 
         # Fetch yearly data - using parameterized query for PostgreSQL
             yearly_query = f"""
-                SELECT "user_id","price_in_gbp", "product_sales", "promotional_rebates", "promotional_rebates_tax",
-                "product_sales_tax", "selling_fees", "refund_selling_fees", "fba_fees", "other",
-                "marketplace_facilitator_tax", "shipping_credits_tax", "giftwrap_credits_tax",
-                "postage_credits", "gift_wrap_credits", "net_sales", "net_taxes", "net_credits",
-                "profit", "profit_percentage", "amazon_fee", "quantity",
-                "cost_of_unit_sold", "other_transaction_fees", "platform_fee", "rembursement_fee",
-                "advertising_total", "reimbursement_vs_sales", "cm2_profit", "cm2_margins", "acos",
-                "asp", "rembursment_vs_cm2_margins", "product_name","shipment_charges","unit_wise_profitability","sku", "return_quantity",
+                SELECT "sku",
+                "product_name",
+                "quantity",
+                "return_quantity",
                 "total_quantity",
-                "refund_sales",
+                "asp",
                 "gross_sales",
-                "sales_tax_refund",
-                "sales_credit_refund",
-                "refund_rebate","lost_total",
-                "misc_transaction"
+                "refund_sales",
+                "tex_and_credits",
+                "net_sales",
+                "promotional_rebates",
+                "promotional_rebates_percentage",
+                "cost_of_unit_sold",
+                "selling_fees",
+                "fba_fees",
+                "amazon_fee",
+                "net_taxes",
+                "net_credits",
+                "misc_transaction",
+                "other_transaction_fees",
+                "profit",
+                "unit_wise_profitability",
+                "profit_percentage",
+                "visible_ads",
+                "dealsvouchar_ads",
+                "advertising_total",
+                "platformfeenew",
+                "platform_fee",
+                "platform_fee_inventory_storage",
+                "cm2_profit",
+                "cm2_profit_percentage",
+                "acos",
+                "rembursement_fee",
+                "rembursment_vs_cm2_margins",
+                "reimbursement_vs_sales",
+                "user_id"
 
                 FROM {source_table}
                 WHERE "year" = '{year}'
@@ -2476,53 +2771,42 @@ def process_yearly_skuwise_data(user_id, country, year):
     
         # Group by SKU for aggregation
             sku_grouped = df.groupby('product_name').agg({
-                "sku": "first", 
-                "price_in_gbp": "mean",
-                "product_sales": "sum",
-                "promotional_rebates": "sum",
-                "promotional_rebates_tax": "sum",
-                "product_sales_tax": "sum",
-                "selling_fees": "sum",
-                "refund_selling_fees": "sum",  # Add this column to df before grouping if needed
-                "fba_fees": "sum",
-                "other": "sum",
-                "marketplace_facilitator_tax": "sum",
-                "shipping_credits_tax": "sum",
-                "giftwrap_credits_tax": "sum",
-                "postage_credits": "sum",
-                "gift_wrap_credits": "sum",
-                "net_sales": "sum",  # Calculate these columns before grouping
-                "net_taxes": "sum",
-                "net_credits": "sum",
-                "profit": "sum",
-                # "profit_percentage": "sum",
-                "amazon_fee": "sum",
-                # "sales_mix": "sum",
-                # "profit_mix": "sum",
-                "quantity": "sum",
-                "cost_of_unit_sold": "sum",
-                "other_transaction_fees": "sum",
-                "platform_fee": "sum",
-                "rembursement_fee": "sum",
-                "advertising_total": "sum",
-                # "reimbursement_vs_sales": "sum",
-                "cm2_profit": "sum",
-                # "cm2_margins": "sum",
-                # "acos": "sum",
-                # "asp": "sum",
-                # "rembursment_vs_cm2_margins": "sum",
-                "shipment_charges": "sum",
-                "unit_wise_profitability": "sum", 
-                "return_quantity": "sum",
-                "total_quantity": "sum",
-                "refund_sales": "sum",
-                "gross_sales": "sum",
-                "sales_tax_refund": "sum",
-                "sales_credit_refund": "sum",
-                "refund_rebate": "sum",
-                "lost_total": "sum",
-                "misc_transaction": "sum",
-                "user_id": "first"  # or "sum" if you want to repeat user_id for each group
+                    "sku": "first", 
+                
+                    "quantity": "sum",
+                    "return_quantity": "sum",
+                    "total_quantity": "sum",
+                    "asp": "mean",
+                    "gross_sales": "sum",
+                    "refund_sales": "sum",
+                    "tex_and_credits": "sum",
+                    "net_sales": "sum",
+                    "promotional_rebates": "sum",
+                    "promotional_rebates_percentage": "mean",
+                    "cost_of_unit_sold": "sum",
+                    "selling_fees": "sum",
+                    "fba_fees": "sum",
+                    "amazon_fee": "sum",
+                    "net_taxes": "sum",
+                    "net_credits": "sum",
+                    "misc_transaction": "sum",
+                    "other_transaction_fees": "sum",
+                    "profit": "sum",
+                    "unit_wise_profitability": "mean",
+                    "profit_percentage": "mean",
+                    "visible_ads": "sum",
+                    "dealsvouchar_ads": "sum",
+                    "advertising_total": "sum",
+                    "platformfeenew": "sum",
+                    "platform_fee": "sum",
+                    "platform_fee_inventory_storage": "sum",
+                    "cm2_profit": "sum",
+                    "cm2_profit_percentage": "mean",
+                    "acos": "mean",
+                    "rembursement_fee": "sum",
+                    "rembursment_vs_cm2_margins": "mean",
+                    "reimbursement_vs_sales": "mean",
+                    "user_id": "first", # or "sum" if you want to repeat user_id for each group
             }).reset_index()
             sku_grouped["product_name"] = sku_grouped["product_name"].astype(str).str.strip()
             sku_grouped["cm2_margins"] = sku_grouped.apply(
@@ -2587,53 +2871,56 @@ def process_yearly_skuwise_data(user_id, country, year):
             create_table_query = f"""
                 CREATE TABLE IF NOT EXISTS {quarter_table} (
                     id SERIAL PRIMARY KEY,
-                    product_name TEXT,
+
                     sku TEXT,
-                    price_in_gbp DOUBLE PRECISION,
-                    product_sales DOUBLE PRECISION,
-                    promotional_rebates DOUBLE PRECISION,
-                    promotional_rebates_tax DOUBLE PRECISION,
-                    product_sales_tax DOUBLE PRECISION,
-                    selling_fees DOUBLE PRECISION,
-                    refund_selling_fees DOUBLE PRECISION,
-                    fba_fees DOUBLE PRECISION,
-                    other DOUBLE PRECISION,
-                    marketplace_facilitator_tax DOUBLE PRECISION,
-                    shipping_credits_tax DOUBLE PRECISION,
-                    giftwrap_credits_tax DOUBLE PRECISION,
-                    postage_credits DOUBLE PRECISION,
-                    gift_wrap_credits DOUBLE PRECISION,
-                    net_sales DOUBLE PRECISION,
-                    net_taxes DOUBLE PRECISION,
-                    net_credits DOUBLE PRECISION,
-                    profit DOUBLE PRECISION,
-                    profit_percentage DOUBLE PRECISION,
-                    amazon_fee DOUBLE PRECISION,
-                    sales_mix DOUBLE PRECISION,
-                    profit_mix DOUBLE PRECISION,
+                    product_name TEXT,
+
                     quantity INTEGER,
-                    cost_of_unit_sold DOUBLE PRECISION,
-                    other_transaction_fees DOUBLE PRECISION,
-                    platform_fee DOUBLE PRECISION,
-                    rembursement_fee DOUBLE PRECISION,
-                    advertising_total DOUBLE PRECISION,
-                    reimbursement_vs_sales DOUBLE PRECISION,
-                    cm2_profit DOUBLE PRECISION,
-                    cm2_margins DOUBLE PRECISION,
-                    acos DOUBLE PRECISION,
-                    asp DOUBLE PRECISION,
-                    rembursment_vs_cm2_margins DOUBLE PRECISION,
-                    shipment_charges DOUBLE PRECISION,
-                    unit_wise_profitability DOUBLE PRECISION,
                     return_quantity INTEGER,
                     total_quantity INTEGER,
-                    refund_sales DOUBLE PRECISION,
+
+                    asp DOUBLE PRECISION,
                     gross_sales DOUBLE PRECISION,
-                    sales_tax_refund DOUBLE PRECISION,
-                    sales_credit_refund DOUBLE PRECISION,
-                    refund_rebate DOUBLE PRECISION,
-                    lost_total DOUBLE PRECISION,
+                    refund_sales DOUBLE PRECISION,
+                    tex_and_credits DOUBLE PRECISION,
+
+                    net_sales DOUBLE PRECISION,
+                    promotional_rebates DOUBLE PRECISION,
+                    promotional_rebates_percentage DOUBLE PRECISION,
+
+                    cost_of_unit_sold DOUBLE PRECISION,
+                    selling_fees DOUBLE PRECISION,
+                    fba_fees DOUBLE PRECISION,
+                    amazon_fee DOUBLE PRECISION,
+
+                    net_taxes DOUBLE PRECISION,
+                    net_credits DOUBLE PRECISION,
+
                     misc_transaction DOUBLE PRECISION,
+                    other_transaction_fees DOUBLE PRECISION,
+
+                    profit DOUBLE PRECISION,
+                    unit_wise_profitability DOUBLE PRECISION,
+                    profit_percentage DOUBLE PRECISION,
+
+                    visible_ads DOUBLE PRECISION,
+                    dealsvouchar_ads DOUBLE PRECISION,
+                    advertising_total DOUBLE PRECISION,
+
+                    platformfeenew DOUBLE PRECISION,
+                    platform_fee DOUBLE PRECISION,
+                    platform_fee_inventory_storage DOUBLE PRECISION,
+
+                    cm2_profit DOUBLE PRECISION,
+                    cm2_profit_percentage DOUBLE PRECISION,
+                    acos DOUBLE PRECISION,
+
+                    rembursement_fee DOUBLE PRECISION,
+                    rembursment_vs_cm2_margins DOUBLE PRECISION,
+                    reimbursement_vs_sales DOUBLE PRECISION,
+
+                    profit_mix DOUBLE PRECISION,
+                    sales_mix DOUBLE PRECISION,
 
                     user_id INTEGER
                 )
