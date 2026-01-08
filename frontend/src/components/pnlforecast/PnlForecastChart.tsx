@@ -64,8 +64,8 @@ const PnlForecastChart: React.FC<PnlForecastChartProps> = ({
     {
       key: 'SALES',
       label: 'Sales',
-      borderColor: '#2CA9E0',
-      backgroundColor: '#2CA9E0',
+      borderColor: '#75BBDA',
+      backgroundColor: '#75BBDA',
     },
     // {
     //   key: 'COGS',
@@ -76,20 +76,20 @@ const PnlForecastChart: React.FC<PnlForecastChartProps> = ({
     {
       key: 'CM1 PROFIT',
       label: 'CM1 Profit',
-      borderColor: '#5EA49B',
-      backgroundColor: '#5EA49B',
+      borderColor: '#7B9A6d',
+      backgroundColor: '#7B9A6d',
     },
     {
       key: 'ADVERTISING COSTS',
       label: 'Advertising Costs',
-      borderColor: '#F47A00',
-      backgroundColor: '#F47A00',
+      borderColor: '#C49466',
+      backgroundColor: '#C49466',
     },
     {
       key: 'CM2 PROFIT',
       label: 'CM2 Profit',
-      borderColor: '#87AD12',
-      backgroundColor: '#87AD12',
+      borderColor: '#B8C78C',
+      backgroundColor: '#B8C78C',
     },
   ];
 
@@ -236,10 +236,10 @@ const PnlForecastChart: React.FC<PnlForecastChartProps> = ({
 
 
 .checkbox-label.sales {
-  color: #2CA9E0;
+  color: #75BBDA;
 }
 .checkbox-label.sales input[type="checkbox"] {
-  background-color: #2CA9E0;
+  background-color: #75BBDA;
 }
 
 // .checkbox-label.cogs {
@@ -248,24 +248,24 @@ const PnlForecastChart: React.FC<PnlForecastChartProps> = ({
 
 
 .checkbox-label.ad {
-  color: #F47A00;
+  color: #C49466;
 }
 .checkbox-label.ad input[type="checkbox"] {
-  background-color: #F47A00;
+  background-color: #C49466;
 }
 
 .checkbox-label.cm1 {
-  color: #5EA49B;
+  color: #7B9A6d;
 }
 .checkbox-label.cm1 input[type="checkbox"] {
-  background-color: #5EA49B;
+  background-color: #7B9A6d;
 }
 
 .checkbox-label.cm2 {
-  color: #87AD12;
+  color: #B8C78C;
 }
 .checkbox-label.cm2 input[type="checkbox"] {
-  background-color: #87AD12;
+  background-color: #B8C78C;
 }
 
 /* Add this CSS to your stylesheet */

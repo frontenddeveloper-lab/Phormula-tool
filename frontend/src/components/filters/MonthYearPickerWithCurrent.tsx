@@ -43,9 +43,9 @@ const MonthYearPickerWithCurrent: React.FC<Props> = ({
   };
 
   const wrapCls =
-    "relative inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs sm:text-sm shadow-sm";
+    "relative inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs 2xl:text-sm shadow-sm";
   const selectCls =
-    "appearance-none bg-transparent px-2 py-1 pr-6 text-center text-xs sm:text-sm text-[#414042] focus:outline-none cursor-pointer leading-tight";
+    "appearance-none bg-transparent px-2 py-1 pr-6 text-center text-xs 2xl:text-sm text-[#414042] focus:outline-none cursor-pointer leading-tight";
 
   return (
     <div className={`flex items-center gap-2 sm:gap-3 ${className}`}>

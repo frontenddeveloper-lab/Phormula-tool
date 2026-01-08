@@ -508,10 +508,10 @@ const urlYear = (params?.year as string) || '';
 {data && (
   <div>
     <div className="overflow-x-auto rounded-sm">
-      <table className="w-full border-collapse !text-sm rounded-sm">
-        <thead className="bg-[#5ea68e] text-[#f8edcf]  text-sm !rounded-sm">
+      <table className="w-full border-collapse !2xl:text-sm text-xs  rounded-sm">
+        <thead className="bg-[#5ea68e] text-[#f8edcf]  2xl:text-sm text-xs  !rounded-sm">
           {/* Top header row with spans (matches JS version) */}
-          <tr className='!py-3 text-sm h-10 rounded-sm'>
+          <tr className='!py-3 2xl:text-sm text-xs  h-10 rounded-sm'>
             <th className="border border-black " colSpan={showamazonfee ? 3 : 2}></th>
             <th className="border border-black" colSpan={showCm1 && LosSalesUnits ? 4 : showCm1 || LosSalesUnits ? 3 : 2}>
               P&amp;L Forecast for {formatMonthYear(currentMonth, currentYear)}
@@ -527,11 +527,11 @@ const urlYear = (params?.year as string) || '';
             </th>
           </tr>
           {/* Second header row that toggles columns same as JS */}
-<tr className="text-sm">
+<tr className="2xl:text-sm text-xs ">
   {/* SNO */}
   <th
     colSpan={isExpanded ? (showamazonfee ? 1 : 1) : (showamazonfee ? 3 : 2)}
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm "
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs  "
   >
     Sno.
   </th>
@@ -543,7 +543,7 @@ const urlYear = (params?.year as string) || '';
       {showamazonfee && (
         <th
           onClick={handleAmazonFeeClick}
-          className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+          className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
         >
           SKU
         </th>
@@ -552,7 +552,7 @@ const urlYear = (params?.year as string) || '';
       {/* PRODUCT NAME */}
       <th
         onClick={handleAmazonFeeClick}
-        className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+        className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       >
         <div className="flex items-center ">
           <ChevronLeft
@@ -572,7 +572,7 @@ const urlYear = (params?.year as string) || '';
   {/* 🔵 BLOCK 1 — PROJECTED SALES (UNITS) */}
   {LosSalesUnits && (
     <th
-      className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+      className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       onClick={handleLosSalesUnitsclick}
     >
       Projected Sales (Units)
@@ -581,7 +581,7 @@ const urlYear = (params?.year as string) || '';
 
   {/* PROJECTED SALES (CURRENCY) */}
   <th
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
     onClick={handleLosSalesUnitsclick}
   >
     <div className="flex items-center ">
@@ -599,7 +599,7 @@ const urlYear = (params?.year as string) || '';
 
   {/* CM1 */}
   <th
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
     onClick={handleshowCm1click}
   >
     <div className="flex items-center ">
@@ -618,7 +618,7 @@ const urlYear = (params?.year as string) || '';
   {/* CM1 % */}
   {showCm1 && (
     <th
-      className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+      className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       onClick={handleshowCm1click}
     >
       Projected CM1 Profit/Loss (%)
@@ -628,7 +628,7 @@ const urlYear = (params?.year as string) || '';
   {/* 🔵 BLOCK 2 — PROJECTED SALES (UNITS) */}
   {LosSalesUnits && (
     <th
-      className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+      className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       onClick={handleLosSalesUnitsclick}
     >
       Projected Sales (Units)
@@ -637,7 +637,7 @@ const urlYear = (params?.year as string) || '';
 
   {/* PROJECTED SALES (CURRENCY) */}
   <th
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
     onClick={handleLosSalesUnitsclick}
   >
     <div className="flex items-center ">
@@ -655,7 +655,7 @@ const urlYear = (params?.year as string) || '';
 
   {/* CM1 */}
   <th
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
     onClick={handleshowCm1click}
   >
     <div className="flex items-center ">
@@ -673,7 +673,7 @@ const urlYear = (params?.year as string) || '';
 
   {showCm1 && (
     <th
-      className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+      className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       onClick={handleshowCm1click}
     >
       Projected CM1 Profit/Loss (%)
@@ -683,7 +683,7 @@ const urlYear = (params?.year as string) || '';
   {/* 🔵 BLOCK 3 — PROJECTED SALES (UNITS) */}
   {LosSalesUnits && (
     <th
-      className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+      className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       onClick={handleLosSalesUnitsclick}
     >
       Projected Sales (Units)
@@ -692,7 +692,7 @@ const urlYear = (params?.year as string) || '';
 
   {/* PROJECTED SALES (CURRENCY) */}
   <th
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
     onClick={handleLosSalesUnitsclick}
   >
     <div className="flex items-center ">
@@ -710,7 +710,7 @@ const urlYear = (params?.year as string) || '';
 
   {/* CM1 */}
   <th
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
     onClick={handleshowCm1click}
   >
     <div className="flex items-center ">
@@ -728,7 +728,7 @@ const urlYear = (params?.year as string) || '';
 
   {showCm1 && (
     <th
-      className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+      className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       onClick={handleshowCm1click}
     >
       Projected CM1 Profit/Loss (%)
@@ -737,14 +737,14 @@ const urlYear = (params?.year as string) || '';
 
   {LosSalesUnits && (
     <th
-      className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+      className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       onClick={handleLosSalesUnitsclick}
     >
       Projected Sales (Units)
     </th>
   )}
    <th
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
     onClick={handleLosSalesUnitsclick}
   >
     <div className="flex items-center ">
@@ -762,7 +762,7 @@ const urlYear = (params?.year as string) || '';
 
   {/* CM1 */}
   <th
-    className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+    className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
     onClick={handleshowCm1click}
   >
     <div className="flex items-center ">
@@ -780,7 +780,7 @@ const urlYear = (params?.year as string) || '';
 
   {showCm1 && (
     <th
-      className="border border-black bg-[#D9D9D9] text-black h-10 text-sm"
+      className="border border-black bg-[#D9D9D9] text-black h-10 2xl:text-sm text-xs "
       onClick={handleshowCm1click}
     >
       Projected CM1 Profit/Loss (%)
@@ -801,7 +801,7 @@ const urlYear = (params?.year as string) || '';
                   key={index}
                   className={` ${isTotalRow ? 'bg-[#D9D9D9]/90 font-bold' : ''}`}
                 >
-                  <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                  <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                     {isTotalRow ? (
                       <span
                         className="total-icon cursor-pointer"
@@ -823,7 +823,7 @@ const urlYear = (params?.year as string) || '';
                     return (
                       <td
                         key={idx}
-                        className={`border border-black p-3 text-center text-gray-700 text-sm h-10 ${
+                        className={`border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10 ${
                           leftAlign ? 'text-left' : ''
                         }`}
                       >
@@ -838,31 +838,31 @@ const urlYear = (params?.year as string) || '';
           <tr className="">
             <td
               colSpan={showamazonfee ? 3 : 2}
-              className="border border-black p-3 text-left text-gray-700 text-sm h-10"
+              className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10"
             >
               Cost of Advertisement
             </td>
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatNumber(data?.find((r) => r.sku === 'advertising_total1')?.value)}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatNumber(data?.find((r) => r.sku === 'advertising_total2')?.value)}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatNumber(data?.find((r) => r.sku === 'advertising_total3')?.value)}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatNumber(data?.find((r) => r.sku === 'advertising_total')?.value)}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -870,31 +870,31 @@ const urlYear = (params?.year as string) || '';
           <tr className="">
             <td
               colSpan={showamazonfee ? 3 : 2}
-              className="border border-black p-3 text-left text-gray-700 text-sm h-10"
+              className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10"
             >
               Platform Fees
             </td>
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('Platform_Fees1')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('Platform_Fees2')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('Platform_Fees3')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('platform_fees_total')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -902,31 +902,31 @@ const urlYear = (params?.year as string) || '';
           <tr className=" bg-[#D9D9D9]/90 font-bold">
             <td
               colSpan={showamazonfee ? 3 : 2}
-              className="border border-black p-3 text-left text-gray-700 text-sm h-10"
+              className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10"
             >
               Other Expenses
             </td>
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {getTotal('Platform_Fees1', 'advertising_total1')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {getTotal('Platform_Fees2', 'advertising_total2')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {getTotal('Platform_Fees3', 'advertising_total3')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {getTotal('platform_fees_total', 'advertising_total')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -935,7 +935,7 @@ const urlYear = (params?.year as string) || '';
             <td
               onClick={toggleTacosSection}
               colSpan={showamazonfee ? 3 : 2}
-              className="border border-black p-3 text-left text-gray-700 text-sm h-10 cursor-pointer hover:bg-gray-100"
+              className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10 cursor-pointer hover:bg-gray-100"
             >
               CM2 Profit/Loss{' '}
               <span>
@@ -948,25 +948,25 @@ const urlYear = (params?.year as string) || '';
             </td>
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('cm2profit1')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('cm2profit2')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('cm2profit3')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('cm2profit_total')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -976,31 +976,31 @@ const urlYear = (params?.year as string) || '';
               <tr className="">
                 <td
                   colSpan={showamazonfee ? 3 : 2}
-                  className="border border-black p-3 text-left text-gray-700 text-sm h-10"
+                  className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10"
                 >
                   CM2 Margins
                 </td>
                 {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
                 <td className="border border-black p-3 h-10"></td>
-                <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                   {formatPercent(data?.find((r) => r.sku === 'cm2margin1')?.value)}
                 </td>
                 {showCm1 && <td className="border border-black p-3 h-10"></td>}
                 {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
                 <td className="border border-black p-3 h-10"></td>
-                <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                   {formatPercent(data?.find((r) => r.sku === 'cm2margin2')?.value)}
                 </td>
                 {showCm1 && <td className="border border-black p-3 h-10"></td>}
                 {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
                 <td className="border border-black p-3 h-10"></td>
-                <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                   {formatPercent(data?.find((r) => r.sku === 'cm2margin3')?.value)}
                 </td>
                 {showCm1 && <td className="border border-black p-3 h-10"></td>}
                 {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
                 <td className="border border-black p-3 h-10"></td>
-                <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                   {formatPercent(data?.find((r) => r.sku === 'cm2margin_total')?.value)}
                 </td>
                 {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -1008,31 +1008,31 @@ const urlYear = (params?.year as string) || '';
               <tr className="">
                 <td
                   colSpan={showamazonfee ? 3 : 2}
-                  className="border border-black p-3 text-left text-gray-700 text-sm h-10"
+                  className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10"
                 >
                   TACoS (Total Advertising Cost of Sale)
                 </td>
                 {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
                 <td className="border border-black p-3 h-10"></td>
-                <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                   {formatPercent(data?.find((r) => r.sku === 'acos1')?.value)}
                 </td>
                 {showCm1 && <td className="border border-black p-3 h-10"></td>}
                 {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
                 <td className="border border-black p-3 h-10"></td>
-                <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                   {formatPercent(data?.find((r) => r.sku === 'acos2')?.value)}
                 </td>
                 {showCm1 && <td className="border border-black p-3 h-10"></td>}
                 {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
                 <td className="border border-black p-3 h-10"></td>
-                <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                   {formatPercent(data?.find((r) => r.sku === 'acos3')?.value)}
                 </td>
                 {showCm1 && <td className="border border-black p-3 h-10"></td>}
                 {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
                 <td className="border border-black p-3 h-10"></td>
-                <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+                <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                   {formatPercent(data?.find((r) => r.sku === 'acos_total')?.value)}
                 </td>
                 {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -1042,31 +1042,31 @@ const urlYear = (params?.year as string) || '';
           <tr className="">
             <td
               colSpan={showamazonfee ? 3 : 2}
-              className="border border-black p-3 text-left text-gray-700 text-sm h-10"
+              className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10"
             >
               Net Reimbursement (Projected)
             </td>
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('NetReimbursement1')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('NetReimbursement2')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('NetReimbursement3')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatValue('NetReimbursement_total')}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -1074,31 +1074,31 @@ const urlYear = (params?.year as string) || '';
           <tr className="">
             <td
               colSpan={showamazonfee ? 3 : 2}
-              className="border border-black p-3 text-left text-gray-700 text-sm h-10"
+              className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10"
             >
               Reimbursement vs CM2 Margins
             </td>
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatPercent(data?.find((r) => r.sku === 'ReimbursementvsCM2Margins1')?.value)}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatPercent(data?.find((r) => r.sku === 'ReimbursementvsCM2Margins2')?.value)}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatPercent(data?.find((r) => r.sku === 'ReimbursementvsCM2Margins3')?.value)}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
             {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
             <td className="border border-black p-3 h-10"></td>
-            <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+            <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
               {formatPercent(data?.find((r) => r.sku === 'ReimbursementvsCM2Margins_total')?.value)}
             </td>
             {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -1107,31 +1107,31 @@ const urlYear = (params?.year as string) || '';
             <tr className="">
               <td
                 colSpan={showamazonfee ? 3 : 2}
-                className="border border-black p-3 text-left text-gray-700 text-sm h-10"
+                className="border border-black p-3 text-left text-gray-700 2xl:text-sm text-xs  h-10"
               >
                 Reimbursement vs Sales
               </td>
               {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
               <td className="border border-black p-3 h-10"></td>
-              <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+              <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                 {formatPercent(data?.find((r) => r.sku === 'Reimbursementvssales1')?.value)}
               </td>
               {showCm1 && <td className="border border-black p-3 h-10"></td>}
               {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
               <td className="border border-black p-3 h-10"></td>
-              <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+              <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                 {formatPercent(data?.find((r) => r.sku === 'Reimbursementvssales2')?.value)}
               </td>
               {showCm1 && <td className="border border-black p-3 h-10"></td>}
               {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
               <td className="border border-black p-3 h-10"></td>
-              <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+              <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                 {formatPercent(data?.find((r) => r.sku === 'Reimbursementvssales3')?.value)}
               </td>
               {showCm1 && <td className="border border-black p-3 h-10"></td>}
               {LosSalesUnits && <td className="border border-black p-3 h-10"></td>}
               <td className="border border-black p-3 h-10"></td>
-              <td className="border border-black p-3 text-center text-gray-700 text-sm h-10">
+              <td className="border border-black p-3 text-center text-gray-700 2xl:text-sm text-xs  h-10">
                 {formatPercent(data?.find((r) => r.sku === 'Reimbursementvssales_total')?.value)}
               </td>
               {showCm1 && <td className="border border-black p-3 h-10"></td>}
@@ -1143,7 +1143,7 @@ const urlYear = (params?.year as string) || '';
     <button
       style={{ display: 'flex' }}
       onClick={() => exportTableToExcel()}
-      className="font-sans text-sm bg-[#2c3e50] text-[#f8edcf] font-bold border-none rounded cursor-pointer text-center py-2 px-4 mt-2 ml-auto hover:bg-[#34495e]"
+      className="font-sans 2xl:text-sm text-xs  bg-[#2c3e50] text-[#f8edcf] font-bold border-none rounded cursor-pointer text-center py-2 px-4 mt-2 ml-auto hover:bg-[#34495e]"
     >
       Download as Excel (.xlsx)
     </button>

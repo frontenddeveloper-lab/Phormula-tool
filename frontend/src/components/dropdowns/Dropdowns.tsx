@@ -59,6 +59,23 @@ type UploadHistoryResponse = {
 
 
 
+
+/* ---------------------- AI Summary Types ---------------------- */
+type AiSummaryResponse = {
+  summary?: string | null;
+  recommendations?: string | null;
+};
+
+type AiPanelData = {
+  summaryBullets: string[];
+  skuInsightsBullets: string[];     // NEW
+  recommendationBullets: string[];
+  inventoryBullets: string[];       // NEW
+  rawSummary?: string | null;
+  rawRecommendations?: string | null;
+};
+
+
 type RangeType = "monthly" | "quarterly" | "yearly" | "";
 
 /** Quarter union and helpers */
@@ -213,6 +230,73 @@ const getPrevYearLabel = (selectedYear: number) => {
   return String(selectedYear - 1); // 2024
 };
 
+// ---------------------- AI Summary Helpers ----------------------
+const monthNameToNumber = (m: string): string => {
+  const idx = monthIndexMap[(m || "").toLowerCase()];
+  return typeof idx === "number" ? String(idx + 1) : "";
+};
+
+const extractBullets = (md: string | null | undefined): string[] => {
+  if (!md) return [];
+  return md
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("- "))
+    .map((l) => l.replace(/^-\s+/, "").trim())
+    .filter(Boolean);
+};
+
+// Pull only bullets under "## SUMMARY" section if present; otherwise fallback to all bullets
+// --- NEW: split markdown into sections by "## " headings
+const parseMdSections = (md?: string | null): Record<string, string[]> => {
+  if (!md) return {};
+  const lines = md.split(/\r?\n/);
+
+  const sections: Record<string, string[]> = {};
+  let current = "ROOT";
+  sections[current] = [];
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.toLowerCase().startsWith("## ")) {
+      current = line.replace(/^##\s+/i, "").trim().toUpperCase();
+      if (!sections[current]) sections[current] = [];
+      continue;
+    }
+    sections[current].push(raw);
+  }
+
+  // convert each section to bullets
+  const out: Record<string, string[]> = {};
+  for (const [k, arr] of Object.entries(sections)) {
+    out[k] = arr
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith("- "))
+      .map((l) => l.replace(/^-\s+/, "").trim())
+      .filter(Boolean);
+  }
+  return out;
+};
+
+// --- REPLACE old extractSummaryBullets with this (so it can also show SKU INSIGHTS)
+const extractSummaryAndSkuBullets = (md?: string | null) => {
+  const sections = parseMdSections(md);
+  return {
+    summaryBullets: sections["SUMMARY"] ?? [],
+    skuInsightsBullets: sections["SKU INSIGHTS"] ?? [],
+  };
+};
+
+// --- NEW: for recommendations, keep main bullets + INVENTORY section bullets
+const extractRecoAndInventoryBullets = (md?: string | null) => {
+  const sections = parseMdSections(md);
+
+  // ROOT = bullets before any "##"
+  const recommendationBullets = sections["ROOT"] ?? [];
+  const inventoryBullets = sections["INVENTORY"] ?? [];
+
+  return { recommendationBullets, inventoryBullets };
+};
 
 /* ---------------------- Component ---------------------- */
 const Dropdowns: React.FC<DropdownsProps> = ({
@@ -256,6 +340,11 @@ const Dropdowns: React.FC<DropdownsProps> = ({
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showNoDataOverlay, setShowNoDataOverlay] = useState(false);
+
+  // ---------------- AI Summary Panel state ----------------
+  const [aiPanel, setAiPanel] = useState<AiPanelData | null>(null);
+  const [aiPanelLoading, setAiPanelLoading] = useState(false);
+  const [aiPanelError, setAiPanelError] = useState<string | null>(null);
 
   const [chartExportApi, setChartExportApi] = useState<ProfitChartExportApi | null>(null);
   const [skuExportPayload, setSkuExportPayload] = useState<SkuExportPayload | null>(null);
@@ -399,6 +488,68 @@ const Dropdowns: React.FC<DropdownsProps> = ({
     }
   };
 
+
+  const fetchAiSummary = async (rangeType: RangeType) => {
+    // only fetch when the selection is valid for the current range
+    if (!countryName || !rangeType || !selectedYear) return;
+
+    const timeline =
+      rangeType === "monthly"
+        ? monthNameToNumber(selectedMonth)
+        : rangeType === "quarterly"
+          ? selectedQuarter
+          : "ALL";
+
+    if (rangeType === "monthly" && !timeline) return;
+    if (rangeType === "quarterly" && !selectedQuarter) return;
+
+    setAiPanelLoading(true);
+    setAiPanelError(null);
+
+    try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("jwtToken") : null;
+
+      const url = new URL("http://127.0.0.1:5000/summary");
+      url.searchParams.set("country", countryName);
+      url.searchParams.set("period", rangeType);
+      url.searchParams.set("timeline", String(timeline));
+      url.searchParams.set("year", String(selectedYear));
+
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setAiPanel(null);
+        setAiPanelError(String(err?.error ?? res.statusText));
+        return;
+      }
+
+      const data: AiSummaryResponse = await res.json();
+
+      const { summaryBullets, skuInsightsBullets } = extractSummaryAndSkuBullets(data.summary);
+const { recommendationBullets, inventoryBullets } = extractRecoAndInventoryBullets(data.recommendations);
+
+setAiPanel({
+  summaryBullets,
+  skuInsightsBullets,
+  recommendationBullets,
+  inventoryBullets,
+  rawSummary: data.summary ?? null,
+  rawRecommendations: data.recommendations ?? null,
+});
+    } catch (e: any) {
+      setAiPanel(null);
+      setAiPanelError(e?.message || "Failed to fetch AI summary");
+    } finally {
+      setAiPanelLoading(false);
+    }
+  };
+
   // month comes in as lowercase from PeriodFiltersTable ("january", etc.)
   const handleMonthChange = (v: string) => {
     setSelectedMonth(v);
@@ -481,6 +632,28 @@ const Dropdowns: React.FC<DropdownsProps> = ({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, selectedMonth, selectedQuarter, selectedYear, countryName, fetchCurrencyKey]);
+
+  // Fetch AI summary/recommendations for the selected period
+  useEffect(() => {
+    if (!range || !selectedYear) {
+      setAiPanel(null);
+      return;
+    }
+
+    // align with the same dropdown validity rules
+    const ready =
+      (range === "monthly" && !!selectedMonth && !!selectedYear) ||
+      (range === "quarterly" && !!selectedQuarter && !!selectedYear) ||
+      (range === "yearly" && !!selectedYear);
+
+    if (!ready) {
+      setAiPanel(null);
+      return;
+    }
+
+    fetchAiSummary(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, selectedMonth, selectedQuarter, selectedYear, countryName]);
 
   const cropPngBase64WithSize = async (
     base64: string,
@@ -996,6 +1169,88 @@ const Dropdowns: React.FC<DropdownsProps> = ({
       )} ${selectedYear}`;
     }
     return `${capitalizeFirstLetter(range)} Tracking Profitability - ${selectedYear}`;
+  };
+
+
+  const renderAiPanel = () => {
+    if (!allDropdownsSelected) return null;
+
+    // show loading even if panel is empty, but only when range selection is ready
+    const showLoading = aiPanelLoading;
+
+    return (
+      <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Summary */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="text-sm font-semibold text-charcoal-500 mb-2">
+              Month-end Business Summary
+            </div>
+
+            {showLoading ? (
+              <div className="text-xs text-charcoal-500">Loading…</div>
+            ) : aiPanelError ? (
+              <div className="text-xs text-red-600">{aiPanelError}</div>
+            ) : aiPanel?.summaryBullets?.length ? (
+              <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500">
+                {aiPanel.summaryBullets.map((b, i) => (
+                  <li key={i}>{b}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-xs text-charcoal-500">No summary available.</div>
+            )}
+            {aiPanel?.skuInsightsBullets?.length ? (
+  <>
+    <div className="mt-4 text-[11px] font-semibold text-charcoal-500">
+      SKU Insights
+    </div>
+    <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500 mt-2">
+      {aiPanel.skuInsightsBullets.map((b, i) => (
+        <li key={i}>{b}</li>
+      ))}
+    </ul>
+  </>
+) : null}
+          </div>
+
+          {/* Recommendations */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="text-sm font-semibold text-charcoal-500 mb-2">
+              Recommendations
+            </div>
+
+            {showLoading ? (
+              <div className="text-xs text-charcoal-500">Loading…</div>
+            ) : aiPanelError ? (
+              <div className="text-xs text-red-600">{aiPanelError}</div>
+            ) : aiPanel?.recommendationBullets?.length ? (
+              <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500">
+                {aiPanel.recommendationBullets.map((b, i) => (
+                  <li key={i}>{b}</li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-xs text-charcoal-500">
+                Recommendations are generated only for the latest completed period.
+              </div>
+            )}
+            {aiPanel?.inventoryBullets?.length ? (
+  <>
+    <div className="mt-4 text-[11px] font-semibold text-charcoal-500">
+      Inventory
+    </div>
+    <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500 mt-2">
+      {aiPanel.inventoryBullets.map((b, i) => (
+        <li key={i}>{b}</li>
+      ))}
+    </ul>
+  </>
+) : null}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1550,6 +1805,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
           })()}
 
       </div>
+      
 
       {/* Profitability header + bundle download */}
       {allDropdownsSelected && (
@@ -1587,6 +1843,9 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               }}
             />
           </div>
+
+          {renderAiPanel()}
+
           <div className="flex flex-wrap justify-between gap-6 md:gap-4 mb-4">
             <div className="flex-1 min-w-[300px]">
               <CircleChart
@@ -1638,6 +1897,9 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               }}
             />
           </div>
+
+          {renderAiPanel()}
+
           <div className="flex flex-wrap justify-between gap-6 md:gap-4">
             <div className="flex-1 min-w-[300px]">
               <CircleChart
@@ -1686,6 +1948,8 @@ const Dropdowns: React.FC<DropdownsProps> = ({
               setShowNoDataOverlay(noData);
             }}
           />
+
+          {renderAiPanel()}
           <div className="flex flex-wrap justify-between gap-6 md:gap-4">
             <div className="flex-1 min-w-[300px]">
               <CircleChart

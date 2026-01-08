@@ -1,0 +1,731 @@
+from flask import Blueprint, request, jsonify
+import jwt
+import os
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
+from config import Config
+from calendar import month_abbr, monthrange
+from datetime import date, datetime, timedelta
+from openai import OpenAI
+import json
+import pandas as pd
+from app.models.user_models import HistoricAISummary
+from app.utils.formulas_utils import safe_num
+from app import db
+
+
+
+
+load_dotenv()
+SECRET_KEY = Config.SECRET_KEY
+
+db_url = os.getenv("DATABASE_URL")
+db_url2 = os.getenv("DATABASE_Chatbot_URL")
+db_url3 = os.getenv("DATABASE_AMAZON_URL")
+phormula_engine = create_engine(db_url)
+chatbot_engine = create_engine(db_url2)
+amazon_engine = create_engine(db_url3)
+
+
+
+MONTH_NUM_TO_NAME = {
+    1: "january",
+    2: "february",
+    3: "march",
+    4: "april",
+    5: "may",
+    6: "june",
+    7: "july",
+    8: "august",
+    9: "september",
+    10: "october",
+    11: "november",
+    12: "december",
+}
+
+
+
+def get_latest_completed_month(today=None):
+    today = today or date.today()
+    if today.month == 1:
+        return today.year - 1, 12
+    return today.year, today.month - 1
+
+
+def get_latest_completed_quarter(today=None):
+    today = today or date.today()
+    q = (today.month - 1) // 3 + 1
+    if q == 1:
+        return today.year - 1, 4
+    return today.year, q - 1
+
+
+def is_latest_period(period, timeline, year):
+    if period == "monthly":
+        y, m = get_latest_completed_month()
+        return str(m) == timeline and y == year
+
+    if period == "quarterly":
+        y, q = get_latest_completed_quarter()
+        return f"Q{q}" == timeline and y == year
+
+    if period == "yearly":
+        return year == date.today().year - 1
+
+    return False
+
+
+def fetch_existing_summary(user_id, country, marketplace_id, period, timeline, year):
+    return HistoricAISummary.query.filter_by(
+        user_id=user_id,
+        country=country,
+        marketplace_id=marketplace_id,
+        period=period,
+        timeline=timeline,
+        year=year
+    ).first()
+
+
+def save_summary_to_db(data):
+    record = HistoricAISummary(
+        user_id=data["user_id"],
+        country=data["country"],
+        marketplace_id=data["marketplace_id"],
+        period=data["period"],
+        timeline=data["timeline"],
+        year=data["year"],
+        summary=data["summary"],
+        recommendations=data["recommendations"]
+    )
+    db.session.add(record)
+    db.session.commit()
+
+def month_name_from_timeline(timeline: str) -> str:
+    # timeline is like "12"
+    return MONTH_NUM_TO_NAME[int(timeline)]  # returns "december"
+
+def build_table_name(user_id: int, country: str, period: str, timeline: str, year: int) -> str:
+    c = str(country).lower()
+
+    if period == "monthly":
+        mn = month_name_from_timeline(timeline)   # "december"
+        return f"skuwisemonthly_{user_id}_{c}_{mn}{year}"
+
+    if period == "quarterly":
+        q = int(str(timeline).replace("Q", ""))   # Q1 -> 1
+        return f"quarter{q}_{user_id}_{c}_{year}_table"
+
+    if period == "yearly":
+        return f"skuwiseyearly_{user_id}_{c}_{year}_table"
+
+    raise ValueError("Invalid period")
+
+def fetch_precalc_table(user_id: int, country: str, period: str, timeline: str, year: int) -> pd.DataFrame:
+    table = build_table_name(user_id, country, period, timeline, year)
+    query = f'SELECT * FROM public."{table}"'
+
+    try:
+        return pd.read_sql(query, phormula_engine)
+    except Exception as e:
+        print(f"[WARN] Could not read table {table}: {e}")
+        return pd.DataFrame()
+
+def _normalize_sku_col(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    df = df.copy()
+    if "sku" not in df.columns and "SKU" in df.columns:
+        df.rename(columns={"SKU": "sku"}, inplace=True)
+    return df
+
+METRIC_COLUMNS = {
+    "quantity",
+    "return_quantity",
+    "total_quantity",
+
+    "gross_sales",
+    "refund_sales",
+    "net_sales",
+
+    "cost_of_unit_sold",
+    "selling_fees",
+    "fba_fees",
+    "amazon_fee",
+    "platform_fee",
+    "platformfeenew",
+    "platform_fee_inventory_storage",
+    "other_transaction_fees",
+    "misc_transaction",
+
+    "tex_and_credits",
+    "net_taxes",
+    "net_credits",
+
+    "promotional_rebates",
+    "visible_ads",
+    "dealsvouchar_ads",
+    "advertising_total",
+
+    "lost_total",
+    "rembursement_fee",
+
+    "profit",
+    "cm2_profit",
+}
+
+PERCENTAGE_COLUMNS = {
+    "acos",
+    "profit_percentage",
+    "cm2_profit_percentage",
+    "promotional_rebates_percentage",
+    "unit_wise_profitability",
+    "sales_mix",
+    "profit_mix",
+}
+
+
+def get_metric_columns(df: pd.DataFrame) -> list[str]:
+    return [c for c in df.columns if c.lower() in METRIC_COLUMNS]
+
+
+def compute_sku_precalc(df: pd.DataFrame) -> dict:
+    if df.empty:
+        return {}
+    df = _normalize_sku_col(df)
+    if "sku" not in df.columns:
+        return {}
+
+    num_cols = get_metric_columns(df)
+
+
+    other_cols = [c for c in df.columns if c not in num_cols and c != "sku"]
+
+    agg = {c: "sum" for c in num_cols}
+    for c in other_cols:
+        agg[c] = "first"
+
+    g = df.groupby("sku", dropna=False).agg(agg).reset_index()
+
+    out = {}
+    for _, r in g.iterrows():
+        sku = str(r["sku"])
+        out[sku] = {}
+        for col in g.columns:
+            if col == "sku":
+                continue
+            val = r[col]
+            if isinstance(val, (int, float)) and pd.notna(val):
+                out[sku][col.lower()] = round(float(val), 2)
+            else:
+                out[sku][col.lower()] = None if pd.isna(val) else val
+    return out
+
+
+
+
+
+
+
+def fetch_inventory_aged_by_user(user_id: int) -> pd.DataFrame:
+    query = text("""
+        SELECT
+            sku,
+            "inv-age-0-to-90-days"        AS age_0_90,
+            "inv-age-91-to-180-days"      AS age_91_180,
+            "inv-age-181-to-270-days"     AS age_181_270,
+            "inv-age-271-to-365-days"     AS age_271_365,
+            "inv-age-365-plus-days"       AS age_365_plus,
+            "estimated-storage-cost-next-month" AS storage_cost_next_month,
+            "unfulfillable-quantity"      AS unfulfillable_qty
+        FROM public.inventory_aged
+        WHERE user_id = :user_id
+    """)
+
+    with amazon_engine.connect() as conn:
+        df = pd.read_sql(query, conn, params={"user_id": user_id})
+
+    return df
+
+def build_inventory_alerts(df: pd.DataFrame) -> dict:
+    if df.empty:
+        return {}
+
+    df = df.copy()
+
+    # Safe numeric coercion
+    for col in [
+        "age_0_90", "age_91_180", "age_181_270",
+        "age_271_365", "age_365_plus",
+        "storage_cost_next_month", "unfulfillable_qty"
+    ]:
+        if col in df.columns:
+            df[col] = safe_num(df[col])
+
+    alerts = {}
+
+    # ---------------- EXPIRED INVENTORY ----------------
+    expired_df = df[df["age_365_plus"] > 0]
+    if not expired_df.empty:
+        alerts["expired_inventory"] = {
+            "total_units": int(expired_df["age_365_plus"].sum()),
+            "top_skus": (
+                expired_df
+                .groupby("sku")["age_365_plus"]
+                .sum()
+                .sort_values(ascending=False)
+                .head(5)
+                .to_dict()
+            )
+        }
+
+    # ---------------- CRITICALLY AGED (181+ DAYS) ----------------
+    df["aged_181_plus"] = df["age_181_270"] + df["age_271_365"]
+    aged_critical = df[df["aged_181_plus"] > 0]
+
+    if not aged_critical.empty:
+        alerts["aged_inventory_181_plus"] = {
+            "total_units": int(aged_critical["aged_181_plus"].sum()),
+            "top_skus": (
+                aged_critical
+                .groupby("sku")["aged_181_plus"]
+                .sum()
+                .sort_values(ascending=False)
+                .head(5)
+                .to_dict()
+            )
+        }
+
+    # ---------------- UNFULFILLABLE INVENTORY ----------------
+    unfulfillable = df[df["unfulfillable_qty"] > 0]
+    if not unfulfillable.empty:
+        alerts["unfulfillable_inventory"] = {
+            "total_units": int(unfulfillable["unfulfillable_qty"].sum()),
+            "top_skus": (
+                unfulfillable
+                .groupby("sku")["unfulfillable_qty"]
+                .sum()
+                .sort_values(ascending=False)
+                .head(5)
+                .to_dict()
+            )
+        }
+
+    # ---------------- STORAGE COST RISK ----------------
+    total_storage_cost = float(df["storage_cost_next_month"].sum())
+    if total_storage_cost > 0:
+        alerts["storage_cost_risk"] = {
+            "estimated_next_month_cost": round(total_storage_cost, 2)
+        }
+
+    return alerts
+
+
+
+
+
+
+def compare_sku_metrics(current: dict, previous: dict) -> dict:
+    output = {}
+
+    all_skus = set(current.keys()) | set(previous.keys())
+
+    for sku in all_skus:
+        curr = current.get(sku, {})
+        prev = previous.get(sku, {})
+
+        sku_out = {}
+
+        # ---------------- ADDITIVE METRICS ----------------
+        for metric in METRIC_COLUMNS:
+            if metric not in curr and metric not in prev:
+                continue
+
+            try:
+                new = float(curr.get(metric, 0.0) or 0.0)
+                old = float(prev.get(metric, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+
+            delta = new - old
+            pct = (delta / old * 100) if old != 0 else None
+
+            sku_out[metric] = {
+                "current": round(new, 2),
+                "previous": round(old, 2),
+                "delta": round(delta, 2),
+                "delta_pct": round(pct, 2) if pct is not None else None
+            }
+
+        # ---------------- PERCENTAGE METRICS ----------------
+        for metric in PERCENTAGE_COLUMNS:
+            if metric not in curr and metric not in prev:
+                continue
+
+            try:
+                new = float(curr.get(metric))
+                old = float(prev.get(metric))
+            except (TypeError, ValueError):
+                continue
+
+            delta = new - old
+
+            sku_out[metric] = {
+                "current": round(new, 2),
+                "previous": round(old, 2),
+                "delta": round(delta, 2),   # ✅ percentage-point change
+                "delta_pct": None           # ❌ intentionally skipped
+            }
+
+        output[sku] = sku_out
+
+    return output
+
+
+
+
+
+def compare_metrics(current, previous):
+    out = {}
+    for k, v in current.items():
+        prev = previous.get(k, 0.0)
+        delta = v - prev
+        pct = (delta / prev * 100) if prev != 0 else None
+
+        out[k] = {
+            "current": round(v, 2),
+            "previous": round(prev, 2),
+            "delta": round(delta, 2),
+            "delta_pct": round(pct, 2) if pct else None
+        }
+    return out
+
+
+def resolve_comparison(period, timeline, year):
+    if period == "monthly":
+        m = int(timeline)
+        prev = ("monthly", "12", year - 1) if m == 1 else ("monthly", str(m - 1), year)
+        yoy = ("monthly", timeline, year - 1)
+        return prev, yoy
+
+    if period == "quarterly":
+        q = int(timeline.replace("Q", ""))
+        prev = ("quarterly", "Q4", year - 1) if q == 1 else ("quarterly", f"Q{q-1}", year)
+        yoy = ("quarterly", timeline, year - 1)
+        return prev, yoy
+
+    if period == "yearly":
+        return ("yearly", "ALL", year - 1), None
+
+    raise ValueError("Invalid period")
+
+AI_SYSTEM_PROMPT = """
+You are a senior ecommerce performance analyst.
+
+You receive structured JSON data containing:
+- Overall MoM metrics (month-over-month)
+- Overall YoY metrics (year-over-year, optional)
+- SKU-level MoM comparisons
+- SKU-level YoY comparisons
+- Inventory alerts per SKU (optional)
+
+IMPORTANT DATA RULES:
+- All numbers are pre-calculated
+- Percentage values represent percentage points (delta = current − previous)
+- Do NOT recompute, infer, or validate numbers
+- Do NOT convert percentages into growth rates
+- Do NOT produce paragraphs
+
+METRIC INTERPRETATION RULES (CRITICAL):
+- The following metrics DO NOT have product-level meaning and must be treated as OVERALL ONLY:
+  platform_fee, platformfeenew, platform_fee_inventory_storage,
+  visible_ads, dealsvouchar_ads, advertising_total,
+  cm2_profit, cm2_profit_percentage, acos
+- Never attribute the above metrics to individual SKUs in insights or actions.
+
+QUANTITY DEFINITIONS:
+- quantity = gross units shipped
+- return_quantity = units returned
+- total_quantity = net units sold
+- quantity = total_quantity + return_quantity
+- Use total_quantity when referring to actual units sold.
+- Do NOT imply returns are additional sales.
+
+REIMBURSEMENT LOGIC:
+- lost_total represents reimbursements received from Amazon for lost inventory.
+- Treat this as cost recovery or credit.
+- Do NOT describe lost_total as a loss or negative event.
+
+SPECIAL SKU LOGIC:
+- If a SKU appears in MoM data but NOT in YoY data, treat it as a **New / Reviving SKU**
+- Explicitly call this out in insights or actions
+
+GOAL:
+Produce a concise monthly performance output with:
+1) A short overall summary
+2) Key SKU-level insights
+3) Clear, limited actions
+
+====================
+OUTPUT FORMAT (MARKDOWN ONLY)
+====================
+
+## SUMMARY
+(4–6 bullets ONLY)
+
+- Summarize overall movement in **net units sold (total_quantity), net sales, and profit**
+  (MoM first, YoY second if available)
+- Clearly state whether growth/decline is **volume-led, cost-led, or margin-led**
+- Call out **major overall cost drivers** if they materially impacted profit
+- If YoY data exists, include exactly 1 bullet comparing MoM trend vs YoY trend
+- Use short bullets, no sub-bullets, no paragraphs
+
+---
+
+## SKU INSIGHTS
+(5–7 bullets ONLY)
+
+Each bullet must:
+- Start with **Product name**
+- Mention **1–2 key SKU-level metrics only** (units sold, net sales, profit, ASP)
+- Clearly state direction (up/down/flat)
+- If SKU is New / Reviving (MoM present, YoY missing), explicitly label it:
+  **“(New / Reviving SKU)”**
+
+Example structure:
+- **Product Name**: Sales up 18% MoM driven by unit growth, but profit declined due to higher costs.
+- **Product Name (New / Reviving SKU)**: Strong MoM sales contribution with improving margins.
+
+Do NOT:
+- Mention inventory here
+- Mention platform fees, advertising totals, ACOS, CM2, or ROAS here
+- Use long explanations
+
+---
+
+## RECOMMENDATIONS
+(3–5 bullets ONLY)
+
+Rules:
+- Actions must be **specific and actionable**
+- Each bullet should clearly map to **pricing, cost control, ads, or inventory**
+- Actions should be driven by SKU-level behavior OR clear overall trends
+- Do NOT restate metrics
+- Do NOT include generic advice
+
+Examples of valid actions:
+- Reduce ASP slightly on low-margin SKUs showing unit decline.
+- Monitor pricing on fast-growing SKUs to protect margin.
+- Review ad spend on SKUs where profit declined despite sales growth.
+
+---
+
+## INVENTORY
+(ONLY if inventory_alerts exist)
+
+- Use bullets
+- One SKU per bullet
+- Start each bullet with **Inventory – Product name**
+- Mention the issue and the consequence (cost, risk, or blockage)
+- Do NOT suggest pricing or ad actions here
+
+---
+
+CRITICAL OUTPUT RULES:
+- You MUST use the exact heading "## SUMMARY" for the summary section.
+- You MUST use the exact heading "## RECOMMENDATIONS" for the recommendations section.
+- Do NOT rename, reword, or omit these headings.
+- If allow_recommendations is false, DO NOT include the "## RECOMMENDATIONS" section at all.
+
+---
+
+TONE & STYLE RULES:
+- Business-focused
+- Concise
+- No storytelling
+- No speculation
+- No emojis
+- No filler language
+
+Return ONLY Markdown.
+Do NOT return JSON.
+"""
+
+
+
+
+def generate_ai_summary(payload, allow_recommendations):
+    user_prompt = {
+        "period": payload["period"],
+        "instructions": {
+            "allow_recommendations": allow_recommendations
+        },
+        "overall_mom": payload["mom"],
+        "overall_yoy": payload.get("yoy"),
+        "sku_mom": payload.get("sku_mom"),
+        "sku_yoy": payload.get("sku_yoy"),
+        "inventory_lost": payload.get("inventory_lost"),
+        "inventory_alerts": payload.get("inventory_alerts"),
+    }
+
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    response = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[
+            {"role": "system", "content": AI_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(user_prompt, indent=2)
+            }
+        ],
+        temperature=0.3
+    )
+
+    ai_text = response.choices[0].message.content.strip()
+
+    # split summary vs recommendations
+    summary = ai_text
+    recommendations = None
+
+    if allow_recommendations and "## RECOMMENDATIONS" in ai_text:
+        parts = ai_text.split("## RECOMMENDATIONS", 1)
+        summary = parts[0].strip()
+        recommendations = parts[1].strip()
+
+    return {
+        "summary": summary,
+        "recommendations": recommendations
+    }
+
+
+
+
+def get_or_create_summary(
+    user_id,
+    country,
+    marketplace_id,
+    period,
+    timeline,
+    year
+):
+    cached = fetch_existing_summary(
+        user_id, country, marketplace_id, period, timeline, year
+    )
+
+    if cached:
+        return {
+            "summary": cached.summary,
+            "recommendations": cached.recommendations,
+            "source": "db"
+        }
+
+    allow_reco = is_latest_period(period, timeline, year)
+
+    # ---------------- CURRENT PERIOD ----------------
+    df_current = fetch_precalc_table(user_id, country, period, timeline, year)
+
+    current = {}
+    if not df_current.empty:
+        for col in get_metric_columns(df_current):
+            current[col.lower()] = round(
+                float(pd.to_numeric(df_current[col], errors="coerce").fillna(0).sum()), 2
+            )
+    print("METRICS USED:", list(current.keys()))
+    sku_current = compute_sku_precalc(df_current)
+
+    inventory_lost = 0
+    if not df_current.empty:
+        for col in ["lost_total"]:
+            if col in df_current.columns:
+                inventory_lost = int(pd.to_numeric(df_current[col], errors="coerce").fillna(0).sum())
+                break
+
+    inventory_alerts = {}
+
+    # =====================================================
+    # 🔴 INVENTORY AGEING LOGIC (latest period only) 🔴
+    # =====================================================
+    if allow_reco:
+        inventory_aged_df = fetch_inventory_aged_by_user(user_id)
+        if not inventory_aged_df.empty:
+            inventory_alerts = build_inventory_alerts(inventory_aged_df)
+        else:
+            inventory_alerts = {}
+
+    # ---------------- PREVIOUS PERIOD (MoM / QoQ) ----------------
+    (p_period, p_timeline, p_year), yoy_key = resolve_comparison(period, timeline, year)
+
+    df_prev = fetch_precalc_table(user_id, country, p_period, p_timeline, p_year)
+
+    prev = {}
+    if not df_prev.empty:
+        for col in get_metric_columns(df_prev):
+            prev[col.lower()] = round(
+                float(pd.to_numeric(df_prev[col], errors="coerce").fillna(0).sum()), 2
+            )
+
+    mom = compare_metrics(current, prev)
+
+    sku_prev = compute_sku_precalc(df_prev)
+    sku_mom = compare_sku_metrics(sku_current, sku_prev)
+
+    # ---------------- YOY (SAFE) ----------------
+    yoy = None
+    sku_yoy = None
+
+    if yoy_key:
+        y_period, y_timeline, y_year = yoy_key
+        df_yoy = fetch_precalc_table(user_id, country, y_period, y_timeline, y_year)
+
+        if not df_yoy.empty:
+            yoy_base = {}
+            for col in get_metric_columns(df_yoy):
+                yoy_base[col.lower()] = round(
+                    float(pd.to_numeric(df_yoy[col], errors="coerce").fillna(0).sum()), 2
+                )
+
+            yoy = compare_metrics(current, yoy_base)
+
+            sku_yoy = compare_sku_metrics(
+                sku_current,
+                compute_sku_precalc(df_yoy)
+            )
+
+    # ---- everything below stays same (debug/ai/save/return) ----
+
+    ai_payload = {
+        "period": f"{period} {timeline} {year}",
+        "mom": mom,
+        "yoy": yoy,
+        "inventory_lost": inventory_lost,
+        "inventory_alerts": inventory_alerts,
+        "sku_mom": sku_mom,
+        "sku_yoy": sku_yoy,
+    }
+
+    ai_output = generate_ai_summary(ai_payload, allow_reco)
+
+    save_summary_to_db({
+        "user_id": user_id,
+        "country": country,
+        "marketplace_id": marketplace_id,
+        "period": period,
+        "timeline": timeline,
+        "year": year,
+        "summary": ai_output["summary"],
+        "recommendations": ai_output["recommendations"]
+    })
+
+    return {
+        "summary": ai_output["summary"],
+        "recommendations": ai_output["recommendations"],
+        "inventory_lost": inventory_lost,
+        "inventory_alerts": inventory_alerts,
+        "sku_current": sku_current,
+        "sku_mom": sku_mom,
+        "sku_yoy": sku_yoy,
+        "source": "ai"
+    }
+
+
+
