@@ -10,11 +10,9 @@ from openai import OpenAI
 import json
 import pandas as pd
 from app.models.user_models import HistoricAISummary
-from app.utils.formulas_utils import uk_all, safe_num
+from app.utils.formulas_utils import safe_num
 from app import db
 
-
-summary_bp = Blueprint("summary_bp", __name__)
 
 
 
@@ -102,76 +100,119 @@ def save_summary_to_db(data):
     db.session.add(record)
     db.session.commit()
 
+def month_name_from_timeline(timeline: str) -> str:
+    # timeline is like "12"
+    return MONTH_NUM_TO_NAME[int(timeline)]  # returns "december"
 
-def build_period_filter(period, timeline, year):
+def build_table_name(user_id: int, country: str, period: str, timeline: str, year: int) -> str:
+    c = str(country).lower()
+
     if period == "monthly":
-        month_num = int(timeline)
-        month_name = MONTH_NUM_TO_NAME[month_num]
-
-        return (
-            "LOWER(month) = %(m)s AND CAST(year AS INTEGER) = %(y)s",
-            {
-                "m": month_name,
-                "y": int(year)
-            }
-        )
+        mn = month_name_from_timeline(timeline)   # "december"
+        return f"skuwisemonthly_{user_id}_{c}_{mn}{year}"
 
     if period == "quarterly":
-        q = int(timeline.replace("Q", ""))
-        month_nums = range((q - 1) * 3 + 1, (q - 1) * 3 + 4)
-        month_names = tuple(MONTH_NUM_TO_NAME[m] for m in month_nums)
-
-        return (
-            "LOWER(month) IN %(months)s AND CAST(year AS INTEGER) = %(y)s",
-            {
-                "months": month_names,
-                "y": int(year)
-            }
-        )
+        q = int(str(timeline).replace("Q", ""))   # Q1 -> 1
+        return f"quarter{q}_{user_id}_{c}_{year}_table"
 
     if period == "yearly":
-        return "CAST(year AS INTEGER) = %(y)s", {"y": int(year)}
+        return f"skuwiseyearly_{user_id}_{c}_{year}_table"
 
     raise ValueError("Invalid period")
 
+def fetch_precalc_table(user_id: int, country: str, period: str, timeline: str, year: int) -> pd.DataFrame:
+    table = build_table_name(user_id, country, period, timeline, year)
+    query = f'SELECT * FROM public."{table}"'
 
+    try:
+        return pd.read_sql(query, phormula_engine)
+    except Exception as e:
+        print(f"[WARN] Could not read table {table}: {e}")
+        return pd.DataFrame()
 
-
-def fetch_raw_data(user_id, country, period, timeline, year):
-    table = f"user_{user_id}_{country}_merge_data_of_all_months"
-    where, params = build_period_filter(period, timeline, year)
-
-    query = f"""
-        SELECT *
-        FROM {table}
-        WHERE {where}
-    """
-
-    return pd.read_sql(query, phormula_engine, params=params)
-
-def uk_quantity_sold(df: pd.DataFrame) -> float:
+def _normalize_sku_col(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return 0.0
+        return df
+    df = df.copy()
+    if "sku" not in df.columns and "SKU" in df.columns:
+        df.rename(columns={"SKU": "sku"}, inplace=True)
+    return df
 
-    mask = df["type"].astype(str).str.lower().isin(["shipment", "order"])
-    return float(safe_num(df.loc[mask, "quantity"]).sum())
+METRIC_COLUMNS = {
+    "quantity",
+    "return_quantity",
+    "total_quantity",
 
+    "gross_sales",
+    "refund_sales",
+    "net_sales",
 
+    "cost_of_unit_sold",
+    "selling_fees",
+    "fba_fees",
+    "amazon_fee",
+    "platform_fee",
+    "platformfeenew",
+    "platform_fee_inventory_storage",
+    "other_transaction_fees",
+    "misc_transaction",
 
-INVENTORY_LOSS_DESCRIPTIONS = {
-    "warehouse_damage",
-    "missing_from_inbound",
-    "missing_from_inbound_clawback",
+    "tex_and_credits",
+    "net_taxes",
+    "net_credits",
+
+    "promotional_rebates",
+    "visible_ads",
+    "dealsvouchar_ads",
+    "advertising_total",
+
+    "lost_total",
+    "rembursement_fee",
+
+    "profit",
+    "cm2_profit",
 }
 
-def compute_inventory_loss_quantity(df: pd.DataFrame) -> int:
+def get_metric_columns(df: pd.DataFrame) -> list[str]:
+    return [c for c in df.columns if c.lower() in METRIC_COLUMNS]
+
+
+def compute_sku_precalc(df: pd.DataFrame) -> dict:
     if df.empty:
-        return 0
+        return {}
+    df = _normalize_sku_col(df)
+    if "sku" not in df.columns:
+        return {}
 
-    desc = df["description"].astype(str).str.lower()
-    mask = desc.isin(INVENTORY_LOSS_DESCRIPTIONS)
+    num_cols = get_metric_columns(df)
 
-    return int(safe_num(df.loc[mask, "quantity"]).sum())
+
+    other_cols = [c for c in df.columns if c not in num_cols and c != "sku"]
+
+    agg = {c: "sum" for c in num_cols}
+    for c in other_cols:
+        agg[c] = "first"
+
+    g = df.groupby("sku", dropna=False).agg(agg).reset_index()
+
+    out = {}
+    for _, r in g.iterrows():
+        sku = str(r["sku"])
+        out[sku] = {}
+        for col in g.columns:
+            if col == "sku":
+                continue
+            val = r[col]
+            if isinstance(val, (int, float)) and pd.notna(val):
+                out[sku][col.lower()] = round(float(val), 2)
+            else:
+                out[sku][col.lower()] = None if pd.isna(val) else val
+    return out
+
+
+
+
+
 
 
 def fetch_inventory_aged_by_user(user_id: int) -> pd.DataFrame:
@@ -270,35 +311,7 @@ def build_inventory_alerts(df: pd.DataFrame) -> dict:
 
 
 
-def compute_metrics(df):
-    metrics = uk_all(df)
-    out = {name: total for name, (total, _, _) in metrics.items()}
 
-    # add quantity sold as a metric
-    out["quantity_sold"] = uk_quantity_sold(df)
-
-    return out
-
-def compute_metrics_by_sku(df: pd.DataFrame) -> dict:
-    if df.empty or "sku" not in df.columns:
-        return {}
-
-    result = {}
-
-    for sku, sku_df in df.groupby("sku"):
-        metrics = uk_all(sku_df)
-
-        sku_metrics = {
-            name.lower(): float(total)
-            for name, (total, _, _) in metrics.items()
-            if name.upper() in {"NET_SALES", "PROFIT", "AMAZON_FEE", "CREDITS", "TAX"}
-        }
-
-        sku_metrics["quantity_sold"] = uk_quantity_sold(sku_df)
-
-        result[str(sku)] = {k: round(v, 2) for k, v in sku_metrics.items()}
-
-    return result
 
 def compare_sku_metrics(current: dict, previous: dict) -> dict:
     output = {}
@@ -393,8 +406,6 @@ def get_or_create_summary(
         user_id, country, marketplace_id, period, timeline, year
     )
 
-    # ✅ Keep previous behavior for cached summaries intact
-    # (Only returns summary/recommendations/source from DB)
     if cached:
         return {
             "summary": cached.summary,
@@ -405,15 +416,24 @@ def get_or_create_summary(
     allow_reco = is_latest_period(period, timeline, year)
 
     # ---------------- CURRENT PERIOD ----------------
-    df_current = fetch_raw_data(user_id, country, period, timeline, year)
-    current = compute_metrics(df_current)
+    df_current = fetch_precalc_table(user_id, country, period, timeline, year)
 
-    # ✅ SKU-wise current metrics
-    sku_current = compute_metrics_by_sku(df_current)
+    current = {}
+    if not df_current.empty:
+        for col in get_metric_columns(df_current):
+            current[col.lower()] = round(
+                float(pd.to_numeric(df_current[col], errors="coerce").fillna(0).sum()), 2
+            )
+    print("METRICS USED:", list(current.keys()))
+    sku_current = compute_sku_precalc(df_current)
 
-    inventory_lost = compute_inventory_loss_quantity(df_current)
+    inventory_lost = 0
+    if not df_current.empty:
+        for col in ["lost_total"]:
+            if col in df_current.columns:
+                inventory_lost = int(pd.to_numeric(df_current[col], errors="coerce").fillna(0).sum())
+                break
 
-    # ✅ Ensure inventory_alerts always defined (prevents UnboundLocalError)
     inventory_alerts = {}
 
     # =====================================================
@@ -429,13 +449,18 @@ def get_or_create_summary(
     # ---------------- PREVIOUS PERIOD (MoM / QoQ) ----------------
     (p_period, p_timeline, p_year), yoy_key = resolve_comparison(period, timeline, year)
 
-    df_prev = fetch_raw_data(user_id, country, p_period, p_timeline, p_year)
-    prev = compute_metrics(df_prev)
+    df_prev = fetch_precalc_table(user_id, country, p_period, p_timeline, p_year)
+
+    prev = {}
+    if not df_prev.empty:
+        for col in get_metric_columns(df_prev):
+            prev[col.lower()] = round(
+                float(pd.to_numeric(df_prev[col], errors="coerce").fillna(0).sum()), 2
+            )
 
     mom = compare_metrics(current, prev)
 
-    # ✅ SKU-wise previous metrics + SKU MoM
-    sku_prev = compute_metrics_by_sku(df_prev)
+    sku_prev = compute_sku_precalc(df_prev)
     sku_mom = compare_sku_metrics(sku_current, sku_prev)
 
     # ---------------- YOY (SAFE) ----------------
@@ -444,82 +469,36 @@ def get_or_create_summary(
 
     if yoy_key:
         y_period, y_timeline, y_year = yoy_key
-        df_yoy = fetch_raw_data(user_id, country, y_period, y_timeline, y_year)
+        df_yoy = fetch_precalc_table(user_id, country, y_period, y_timeline, y_year)
 
         if not df_yoy.empty:
-            yoy = compare_metrics(current, compute_metrics(df_yoy))
+            yoy_base = {}
+            for col in get_metric_columns(df_yoy):
+                yoy_base[col.lower()] = round(
+                    float(pd.to_numeric(df_yoy[col], errors="coerce").fillna(0).sum()), 2
+                )
 
-            # ✅ SKU YoY
+            yoy = compare_metrics(current, yoy_base)
+
             sku_yoy = compare_sku_metrics(
                 sku_current,
-                compute_metrics_by_sku(df_yoy)
+                compute_sku_precalc(df_yoy)
             )
 
-    # ================= DEBUG: NUMERICS =================
-    print("\n================ SUMMARY NUMERICS ================")
-    print(f"USER: {user_id} | COUNTRY: {country}")
-    print(f"PERIOD: {period.upper()} {timeline} {year}")
+    # ---- everything below stays same (debug/ai/save/return) ----
 
-    print("\n--- CURRENT PERIOD METRICS ---")
-    for k, v in current.items():
-        print(f"{k.upper():15}: {round(v, 2)}")
-
-    print("\n--- MOM COMPARISON (vs previous period) ---")
-    for k, v in mom.items():
-        print(
-            f"{k.upper():15}: "
-            f"current={v['current']} | "
-            f"previous={v['previous']} | "
-            f"delta={v['delta']} | "
-            f"delta_pct={v['delta_pct']}"
-        )
-
-    if yoy:
-        print("\n--- YOY COMPARISON (vs last year) ---")
-        for k, v in yoy.items():
-            print(
-                f"{k.upper():15}: "
-                f"current={v['current']} | "
-                f"previous={v['previous']} | "
-                f"delta={v['delta']} | "
-                f"delta_pct={v['delta_pct']}"
-            )
-    else:
-        print("\n--- YOY COMPARISON ---")
-        print("NO YOY DATA AVAILABLE")
-
-    # ✅ Optional SKU debug (small preview)
-    print("\n--- SKU SUMMARY CHECK ---")
-    print("SKU CURRENT COUNT:", len(sku_current))
-    print("SKU MOM COUNT:", len(sku_mom))
-    print("SKU YOY COUNT:", 0 if sku_yoy is None else len(sku_yoy))
-    print("=================================================\n")
-
-    # ---------------- AI PAYLOAD ----------------
     ai_payload = {
         "period": f"{period} {timeline} {year}",
         "mom": mom,
         "yoy": yoy,
-        "inventory_lost": inventory_lost,     # ✅ always present
-        "inventory_alerts": inventory_alerts,  # ✅ always present (may be {})
-        # ✅ add SKU comparisons for AI if you want it to reason at SKU level
+        "inventory_lost": inventory_lost,
+        "inventory_alerts": inventory_alerts,
         "sku_mom": sku_mom,
         "sku_yoy": sku_yoy,
     }
 
-    print("\n--- AI PAYLOAD CHECK ---")
-    print("inventory_lost:", ai_payload["inventory_lost"])
-    print(
-        "inventory_alerts:",
-        json.dumps(ai_payload["inventory_alerts"], indent=2)
-        if ai_payload["inventory_alerts"]
-        else None
-    )
-    print("------------------------\n")
-
     ai_output = generate_ai_summary(ai_payload, allow_reco)
 
-    # ---------------- SAVE TO DB ----------------
     save_summary_to_db({
         "user_id": user_id,
         "country": country,
@@ -531,7 +510,6 @@ def get_or_create_summary(
         "recommendations": ai_output["recommendations"]
     })
 
-    # ✅ Return includes SKU breakdown + SKU MoM/YoY (previous logic preserved + extended)
     return {
         "summary": ai_output["summary"],
         "recommendations": ai_output["recommendations"],
@@ -542,5 +520,6 @@ def get_or_create_summary(
         "sku_yoy": sku_yoy,
         "source": "ai"
     }
+
 
 
