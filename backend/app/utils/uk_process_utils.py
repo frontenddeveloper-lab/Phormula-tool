@@ -674,40 +674,40 @@ def process_skuwise_data(user_id, country, month, year):
         df_refund_kw   = df.loc[refund_mask].copy()
         df_non_refund  = df.loc[~refund_mask].copy()
 
-        # ---------------------------
-        # ✅ COGS ONLY NON-REFUND (SKU-wise)
-        # ---------------------------
-        if "cost_of_unit_sold" not in df_non_refund.columns:
-            df_non_refund["cost_of_unit_sold"] = 0.0
+        # # ---------------------------
+        # # ✅ COGS ONLY NON-REFUND (SKU-wise)
+        # # ---------------------------
+        # if "cost_of_unit_sold" not in df_non_refund.columns:
+        #     df_non_refund["cost_of_unit_sold"] = 0.0
 
-        cogs_by_sku = (
-            df_non_refund.groupby("sku", as_index=False)["cost_of_unit_sold"]
-            .sum()
-            .rename(columns={"cost_of_unit_sold": "cost_of_unit_sold_non_refund"})
-        )
+        # cogs_by_sku = (
+        #     df_non_refund.groupby("sku", as_index=False)["cost_of_unit_sold"]
+        #     .sum()
+        #     .rename(columns={"cost_of_unit_sold": "cost_of_unit_sold_non_refund"})
+        # )
 
-        cogs_by_sku["cost_of_unit_sold_non_refund"] = pd.to_numeric(
-            cogs_by_sku["cost_of_unit_sold_non_refund"], errors="coerce"
-        ).fillna(0.0)
-
-
-        # after sku_grouped is created (and sku cleaned)
-        sku_grouped["sku"] = sku_grouped["sku"].astype(str).str.strip()
-
-        # merge non-refund cogs and override
-        sku_grouped = sku_grouped.merge(cogs_by_sku, on="sku", how="left")
-        sku_grouped["cost_of_unit_sold_non_refund"] = pd.to_numeric(
-            sku_grouped.get("cost_of_unit_sold_non_refund", 0), errors="coerce"
-        ).fillna(0.0)
-
-        # ✅ force final COGS = NON-REFUND only
-        sku_grouped["cost_of_unit_sold"] = sku_grouped["cost_of_unit_sold_non_refund"]
-        sku_grouped.drop(columns=["cost_of_unit_sold_non_refund"], inplace=True, errors="ignore")
+        # cogs_by_sku["cost_of_unit_sold_non_refund"] = pd.to_numeric(
+        #     cogs_by_sku["cost_of_unit_sold_non_refund"], errors="coerce"
+        # ).fillna(0.0)
 
 
+        # # after sku_grouped is created (and sku cleaned)
+        # sku_grouped["sku"] = sku_grouped["sku"].astype(str).str.strip()
+
+        # # merge non-refund cogs and override
+        # sku_grouped = sku_grouped.merge(cogs_by_sku, on="sku", how="left")
+        # sku_grouped["cost_of_unit_sold_non_refund"] = pd.to_numeric(
+        #     sku_grouped.get("cost_of_unit_sold_non_refund", 0), errors="coerce"
+        # ).fillna(0.0)
+
+        # # ✅ force final COGS = NON-REFUND only
+        # sku_grouped["cost_of_unit_sold"] = sku_grouped["cost_of_unit_sold_non_refund"]
+        # sku_grouped.drop(columns=["cost_of_unit_sold_non_refund"], inplace=True, errors="ignore")
 
 
-                # ---------------- merge TOP computed columns into sku_grouped ----------------
+
+
+        # ---------------- merge TOP computed columns into sku_grouped ----------------
         sku_grouped["sku"] = sku_grouped["sku"].astype(str).str.strip()
 
         # 1) newrefundsales
@@ -749,7 +749,12 @@ def process_skuwise_data(user_id, country, month, year):
             - sku_grouped["return_quantity"]
         ).astype(int)
 
-        
+        # ✅ FINAL COGS = price_in_gbp * total_quantity
+        sku_grouped["price_in_gbp"] = pd.to_numeric(sku_grouped.get("price_in_gbp", 0), errors="coerce").fillna(0.0)
+        sku_grouped["total_quantity"] = pd.to_numeric(sku_grouped.get("total_quantity", 0), errors="coerce").fillna(0).astype(int)
+
+        sku_grouped["cost_of_unit_sold"] = sku_grouped["price_in_gbp"] * sku_grouped["total_quantity"]
+
 
 
         # Refund fee adjustment
@@ -1515,6 +1520,20 @@ def process_skuwise_data(user_id, country, month, year):
             "Net Credits": "net_credits"
         }, inplace=True)
 
+        # ✅ NEW: other_transaction formula
+        for c in [ "net_taxes", "net_credits", "misc_transaction"]:
+            if c not in sku_grouped.columns:
+                sku_grouped[c] = 0.0
+
+        sku_grouped["other_transaction_fees"] = (
+            
+            
+            + pd.to_numeric(sku_grouped["net_credits"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(sku_grouped["misc_transaction"], errors="coerce").fillna(0.0)
+            - pd.to_numeric(sku_grouped["net_taxes"], errors="coerce").fillna(0.0)
+        )
+
+
         sku_grouped["cm2_profit_percentage"] = np.where(
             pd.to_numeric(sku_grouped["net_sales"], errors="coerce").fillna(0) != 0,
             (pd.to_numeric(sku_grouped["cm2_profit"], errors="coerce").fillna(0) /
@@ -1712,6 +1731,7 @@ def process_skuwise_data(user_id, country, month, year):
                     visible_ads REAL,
                     dealsvouchar_ads REAL,
                     advertising_total REAL,
+                    lost_total REAL,
                     platformfeenew REAL,
                     platform_fee REAL,
                     platform_fee_inventory_storage REAL,
@@ -2188,6 +2208,7 @@ def process_skuwise_data(user_id, country, month, year):
             "rembursement_fee",
             "rembursment_vs_cm2_margins",
             "reimbursement_vs_sales",
+            "lost_total",
 
             "user_id"
         ]
