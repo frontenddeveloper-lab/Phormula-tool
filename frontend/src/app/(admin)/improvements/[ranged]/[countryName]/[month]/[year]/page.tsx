@@ -3051,17 +3051,17 @@ const MonthsforBI: React.FC = () => {
           {/* Shared legend bottom center */}
           <div className="mt-3 flex flex-wrap justify-center gap-4 sm:text-sm text-xs font-semibold text-[#414042]">
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#F47A00]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#ed9F50]" />
               Top 80%
             </span>
 
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#AB64B5]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#3a8ea4]" />
               Other SKUs
             </span>
 
             <span className="inline-flex items-center gap-2">
-              <span className="inline-block h-[10px] w-[10px]  bg-[#87AD12]" />
+              <span className="inline-block h-[10px] w-[10px]  bg-[#7B9A6D]" />
               New/Reviving
             </span>
           </div>

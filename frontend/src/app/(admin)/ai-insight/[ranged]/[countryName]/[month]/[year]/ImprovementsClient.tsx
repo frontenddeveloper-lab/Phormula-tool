@@ -442,7 +442,7 @@ const MonthsforBI: React.FC = () => {
         legend: { show: false },
 
         grid: { left: 50, right: 20, top: 40, bottom: 35 },
-        color: ['#87AD12', '#AB64B5', '#F47A00',], // Net Sales palette
+        color: ['#7B9A6D', '#3a8ea4', '#ed9F50',], // Net Sales palette
         xAxis: {
           type: 'category',
           boundaryGap: false,
