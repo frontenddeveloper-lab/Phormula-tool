@@ -196,8 +196,6 @@ def compute_sku_precalc(df: pd.DataFrame) -> dict:
         return {}
 
     num_cols = get_metric_columns(df)
-
-
     other_cols = [c for c in df.columns if c not in num_cols and c != "sku"]
 
     agg = {c: "sum" for c in num_cols}
@@ -209,16 +207,31 @@ def compute_sku_precalc(df: pd.DataFrame) -> dict:
     out = {}
     for _, r in g.iterrows():
         sku = str(r["sku"])
-        out[sku] = {}
+
+        # ✅ product_name fallback logic
+        raw_name = r.get("product_name")
+        product_name = (
+            str(raw_name).strip()
+            if raw_name not in [None, "", "0", 0]
+            else sku
+        )
+
+        out[sku] = {
+            "product_name": product_name  # 👈 ADD THIS
+        }
+
         for col in g.columns:
-            if col == "sku":
+            if col in ["sku", "product_name"]:
                 continue
+
             val = r[col]
             if isinstance(val, (int, float)) and pd.notna(val):
                 out[sku][col.lower()] = round(float(val), 2)
             else:
                 out[sku][col.lower()] = None if pd.isna(val) else val
+
     return out
+
 
 
 
@@ -263,13 +276,13 @@ def build_inventory_alerts(df: pd.DataFrame) -> dict:
 
     alerts = {}
 
-    # ---------------- EXPIRED INVENTORY ----------------
-    expired_df = df[df["age_365_plus"] > 0]
-    if not expired_df.empty:
-        alerts["expired_inventory"] = {
-            "total_units": int(expired_df["age_365_plus"].sum()),
+    # ---------------- LONG-TERM AGED INVENTORY (365+ DAYS) ----------------
+    long_term_aged_df = df[df["age_365_plus"] > 0]
+    if not long_term_aged_df.empty:
+        alerts["long_term_aged_inventory"] = {
+            "total_units": int(long_term_aged_df["age_365_plus"].sum()),
             "top_skus": (
-                expired_df
+                long_term_aged_df
                 .groupby("sku")["age_365_plus"]
                 .sum()
                 .sort_values(ascending=False)
@@ -278,7 +291,7 @@ def build_inventory_alerts(df: pd.DataFrame) -> dict:
             )
         }
 
-    # ---------------- CRITICALLY AGED (181+ DAYS) ----------------
+    # ---------------- CRITICALLY AGED INVENTORY (181–365 DAYS) ----------------
     df["aged_181_plus"] = df["age_181_270"] + df["age_271_365"]
     aged_critical = df[df["aged_181_plus"] > 0]
 
@@ -318,6 +331,7 @@ def build_inventory_alerts(df: pd.DataFrame) -> dict:
         }
 
     return alerts
+
 
 
 
@@ -435,6 +449,17 @@ IMPORTANT DATA RULES:
 - Do NOT convert percentages into growth rates
 - Do NOT produce paragraphs
 
+PERCENTAGE FORMATTING RULE:
+- Always append "%" when mentioning percentage values.
+- Do NOT output raw numeric deltas without "%" for growth or change metrics.
+
+CURRENCY RULE:
+- Use the symbol provided in user_context.currency_symbol for all monetary values.
+- Do NOT spell out currency names (GBP, USD).
+- Do NOT infer or guess currency from country names.
+- If currency_symbol is empty, omit the symbol.
+- Never omit the currency symbol when it is provided.
+
 METRIC INTERPRETATION RULES (CRITICAL):
 - The following metrics DO NOT have product-level meaning and must be treated as OVERALL ONLY:
   platform_fee, platformfeenew, platform_fee_inventory_storage,
@@ -459,6 +484,28 @@ SPECIAL SKU LOGIC:
 - If a SKU appears in MoM data but NOT in YoY data, treat it as a **New / Reviving SKU**
 - Explicitly call this out in insights or actions
 
+NEW / REVIVING SKU YoY RULE (CRITICAL):
+- For any SKU labeled as **New / Reviving SKU**:
+  - YoY comparison is NOT APPLICABLE.
+  - Do NOT mention YoY percentages, YoY growth, or YoY trends.
+  - Only describe MoM performance or absolute contribution.
+  - Never write phrases like "MoM and YoY" for these SKUs.
+
+DISPLAY NAME RULE (CRITICAL):
+- Always use product_name when available.
+- If product_name is missing, blank, null, or "0", fall back to SKU.
+- Never display raw SKU if a valid product_name exists.
+- The first bolded text in SKU INSIGHTS MUST always be product_name.
+
+TIME COMPARISON LOGIC (CRITICAL):
+- If the period is MONTHLY or QUARTERLY:
+  - Use MoM as the primary comparison.
+  - Include YoY only if YoY data is present.
+- If the period is YEARLY:
+  - Treat ALL comparisons as YoY.
+  - Do NOT mention MoM anywhere in SUMMARY or SKU INSIGHTS.
+  - Replace MoM language with YoY language (e.g., "up YoY", "down YoY").
+
 GOAL:
 Produce a concise monthly performance output with:
 1) A short overall summary
@@ -473,10 +520,10 @@ OUTPUT FORMAT (MARKDOWN ONLY)
 (4–6 bullets ONLY)
 
 - Summarize overall movement in **net units sold (total_quantity), net sales, and profit**
-  (MoM first, YoY second if available)
+  (Use MoM for monthly/quarterly periods, YoY for yearly periods)
 - Clearly state whether growth/decline is **volume-led, cost-led, or margin-led**
 - Call out **major overall cost drivers** if they materially impacted profit
-- If YoY data exists, include exactly 1 bullet comparing MoM trend vs YoY trend
+- If both MoM and YoY exist (non-yearly only), include exactly 1 bullet comparing MoM vs YoY trend
 - Use short bullets, no sub-bullets, no paragraphs
 
 ---
@@ -488,8 +535,15 @@ Each bullet must:
 - Start with **Product name**
 - Mention **1–2 key SKU-level metrics only** (units sold, net sales, profit, ASP)
 - Clearly state direction (up/down/flat)
-- If SKU is New / Reviving (MoM present, YoY missing), explicitly label it:
+- If SKU is New / Reviving, explicitly label it:
   **“(New / Reviving SKU)”**
+
+When describing SKU performance:
+- Always include percentage values when available
+- Use MoM percentages for monthly/quarterly periods
+- Use YoY percentages for yearly periods
+- Do NOT mix MoM and YoY for the same metric
+- Do NOT invent percentages if data is missing
 
 Example structure:
 - **Product Name**: Sales up 18% MoM driven by unit growth, but profit declined due to higher costs.
@@ -553,12 +607,17 @@ Do NOT return JSON.
 
 
 
+
 def generate_ai_summary(payload, allow_recommendations):
     user_prompt = {
         "period": payload["period"],
         "instructions": {
             "allow_recommendations": allow_recommendations
         },
+        "user_context": {
+        "currency_symbol": "£" if payload.get("country") == "uk" else "$" if payload.get("country") == "us" else ""
+        },
+
         "overall_mom": payload["mom"],
         "overall_yoy": payload.get("yoy"),
         "sku_mom": payload.get("sku_mom"),
