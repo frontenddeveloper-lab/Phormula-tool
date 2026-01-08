@@ -947,7 +947,7 @@ const Dropdowns: React.FC<DropdownsProps> = ({
     };
   }, [showNoDataOverlay]);
 
-  const goBack = () => router.push("/country/QTD/global/NA/NA");
+  const goBack = () => router.push("/pnl-dashboard/QTD/global/NA/NA");
 
   if (month === "NA" || year === "NA") {
     return <IntegrationDashboard />;

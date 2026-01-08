@@ -622,7 +622,7 @@ await new Promise((r) => setTimeout(r, 600));
       window.dispatchEvent(new Event("storage"));
 
       if (onClose) onClose();
-      router.push(`/country/MTD/${countryUsed}/${monthSlug}/${y}`);
+      router.push(`/pnl-dashboard/MTD/${countryUsed}/${monthSlug}/${y}`);
     });
 
   const handleFetchRange = () =>
@@ -754,7 +754,7 @@ await new Promise((r) => setTimeout(r, 600));
       window.dispatchEvent(new Event("storage"));
 
       if (onClose) onClose();
-      router.push(`/country/MTD/${countryUsed}/${latestMonthSlug}/${last.y}`);
+      router.push(`/pnl-dashboard/MTD/${countryUsed}/${latestMonthSlug}/${last.y}`);
     });
 
   const selectedIsValid =

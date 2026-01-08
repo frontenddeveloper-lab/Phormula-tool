@@ -954,7 +954,7 @@ const chartOptions = {
 
                     // 🔹 Now push with extra params for last fetched period
                     router.push(
-                      `/productwiseperformance/${encodeURIComponent(
+                      `/skuwiseprofit/${encodeURIComponent(
                         productname
                       )}/${encodeURIComponent(countryName)}/${encodeURIComponent(
                         month

@@ -189,7 +189,7 @@ export default function ConfirmationFeepreview({
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();                            // fallback if used via routing
     } else {
-      router.push(`/country/QTD/${country}/NA/NA`);
+      router.push(`/pnl-dashboard/QTD/${country}/NA/NA`);
     }
   };
 
@@ -269,7 +269,7 @@ export default function ConfirmationFeepreview({
         message={modalMessage}
         onClose={() => {
           setShowModal(false);
-          router.push(`/country/QTD/${country}/NA/NA`);
+          router.push(`/pnl-dashboard/QTD/${country}/NA/NA`);
         }}
       />
     </div>

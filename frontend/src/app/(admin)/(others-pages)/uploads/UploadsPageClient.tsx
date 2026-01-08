@@ -65,7 +65,7 @@ export default function UploadsPage() {
 
   const handleViewPerformance = (upload: UploadItem) => {
     const { month, year, country } = upload;
-    router.push(`/country/MTD/${country}/${month}/${year}`);
+    router.push(`/pnl-dashboard/MTD/${country}/${month}/${year}`);
   };
 
   const EmptyState = () => (

@@ -101,7 +101,7 @@ const now = new Date();
 const currentMonth = now.toLocaleString("en-US", { month: "long" });
 const currentYear = String(now.getFullYear());
 
-const profitPath = `/real-time/${countryFromBackend}/${currentMonth}/${currentYear}`;
+const profitPath = `/live-dashboard/${countryFromBackend}/${currentMonth}/${currentYear}`;
 
 router.replace(profitPath);
 
