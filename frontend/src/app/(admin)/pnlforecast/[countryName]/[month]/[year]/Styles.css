@@ -65,3 +65,7 @@ input {
   animation: blink-caret 1s step-end infinite; /* Optional blinking animation */
 }
 
+.th-left > div {
+  justify-content: flex-start !important;
+}
+
