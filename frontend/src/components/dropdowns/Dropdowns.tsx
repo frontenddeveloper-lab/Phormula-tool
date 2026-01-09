@@ -25,6 +25,8 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import type { ProfitChartExportApi, SkuExportPayload } from "@/lib/utils/exportTypes";
 import DownloadIconButton from "../ui/button/DownloadIconButton";
+import MonthEndBusinessSummaryCard from "./MonthEndBusinessSummaryCard";
+import RecommendationsCard from "./RecommendationsCard";
 
 
 
@@ -1172,12 +1174,13 @@ setAiPanel({
   };
 
 
-  const renderAiPanel = () => {
-    if (!allDropdownsSelected) return null;
+//   const renderAiPanel = () => {
+//     if (!allDropdownsSelected) return null;
 
-    // show loading even if panel is empty, but only when range selection is ready
-    const showLoading = aiPanelLoading;
+//     // show loading even if panel is empty, but only when range selection is ready
+//     const showLoading = aiPanelLoading;
 
+<<<<<<< HEAD
     return (
       <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1197,36 +1200,50 @@ setAiPanel({
               align="left"
               textSize="2xl"
             />
+=======
+//     return (
+//       <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
+//         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+//           {/* Summary */}
+//           <div className="rounded-xl border border-slate-200 bg-white p-4">
+// <PageBreadcrumb
+//               pageTitle="Month-end Business Summary"
+//               variant="page"
+//               align="left"
+//               textSize="2xl"
+//             />
+>>>>>>> origin
 
 >>>>>>> origin
 
-            {showLoading ? (
-              <div className="text-xs text-charcoal-500">Loading…</div>
-            ) : aiPanelError ? (
-              <div className="text-xs text-red-600">{aiPanelError}</div>
-            ) : aiPanel?.summaryBullets?.length ? (
-              <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500">
-                {aiPanel.summaryBullets.map((b, i) => (
-                  <li key={i}>{b}</li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-xs text-charcoal-500">No summary available.</div>
-            )}
-            {aiPanel?.skuInsightsBullets?.length ? (
-  <>
-    <div className="mt-4 text-[11px] font-semibold text-charcoal-500">
-      SKU Insights
-    </div>
-    <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500 mt-2">
-      {aiPanel.skuInsightsBullets.map((b, i) => (
-        <li key={i}>{b}</li>
-      ))}
-    </ul>
-  </>
-) : null}
-          </div>
+//             {showLoading ? (
+//               <div className="text-xs text-charcoal-500">Loading…</div>
+//             ) : aiPanelError ? (
+//               <div className="text-xs text-red-600">{aiPanelError}</div>
+//             ) : aiPanel?.summaryBullets?.length ? (
+//               <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500">
+//                 {aiPanel.summaryBullets.map((b, i) => (
+//                   <li key={i}>{b}</li>
+//                 ))}
+//               </ul>
+//             ) : (
+//               <div className="text-xs text-charcoal-500">No summary available.</div>
+//             )}
+//             {aiPanel?.skuInsightsBullets?.length ? (
+//   <>
+//     <div className="mt-4 text-[11px] font-semibold text-charcoal-500">
+//       SKU Insights
+//     </div>
+//     <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500 mt-2">
+//       {aiPanel.skuInsightsBullets.map((b, i) => (
+//         <li key={i}>{b}</li>
+//       ))}
+//     </ul>
+//   </>
+// ) : null}
+//           </div>
 
+<<<<<<< HEAD
           {/* Recommendations */}
           <div className="rounded-xl border border-slate-200 bg-white p-4">
 <<<<<<< HEAD
@@ -1244,39 +1261,74 @@ setAiPanel({
               textSize="2xl"
             />
 >>>>>>> origin
+=======
+//           {/* Recommendations */}
+//           <div className="rounded-xl border border-slate-200 bg-white p-4">
+//             <PageBreadcrumb
+//               pageTitle="Recommendations"
+//               variant="page"
+//               align="left"
+//               textSize="2xl"
+//             />
+>>>>>>> origin
 
-            {showLoading ? (
-              <div className="text-xs text-charcoal-500">Loading…</div>
-            ) : aiPanelError ? (
-              <div className="text-xs text-red-600">{aiPanelError}</div>
-            ) : aiPanel?.recommendationBullets?.length ? (
-              <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500">
-                {aiPanel.recommendationBullets.map((b, i) => (
-                  <li key={i}>{b}</li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-xs text-charcoal-500">
-                Recommendations are generated only for the latest completed period.
-              </div>
-            )}
-            {aiPanel?.inventoryBullets?.length ? (
-  <>
-    <div className="mt-4 text-[11px] font-semibold text-charcoal-500">
-      Inventory
-    </div>
-    <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500 mt-2">
-      {aiPanel.inventoryBullets.map((b, i) => (
-        <li key={i}>{b}</li>
-      ))}
-    </ul>
-  </>
-) : null}
-          </div>
-        </div>
+//             {showLoading ? (
+//               <div className="text-xs text-charcoal-500">Loading…</div>
+//             ) : aiPanelError ? (
+//               <div className="text-xs text-red-600">{aiPanelError}</div>
+//             ) : aiPanel?.recommendationBullets?.length ? (
+//               <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500">
+//                 {aiPanel.recommendationBullets.map((b, i) => (
+//                   <li key={i}>{b}</li>
+//                 ))}
+//               </ul>
+//             ) : (
+//               <div className="text-xs text-charcoal-500">
+//                 Recommendations are generated only for the latest completed period.
+//               </div>
+//             )}
+//             {aiPanel?.inventoryBullets?.length ? (
+//   <>
+//     <div className="mt-4 text-[11px] font-semibold text-charcoal-500">
+//       Inventory
+//     </div>
+//     <ul className="list-disc pl-5 space-y-1 text-xs text-charcoal-500 mt-2">
+//       {aiPanel.inventoryBullets.map((b, i) => (
+//         <li key={i}>{b}</li>
+//       ))}
+//     </ul>
+//   </>
+// ) : null}
+//           </div>
+//         </div>
+//       </div>
+//     );
+//   };
+
+const renderAiPanel = () => {
+  if (!allDropdownsSelected) return null;
+
+  return (
+    // <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <MonthEndBusinessSummaryCard
+          loading={aiPanelLoading}
+          error={aiPanelError}
+          summaryBullets={aiPanel?.summaryBullets ?? []}
+          skuInsightsBullets={aiPanel?.skuInsightsBullets ?? []}
+        />
+
+        <RecommendationsCard
+          loading={aiPanelLoading}
+          error={aiPanelError}
+          recommendationBullets={aiPanel?.recommendationBullets ?? []}
+          inventoryBullets={aiPanel?.inventoryBullets ?? []}
+        />
       </div>
-    );
-  };
+    // </div>
+  );
+};
+
 
   return (
     <div ref={layoutRef} className="space-y-6 relative">

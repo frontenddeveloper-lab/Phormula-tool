@@ -385,107 +385,141 @@ const SKUtable: React.FC<SKUtableProps> = ({
     []
   );
 
- const SINGLE_COLS: LeafCol<TableRow>[] = useMemo(
-  () => [
-    // Units
-    { key: "units_sold", label: "Units Sold", align: "center" },
-    { key: "return_units", label: "Return", align: "center" },
-    { key: "net_units_sold", label: "Net Units Sold", align: "center" },
+  const groups = [
+    {
+      id: "sales",
+      label: "Sales",
+      collapsedCols: [], // ✅ nothing shown in collapsed view
+      expandedCols: [
+        { key: "gross_sales", label: "Gross Sales", align: "right" },
+        { key: "sales_refund", label: "Sales - Refund", align: "right" },
+        { key: "taxes_credits", label: "Taxes and Credits", align: "right" },
+      ],
+    },
+  ];
 
-    // ASP
-    { key: (aspKey ?? "asp") as string, label: "ASP", align: "center" },
 
-    // Sales
-    { key: "product_sales", label: "Gross Sales", align: "center" },
-    { key: "refund_sales", label: "Sales - Refund", align: "center" },
-    { key: "tex_and_credits", label: "Taxes and Credits", align: "center" },
-    { key: "net_sales", label: "Net Sales", align: "center" },
+  const singleCols = [
+    // ✅ separate header (rowSpan=2) — this becomes its own top header cell
+    {
+      key: "amazon_fees_total",
+      label: "Amazon Fees",
+      align: "right",
+      thClassName: "font-bold",
+      tdClassName: "font-semibold bg-gray-100 border-l-2 border-gray-400",
+    },
+  ];
 
-    // Promotions
-    { key: "promotional_rebates", label: "Promotions", align: "center" },
-    { key: "promotional_rebates_percentage", label: "Promotions %age", align: "center" },
 
-    // COGS
-    { key: "cost_of_unit_sold", label: "COGS", align: "center" },
 
-    // Amazon Fees
-    { key: "selling_fees", label: "Selling Fees", align: "center" },
-    { key: "fba_fees", label: "FBA Fees", align: "center" },
-    { key: "amazon_fee", label: "Amazon Fees", align: "center" },
+  //  const SINGLE_COLS: LeafCol<TableRow>[] = useMemo(
+  //   () => [
+  //     // Units
+  //     { key: "units_sold", label: "Units Sold", align: "center" },
+  //     { key: "return_units", label: "Return", align: "center" },
+  //     { key: "net_units_sold", label: "Net Units Sold", align: "center" },
 
-    // Others
-    { key: "net_taxes", label: "Net Taxes", align: "center" },
-    { key: "net_credits", label: "Net Credits", align: "center" },
-    { key: "misc_transaction", label: "Misc. Transactions", align: "center" },
-    { key: "other_transactions", label: "Other Transactions", align: "center" },
+  //     // ASP
+  //     { key: (aspKey ?? "asp") as string, label: "ASP", align: "center" },
 
-    // CM1
-    { key: "profit", label: "CM1 Profit Margin", align: "center" },
-    { key: "unit_wise_profitability", label: "CM1 Profit Per Unit", align: "center" },
-    { key: "profit_percentage", label: "CM1 Profit %age", align: "center" },
-  ],
-  [aspKey]
-);
+  //     // Sales
+  //     { key: "product_sales", label: "Gross Sales", align: "center" },
+  //     { key: "refund_sales", label: "Sales - Refund", align: "center" },
+  //     { key: "tex_and_credits", label: "Taxes and Credits", align: "center" },
+  //     { key: "net_sales", label: "Net Sales", align: "center" },
+
+  //     // Promotions
+  //     { key: "promotional_rebates", label: "Promotions", align: "center" },
+  //     { key: "promotional_rebates_percentage", label: "Promotions %age", align: "center" },
+
+  //     // COGS
+  //     { key: "cost_of_unit_sold", label: "COGS", align: "center" },
+
+  //     // Amazon Fees
+  //     { key: "selling_fees", label: "Selling Fees", align: "center" },
+  //     { key: "fba_fees", label: "FBA Fees", align: "center" },
+  //     { key: "amazon_fee", label: "Amazon Fees", align: "center" },
+
+  //     // Others
+  //     { key: "net_taxes", label: "Net Taxes", align: "center" },
+  //     { key: "net_credits", label: "Net Credits", align: "center" },
+  //     { key: "misc_transaction", label: "Misc. Transactions", align: "center" },
+  //     { key: "other_transactions", label: "Other Transactions", align: "center" },
+
+  //     // CM1
+  //     { key: "profit", label: "CM1 Profit Margin", align: "center" },
+  //     { key: "unit_wise_profitability", label: "CM1 Profit Per Unit", align: "center" },
+  //     { key: "profit_percentage", label: "CM1 Profit %age", align: "center" },
+  //   ],
+  //   [aspKey]
+  // );
 
 
   // Formatting
+
+  const SINGLE_COLS = [
+    { key: "net_sales", label: "Net Sales", align: "right" },
+  ];
+
+
+
   const INT_KEYS = useMemo(() => new Set(["quantity", "units_sold", "return_units", "net_units_sold"]), []);
 
- const formatValue = useCallback(
-  (value: unknown, key: string) => {
-    if (value === undefined || value === null || value === "") return "-";
+  const formatValue = useCallback(
+    (value: unknown, key: string) => {
+      if (value === undefined || value === null || value === "") return "-";
 
-    // ✅ always show positive in table (sign already shown separately)
-    const n = Math.abs(toNumber(value));
-    if (!Number.isFinite(n)) return "-";
+      // ✅ always show positive in table (sign already shown separately)
+      const n = Math.abs(toNumber(value));
+      if (!Number.isFinite(n)) return "-";
 
-    if (INT_KEYS.has(key)) return n;
+      if (INT_KEYS.has(key)) return n;
 
-    const formatted = n.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+      const formatted = n.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
 
-    if (key === "profit_percentage") return `${formatted}%`;
-    return formatted;
-  },
-  [INT_KEYS]
-);
+      if (key === "profit_percentage") return `${formatted}%`;
+      return formatted;
+    },
+    [INT_KEYS]
+  );
 
 
   // Sign row (stable sets)
- const SIGN_PLUS = useMemo(
-  () =>
-    new Set([
-      "units_sold",          // Units Sold  (+)
-      // Net Units Sold (+)
-      "product_sales",       // Gross Sales (+)
-      "net_sales",           // Net Sales (+)
-      "net_credits",         // Net Credits (+)
-    ]),
-  []
-);
+  const SIGN_PLUS = useMemo(
+    () =>
+      new Set([
+        "units_sold",          // Units Sold  (+)
+        // Net Units Sold (+)
+        "product_sales",       // Gross Sales (+)
+        "net_sales",           // Net Sales (+)
+        "net_credits",         // Net Credits (+)
+      ]),
+    []
+  );
 
- const SIGN_MINUS = useMemo(
-  () =>
-    new Set([
-      "return_units",        // Return (-)
-      "refund_sales",        // Sales - Refund (-)
-      "tex_and_credits",     // Taxes and Credits (-)
+  const SIGN_MINUS = useMemo(
+    () =>
+      new Set([
+        "return_units",        // Return (-)
+        "refund_sales",        // Sales - Refund (-)
+        "tex_and_credits",     // Taxes and Credits (-)
 
-      "cost_of_unit_sold",   // COGS (-)
-      "selling_fees",        // Selling Fees (-)
-      "fba_fees",            // FBA Fees (-)
-      "amazon_fee",          // Amazon Fees (-)
+        "cost_of_unit_sold",   // COGS (-)
+        "selling_fees",        // Selling Fees (-)
+        "fba_fees",            // FBA Fees (-)
+        "amazon_fee",          // Amazon Fees (-)
 
-      "promotional_rebates", // Promotions (-)
-      "platformfeenew",
-      "platform_fee_inventory_storage",
-      "other_transactions",
-      "lost_total",
-    ]),
-  []
-);
+        "promotional_rebates", // Promotions (-)
+        "platformfeenew",
+        "platform_fee_inventory_storage",
+        "other_transactions",
+        "lost_total",
+      ]),
+    []
+  );
 
 
   const getSignForCol = useCallback(
@@ -1041,8 +1075,13 @@ const SKUtable: React.FC<SKUtableProps> = ({
               <GroupedCollapsibleTable<TableRow>
                 rows={tableData}
                 leftCols={LEFT_COLS}
-                groups={[]}
+                // groups={[]}
+                // groups={groups}
+                // singleCols={SINGLE_COLS}
+                groups={groups}
                 singleCols={SINGLE_COLS}
+                toggleGroupByColKey={{ net_sales: "sales" }} // ✅ click Net Sales toggles Sales group
+                initialCollapsed={{ sales: true }}
                 showSignRowInBody
                 getSignForCol={getSignForCol}
                 getRowClassName={(_, index) => {

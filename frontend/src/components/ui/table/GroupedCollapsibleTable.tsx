@@ -47,7 +47,7 @@ type Props<RowT> = {
   // Optional: sign row not in THEAD (keeps header strictly 2 rows)
   showSignRowInBody?: boolean;
   getSignForCol?: (colKey: string) => { text: string; className?: string } | null;
-
+  toggleGroupByColKey?: Record<string, string>;
   tableClassName?: string;
   headerRow1ClassName?: string;
   headerRow2ClassName?: string;
@@ -71,7 +71,7 @@ export default function GroupedCollapsibleTable<RowT>({
 
   showSignRowInBody = false,
   getSignForCol,
-
+toggleGroupByColKey,
   tableClassName = "min-w-[800px] w-full table-auto border-collapse text-[#414042]",
   headerRow1ClassName = "bg-[#5EA68E] text-[#f8edcf]",
   headerRow2ClassName = "bg-[#5EA68E] text-[#f8edcf]",
@@ -129,7 +129,7 @@ export default function GroupedCollapsibleTable<RowT>({
             </th>
           ))}
 
-          {groups.map((g) => {
+          {/* {groups.map((g) => {
             const isCollapsed = !!collapsed[g.id];
             const cols = isCollapsed ? g.collapsedCols : g.expandedCols;
             const colSpan = Math.max(cols.length, 1);
@@ -152,8 +152,32 @@ export default function GroupedCollapsibleTable<RowT>({
                 <span className="px-6">{g.label}</span>
               </th>
             );
+          })} */}
+
+          {groups.map((g) => {
+            const isCollapsed = !!collapsed[g.id];
+            const cols = isCollapsed ? g.collapsedCols : g.expandedCols;
+            const colSpan = cols.length;              // ✅ no Math.max
+
+            if (colSpan === 0) return null;           // ✅ hide group header when collapsed has 0 cols
+
+            return (
+              <th key={g.id} colSpan={colSpan} className={`${thBase} relative text-center ${g.headerClassName || ""}`}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(g.id)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded border border-white/60 bg-white/10 px-1 text-xs"
+                  aria-label={isCollapsed ? `Expand ${g.label}` : `Collapse ${g.label}`}
+                  title={isCollapsed ? "Expand" : "Collapse"}
+                >
+                  {isCollapsed ? "+" : "−"}
+                </button>
+                <span className="px-6">{g.label}</span>
+              </th>
+            );
           })}
 
+          {/* 
           {singleCols.map((c) => (
             <th
               key={c.key}
@@ -165,7 +189,28 @@ export default function GroupedCollapsibleTable<RowT>({
                 {c.tooltip ? c.tooltip : null}
               </div>
             </th>
-          ))}
+          ))} */}
+
+          {singleCols.map((c) => {
+            const targetGroupId = toggleGroupByColKey?.[c.key];
+
+            return (
+              <th
+                key={c.key}
+                rowSpan={2}
+                className={`${thBase} ${alignClass(c.align)} ${c.thClassName || ""}`}
+                onClick={targetGroupId ? () => toggleGroup(targetGroupId) : undefined}
+                role={targetGroupId ? "button" : undefined}
+                title={targetGroupId ? "Click to expand/collapse" : undefined}
+              >
+                <div className="flex items-center justify-center gap-1">
+                  {c.label}
+                  {c.tooltip ? c.tooltip : null}
+                </div>
+              </th>
+            );
+          })}
+
         </tr>
 
         {/* ✅ Row 2: ONLY group leaf headers */}
@@ -193,9 +238,8 @@ export default function GroupedCollapsibleTable<RowT>({
               return (
                 <td
                   key={c.key}
-                  className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-xs 2xl:text-sm ${
-                    sign?.className || ""
-                  }`}
+                  className={`whitespace-nowrap border border-gray-300 px-2 py-2 text-xs 2xl:text-sm ${sign?.className || ""
+                    }`}
                 >
                   {sign?.text || ""}
                 </td>
