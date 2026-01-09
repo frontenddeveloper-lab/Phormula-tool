@@ -2481,7 +2481,7 @@ def generate_inventory_alerts_for_all_skus(user_id: int, country: str) -> dict:
         # 2️⃣ Ageing inventory
         elif overaged:
             alert = (
-                "Inventory is ageing; please refer to Business Intelligence for resolution."
+                "Ageing Inventory. Ref. AI Insights"
             )
             alert_type = "ageing"
 
