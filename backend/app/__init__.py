@@ -124,11 +124,6 @@ def create_app():
     # app.register_blueprint(amazon_live_api_bp)
     app.register_blueprint(live_data_bi_bp)
     app.register_blueprint(summary_bp)
-<<<<<<< HEAD
-    
-     # Create tables and handle migrations
-=======
->>>>>>> origin
     
     
     

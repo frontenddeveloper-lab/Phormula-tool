@@ -508,12 +508,6 @@ def compute_inventory_coverage_ratio(user_id: int, country: str) -> pd.DataFrame
     return df
 
 
-# -----------------------------------------------------------------------------
-
-
-
-
-
 def compute_sku_metrics_from_df(df: pd.DataFrame) -> list:
     """
     Given a raw settlement-style DataFrame with columns like:
@@ -1535,8 +1529,6 @@ def _cell_value(x):
 
 
 
-
-
 def build_inventory_signals(user_id: int, country: str) -> dict:
     signals = {}
 
@@ -1937,9 +1929,26 @@ Metrics paragraph rules (Line 2-3)
 
 - Do NOT invent numbers and do NOT add extra reasons.
 
+
+RULE PRECEDENCE (CRITICAL):
+- Visibility INVALIDATION RULE overrides ALL other rules.
+- If a visibility action is invalidated, it must NEVER be selected,
+  even if other rules suggest or allow it.
+
 -----------------------------
 ACTION DECISION RULES (CRITICAL)
 -----------------------------
+
+PRICE EXHAUSTION OVERRIDE (CRITICAL):
+- If ASP is DOWN by more than 10%
+  AND Units are DOWN (negative growth) by more than 60%,
+  THEN pricing has already failed to revive demand.
+- In this case:
+  ❌ Do NOT recommend any ASP increase or decrease.
+  ❌ Ignore the PRICING PRIORITY RULE.
+  ✅ Use ONLY:
+     - "Review the visibility setup for this product."
+
 
 PRICING PRIORITY RULE:
 - If absolute ASP change is greater than 10% (increase or decrease),
@@ -1953,13 +1962,21 @@ MARGIN PROTECTION RULE:
   do NOT suggest further ASP reduction.
 - Prefer:
   - "Increase ASP slightly to strengthen margins."
-  - OR "Monitor performance closely for now."
+ 
 
 PRICE RESISTANCE RULE:
 - If ASP is up AND units and sales are both down,
   interpret this as price resistance.
 - Do NOT attribute decline to ads or visibility.
 - Prefer ASP reduction or monitoring actions.
+
+VISIBILITY INVALIDATION RULE (CRITICAL):
+- If Units are UP (positive growth),
+  ❌ Visibility-related actions are INVALID and must NOT be selected.
+- This includes:
+  - "Check ads and visibility campaigns for this product."
+  - "Review the visibility setup for this product."
+
 
 ADS / VISIBILITY ELIGIBILITY RULE:
 - Ads or visibility actions may be suggested ONLY IF:
@@ -1986,16 +2003,17 @@ SECONDARY STRATEGY RULE (MANDATORY, RANK-ONLY):
 - When the rule is triggered, use ONLY this sentence:
   "If your objective is to boost rank, you may continue with the current pricing setup but monitor performance closely."
 
-
-
-
+IMPORTANT CLARIFICATION:
+- The PRIMARY action (Line 5) represents the default, margin-optimal recommendation.
+- The SECONDARY strategy (Line 6) represents an alternative rank-first option and MAY contradict the primary action.
+- Do NOT weaken or neutralize the primary action to make it consistent with the secondary strategy.
 
 -----------------------------
 Inventory alert rules (Line 7 ONLY, OPTIONAL)
 -----------------------------
 - NEVER create a separate bullet for inventory.
 - Inventory sentence must start with "Inventory:".
-- If no inventory issue exists, DO NOT add Line 6.
+- If no inventory issue exists, DO NOT add Line 7.
 - Do NOT repeat product name.
 - Do NOT mention inventory anywhere else.
 
@@ -2017,9 +2035,6 @@ Allowed secondary strategy sentences (Line 6 only, OPTIONAL)
 Use exactly ONE of these sentences, verbatim:
 - "If your objective is to boost rank, you may continue with the current pricing setup but monitor performance closely."
 
-
-
-
 -----------------------------
 Allowed inventory alerts (Line 7 only, OPTIONAL)
 -----------------------------
@@ -2032,6 +2047,7 @@ Ignore:
 
 OUTPUT FORMAT
 Return ONLY valid JSON:
+
 {{
   "summary_bullets": [...],
   "action_bullets": ["...", "...", "...", "...", "..."]
@@ -2059,7 +2075,7 @@ DATA
                 {"role": "user", "content": prompt},
             ],
             max_tokens=900,
-            temperature=0.2,
+            temperature=0,
             response_format={"type": "json_object"},
         )
 
@@ -2185,8 +2201,6 @@ DATA
         "summary_bullets": fallback_summary,
         "action_bullets": fallback_actions[:5],
     }
-
-
 
 
 #-----------------------------------------------------------------------------
@@ -2475,13 +2489,13 @@ def generate_inventory_alerts_for_all_skus(user_id: int, country: str) -> dict:
             and coverage_ratio is not None
             and coverage_ratio < transit_time
         ):
-            alert = "Inventory coverage is below transit time; supply inventory required."
+            alert = "Inventory coverage is below transit time.Ref. AI Insights"
             alert_type = "supply"
 
         # 2️⃣ Ageing inventory
         elif overaged:
             alert = (
-                "Inventory is ageing; please refer to Business Intelligence for resolution."
+                "Ageing Inventory. Ref. AI Insights"
             )
             alert_type = "ageing"
 
