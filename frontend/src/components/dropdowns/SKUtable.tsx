@@ -520,9 +520,11 @@ const SKUtable: React.FC<SKUtableProps> = ({
         "product_sales",       // Gross Sales (+)
         "net_sales",           // Net Sales (+)
         "net_credits",         // Net Credits (+)
+        "misc_transaction",
+        "other_transactions",
       ]),
-    []
-  );
+      []
+    );
 
   const SIGN_MINUS = useMemo(
     () =>
@@ -530,16 +532,16 @@ const SKUtable: React.FC<SKUtableProps> = ({
         "return_units",        // Return (-)
         "refund_sales",        // Sales - Refund (-)
         "tex_and_credits",     // Taxes and Credits (-)
-
+        
         "cost_of_unit_sold",   // COGS (-)
         "selling_fees",        // Selling Fees (-)
         "fba_fees",            // FBA Fees (-)
         "amazon_fee",          // Amazon Fees (-)
-
+        
         "promotional_rebates", // Promotions (-)
         "platformfeenew",
         "platform_fee_inventory_storage",
-        "other_transactions",
+        "net_taxes",
         "lost_total",
       ]),
     []

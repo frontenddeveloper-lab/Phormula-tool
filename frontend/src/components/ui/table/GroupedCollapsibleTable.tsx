@@ -107,9 +107,9 @@ export default function GroupedCollapsibleTable<RowT>({
       layout?.length
         ? layout
         : [
-            ...groups.map((g) => ({ type: "group" as const, id: g.id })),
-            ...singleCols.map((c) => ({ type: "single" as const, key: c.key })),
-          ],
+          ...groups.map((g) => ({ type: "group" as const, id: g.id })),
+          ...singleCols.map((c) => ({ type: "single" as const, key: c.key })),
+        ],
     [layout, groups, singleCols]
   );
 
@@ -157,7 +157,7 @@ export default function GroupedCollapsibleTable<RowT>({
     <table className={tableClassName}>
       <thead className="sticky top-0 z-10 font-bold">
         {/* -------- Header Row 1 -------- */}
-        <tr className={headerRow1ClassName}>
+        {/* <tr className={headerRow1ClassName}>
           {leftCols.map((c) => (
             <th
               key={c.key}
@@ -186,7 +186,7 @@ export default function GroupedCollapsibleTable<RowT>({
       className={`${thBase} relative cursor-pointer select-none text-center ${g.headerClassName || ""}`}
       title="Click to expand/collapse"
     >
-      {/* + / − indicator */}
+  
       <span className="absolute left-2 top-1/2 -translate-y-1/2 rounded border border-white/60 bg-white/10 px-1 text-xs leading-none">
         {isCollapsed ? "+" : "−"}
       </span>
@@ -213,7 +213,75 @@ export default function GroupedCollapsibleTable<RowT>({
               </th>
             );
           })}
+        </tr> */}
+
+
+        {/* -------- Header Row 1 -------- */}
+        <tr className={headerRow1ClassName}>
+          {leftCols.map((c) => (
+            <th
+              key={c.key}
+              rowSpan={2}
+              className={`${thBase} ${alignClass(c.align)} ${c.thClassName || ""}`}
+            >
+              {c.label}
+            </th>
+          ))}
+
+          {resolvedLayout.map((item) => {
+            // ----- GROUP HEADERS (no +/- here) -----
+            if (item.type === "group") {
+              const g = groupMap.get(item.id);
+              if (!g) return null;
+
+              const isCollapsed = collapsed[g.id];
+              const cols = isCollapsed ? g.collapsedCols : g.expandedCols;
+              if (cols.length === 0) return null;
+
+              return (
+                <th
+                  key={g.id}
+                  colSpan={cols.length}
+                  onClick={() => toggleGroup(g.id)}
+                  role="button"
+                  className={`${thBase} cursor-pointer select-none text-center ${g.headerClassName || ""}`}
+                  title="Click to expand/collapse"
+                >
+                  {g.label}
+                </th>
+              );
+            }
+
+            // ----- SINGLE HEADERS (show +/- if they toggle a group) -----
+            const c = singleMap.get(item.key);
+            if (!c) return null;
+
+            const targetGroupId = toggleGroupByColKey?.[c.key];
+            const isExpandable = Boolean(targetGroupId);
+            const isTargetCollapsed = targetGroupId ? collapsed[targetGroupId] : true;
+
+            return (
+              <th
+                key={c.key}
+                rowSpan={2}
+                onClick={isExpandable ? () => toggleGroup(targetGroupId!) : undefined}
+                role={isExpandable ? "button" : undefined}
+                title={isExpandable ? "Click to expand/collapse" : undefined}
+                className={`${thBase} ${alignClass(c.align)} ${c.thClassName || ""} ${isExpandable ? "relative cursor-pointer select-none pl-7" : ""
+                  }`}
+              >
+                {c.label}
+                {isExpandable && (
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 rounded border border-white/60 bg-white/10 px-1 text-xs leading-none">
+                    {isTargetCollapsed ? "+" : "−"}
+                  </span>
+                )}
+
+              </th>
+            );
+          })}
         </tr>
+
 
         {/* -------- Header Row 2 -------- */}
         <tr className={headerRow2ClassName}>
