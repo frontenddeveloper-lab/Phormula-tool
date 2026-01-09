@@ -233,6 +233,7 @@ export default function InventoryChoicePage() {
                 />
                 <p className="text-[11px] text-gray-400 mt-1">
                   Marketplace is fixed to Amazon and cannot be changed.
+                  
                 </p>
               </div>
 

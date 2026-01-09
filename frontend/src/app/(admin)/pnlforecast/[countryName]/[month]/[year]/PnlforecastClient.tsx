@@ -833,7 +833,7 @@ const normalizedProductRows = productRows?.map(r => ({
 
   getRowClassName={(row) => {
     if (row.product_name === "Total") {
-      return "bg-[#D9D9D9]/90 font-bold";
+      return "bg-[#D9D9D9]/90 font-bold ";
     }
     if (summaryRows.some(s => s.label === row.product_name)) {
       return "bg-[#ffffff]";

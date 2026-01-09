@@ -379,7 +379,7 @@ const PnlForecastChart = forwardRef<any, PnlForecastChartProps>(({ chartData, cu
       `}</style>
 
 <br/>
-<div className='flex justify-between items-center mx-5'>
+<div className='flex justify-between items-center mx-5 '>
    <div className="forecast-legend">
         <div className="forecast-legend-item">
           <div className="solid-line"></div>
