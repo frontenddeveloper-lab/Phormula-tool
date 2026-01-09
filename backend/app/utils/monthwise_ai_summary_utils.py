@@ -467,6 +467,14 @@ METRIC INTERPRETATION RULES (CRITICAL):
   cm2_profit, cm2_profit_percentage, acos
 - Never attribute the above metrics to individual SKUs in insights or actions.
 
+ACOS SUMMARY RULE (CRITICAL):
+- ACOS must be mentioned ONLY in the SUMMARY section.
+- Treat ACOS strictly as an OVERALL efficiency metric.
+- Describe ACOS movement using percentage points (e.g., "ACOS increased by 2.4 points").
+- Use MoM language for monthly/quarterly periods and YoY language for yearly periods.
+- Do NOT describe ACOS as growth or decline in percentage terms.
+- Do NOT mention ACOS in SKU INSIGHTS, RECOMMENDATIONS, or INVENTORY sections.
+
 QUANTITY DEFINITIONS:
 - quantity = gross units shipped
 - return_quantity = units returned
@@ -523,6 +531,7 @@ OUTPUT FORMAT (MARKDOWN ONLY)
   (Use MoM for monthly/quarterly periods, YoY for yearly periods)
 - Clearly state whether growth/decline is **volume-led, cost-led, or margin-led**
 - Call out **major overall cost drivers** if they materially impacted profit
+- Include ACOS movement (percentage-point change) if ACOS data exists
 - If both MoM and YoY exist (non-yearly only), include exactly 1 bullet comparing MoM vs YoY trend
 - Use short bullets, no sub-bullets, no paragraphs
 
